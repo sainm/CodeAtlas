@@ -62,12 +62,15 @@ public final class Neo4jGraphQueryBuilder {
             LIMIT $limit
             """.formatted(depth), baseParameters(projectId, snapshotId, changedSymbolId, limit, List.of(
             RelationType.CALLS.name(),
+            RelationType.DECLARES.name(),
             RelationType.BRIDGES_TO.name(),
             RelationType.IMPLEMENTS.name(),
             RelationType.INJECTS.name(),
             RelationType.ROUTES_TO.name(),
             RelationType.SUBMITS_TO.name(),
             RelationType.BINDS_TO.name(),
+            RelationType.READS_PARAM.name(),
+            RelationType.WRITES_PARAM.name(),
             RelationType.FORWARDS_TO.name(),
             RelationType.READS_TABLE.name(),
             RelationType.WRITES_TABLE.name()

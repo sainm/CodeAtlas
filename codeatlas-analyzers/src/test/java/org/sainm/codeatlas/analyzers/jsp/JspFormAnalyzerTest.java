@@ -24,6 +24,8 @@ class JspFormAnalyzerTest {
             <html:form action="/user/save.do" method="post">
               <html:text property="name"/>
               <html:hidden property="id"/>
+              <html:textarea property="description"/>
+              <html:radio property="status" value="ACTIVE"/>
             </html:form>
             """);
 
@@ -31,7 +33,7 @@ class JspFormAnalyzerTest {
         JspAnalysisResult result = new JspFormAnalyzer().analyze(scope, "shop", "src/main/webapp", jsp);
 
         assertEquals(1, result.forms().size());
-        assertEquals(2, result.forms().getFirst().inputs().size());
+        assertEquals(4, result.forms().getFirst().inputs().size());
         assertTrue(result.nodes().stream().anyMatch(node -> node.symbolId().kind() == SymbolKind.JSP_PAGE));
         assertTrue(result.nodes().stream().anyMatch(node -> node.symbolId().kind() == SymbolKind.JSP_FORM));
         assertTrue(result.nodes().stream().anyMatch(node -> node.symbolId().kind() == SymbolKind.JSP_INPUT
@@ -43,5 +45,9 @@ class JspFormAnalyzerTest {
         assertTrue(result.facts().stream().anyMatch(fact -> fact.factKey().relationType() == RelationType.SUBMITS_TO));
         assertTrue(result.facts().stream().anyMatch(fact -> fact.factKey().relationType() == RelationType.WRITES_PARAM
             && fact.factKey().qualifier().equals("name")));
+        assertTrue(result.facts().stream().anyMatch(fact -> fact.factKey().relationType() == RelationType.WRITES_PARAM
+            && fact.factKey().qualifier().equals("description")));
+        assertTrue(result.facts().stream().anyMatch(fact -> fact.factKey().relationType() == RelationType.WRITES_PARAM
+            && fact.factKey().qualifier().equals("status")));
     }
 }

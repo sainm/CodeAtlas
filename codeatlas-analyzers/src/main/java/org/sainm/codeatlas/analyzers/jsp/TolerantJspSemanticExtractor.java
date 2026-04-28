@@ -11,6 +11,9 @@ public final class TolerantJspSemanticExtractor {
     private static final Pattern DIRECTIVE = Pattern.compile("(?is)<%@\\s*(\\w+)\\s+([^%]*)%>");
     private static final Pattern JSP_ACTION = Pattern.compile("(?is)<(jsp:(?:include|forward|param|useBean))\\b([^>]*)>");
     private static final Pattern JSTL_ACTION = Pattern.compile("(?is)<(c:(?:if|forEach|choose|when|otherwise|out|set))\\b([^>]*)>");
+    private static final Pattern STRUTS_ACTION = Pattern.compile(
+        "(?is)<((?:html|bean|logic):(?:form|text|hidden|password|checkbox|select|textarea|radio|multibox|write|iterate|present|notPresent|empty|notEmpty|equal|notEqual))\\b([^>]*)>"
+    );
     private static final Pattern EL = Pattern.compile("\\$\\{([^}]*)}");
     private static final Pattern SCRIPTLET = Pattern.compile("(?is)<%(?!@|=)(.*?)%>");
     private static final Pattern EXPRESSION = Pattern.compile("(?is)<%=(.*?)%>");
@@ -47,6 +50,7 @@ public final class TolerantJspSemanticExtractor {
         List<JspAction> result = new ArrayList<>();
         collectActions(text, JSP_ACTION, result);
         collectActions(text, JSTL_ACTION, result);
+        collectActions(text, STRUTS_ACTION, result);
         return result;
     }
 

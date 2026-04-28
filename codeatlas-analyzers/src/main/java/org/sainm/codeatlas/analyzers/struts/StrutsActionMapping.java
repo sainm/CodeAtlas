@@ -5,7 +5,8 @@ public record StrutsActionMapping(
     String type,
     String name,
     String scope,
-    String input
+    String input,
+    String parameter
 ) {
     public StrutsActionMapping {
         path = require(path, "path");
@@ -13,6 +14,7 @@ public record StrutsActionMapping(
         name = blankToNull(name);
         scope = blankToNull(scope);
         input = blankToNull(input);
+        parameter = blankToNull(parameter);
     }
 
     private static String require(String value, String name) {

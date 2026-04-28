@@ -77,7 +77,7 @@
 - [x] 解析 EL 表达式。
 - [x] 解析 scriptlet 和 expression。
 - [x] 解析 JSTL 常见标签。
-- [ ] 解析 Struts taglib：html:form、html:text、bean:write、logic:iterate。
+- [x] 解析 Struts taglib：html:form、html:text、bean:write、logic:iterate。
 - [x] 解析 Struts taglib MVP：html:form、html:text、html:hidden、html:password、html:checkbox、html:select。
 - [ ] 解析 Spring form tag。
 - [ ] 调研并接入 JetHTMLParser 或 Jericho 作为容错解析器。
@@ -96,6 +96,8 @@
 - [x] Struts1：解析 struts-config.xml。
 - [x] Struts1：建立 path -> Action -> ActionForm -> Forward。
 - [x] Struts1：建立 JSP form action -> Action path。
+- [x] Struts1：解析 plug-in、set-property、TilesPlugin、ValidatorPlugIn 等插件配置。
+- [x] Struts1：解析 controller、processorClass、multipartClass、inputForward、maxFileSize 等控制器配置。
 - [x] Seasar2：解析 dicon component。
 - [x] Seasar2：识别命名约定 binding。
 - [x] Seasar2：识别 service/dao/interceptor 基础关系。
@@ -277,10 +279,10 @@
 ## 17. 测试与样例工程
 
 - [ ] 创建 Spring MVC 样例项目。
-- [ ] 创建 Struts1 + JSP 样例项目。
+- [x] 创建 Struts1 + JSP 样例项目。
 - [ ] 创建 Seasar2 dicon 样例片段。
 - [ ] 创建 MyBatis XML 样例。
-- [ ] 创建 JSP form -> Action -> Service -> Mapper -> SQL 样例链路。
+- [x] 创建 JSP form -> Action -> Service -> Mapper -> SQL 样例链路。
 - [ ] 测试 Java 方法调用解析。
 - [x] 测试 JSP input 到 request parameter。
 - [x] 测试 ActionForm 字段绑定。

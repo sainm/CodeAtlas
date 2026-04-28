@@ -11,7 +11,7 @@ final class TolerantJspFormExtractor {
         "(?is)<(?:html:form|form)\\b([^>]*)>(.*?)</(?:html:form|form)>"
     );
     private static final Pattern INPUT_PATTERN = Pattern.compile(
-        "(?is)<(?:html:text|html:password|html:hidden|html:checkbox|html:select|input|select|textarea)\\b([^>]*)>"
+        "(?is)<(?:html:text|html:password|html:hidden|html:checkbox|html:select|html:textarea|html:radio|html:multibox|input|select|textarea)\\b([^>]*)>"
     );
     private static final Pattern ATTR_PATTERN = Pattern.compile("(?is)([a-zA-Z_:.-]+)\\s*=\\s*(\"([^\"]*)\"|'([^']*)'|([^\\s>]+))");
 

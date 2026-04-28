@@ -1,0 +1,7 @@
+<struts-config>
+  <action-mappings>
+    <action path="/admin/user/list" type="com.acme.legacy.web.AdminUserAction">
+      <forward name="success" path="/admin/user/list.jsp"/>
+    </action>
+  </action-mappings>
+</struts-config>

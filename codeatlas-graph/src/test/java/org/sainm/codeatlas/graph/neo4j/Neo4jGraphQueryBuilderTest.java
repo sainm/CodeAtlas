@@ -28,6 +28,8 @@ class Neo4jGraphQueryBuilderTest {
         assertTrue(statement.cypher().contains("all(r IN relationships(path)"));
         assertTrue(((List<?>) statement.parameters().get("relationTypes")).contains("INJECTS"));
         assertTrue(((List<?>) statement.parameters().get("relationTypes")).contains("BRIDGES_TO"));
+        assertTrue(((List<?>) statement.parameters().get("relationTypes")).contains("DECLARES"));
+        assertTrue(((List<?>) statement.parameters().get("relationTypes")).contains("READS_PARAM"));
     }
 
     @Test

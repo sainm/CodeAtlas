@@ -11,13 +11,16 @@ import org.sainm.codeatlas.analyzers.sql.MyBatisMapperInterfaceAnalyzer;
 import org.sainm.codeatlas.analyzers.sql.MyBatisXmlAnalyzer;
 import org.sainm.codeatlas.analyzers.struts.StrutsActionFormAnalyzer;
 import org.sainm.codeatlas.analyzers.struts.StrutsConfigAnalyzer;
+import org.sainm.codeatlas.analyzers.struts.StrutsWebXmlAnalyzer;
 import org.sainm.codeatlas.graph.model.GraphFact;
 import org.sainm.codeatlas.graph.model.GraphNode;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 
 public final class CodeAtlasProjectAnalyzer {
     private final SpoonJavaAnalyzer javaAnalyzer = new SpoonJavaAnalyzer();
@@ -28,6 +31,7 @@ public final class CodeAtlasProjectAnalyzer {
     private final MyBatisMapperInterfaceAnalyzer myBatisMapperInterfaceAnalyzer = new MyBatisMapperInterfaceAnalyzer();
     private final StrutsActionFormAnalyzer strutsActionFormAnalyzer = new StrutsActionFormAnalyzer();
     private final StrutsConfigAnalyzer strutsConfigAnalyzer = new StrutsConfigAnalyzer();
+    private final StrutsWebXmlAnalyzer strutsWebXmlAnalyzer = new StrutsWebXmlAnalyzer();
     private final JspFormAnalyzer jspFormAnalyzer = new JspFormAnalyzer();
     private final MyBatisXmlAnalyzer myBatisXmlAnalyzer = new MyBatisXmlAnalyzer();
     private final SeasarDiconAnalyzer seasarDiconAnalyzer = new SeasarDiconAnalyzer();
@@ -68,9 +72,10 @@ public final class CodeAtlasProjectAnalyzer {
             facts.addAll(requestParameterResult.facts());
         }
 
+        Set<Path> strutsConfigs = strutsConfigFiles(files);
         for (Path file : files) {
             String normalized = file.toString().replace('\\', '/');
-            if (normalized.endsWith("struts-config.xml")) {
+            if (strutsConfigs.contains(file)) {
                 var result = strutsConfigAnalyzer.analyze(scope, projectKey, "src/main/webapp", file);
                 nodes.addAll(result.nodes());
                 facts.addAll(result.facts());
@@ -90,6 +95,35 @@ public final class CodeAtlasProjectAnalyzer {
         }
 
         return new ProjectAnalysisResult(nodes, facts);
+    }
+
+    private Set<Path> strutsConfigFiles(List<Path> files) {
+        Set<Path> configs = new LinkedHashSet<>();
+        for (Path file : files) {
+            String fileName = file.getFileName().toString();
+            String normalized = file.toString().replace('\\', '/');
+            if (fileName.startsWith("struts-config") && fileName.endsWith(".xml")) {
+                configs.add(file);
+            }
+            if (normalized.endsWith("/WEB-INF/web.xml")) {
+                Path webRoot = file.getParent().getParent();
+                for (String location : strutsWebXmlAnalyzer.analyze(file).configLocations()) {
+                    Path config = resolveWebLocation(webRoot, location);
+                    if (java.nio.file.Files.exists(config)) {
+                        configs.add(config);
+                    }
+                }
+            }
+        }
+        return configs;
+    }
+
+    private Path resolveWebLocation(Path webRoot, String location) {
+        String normalized = location == null ? "" : location.trim().replace('\\', '/');
+        if (normalized.startsWith("/")) {
+            normalized = normalized.substring(1);
+        }
+        return webRoot.resolve(normalized).toAbsolutePath().normalize();
     }
 
     private List<Path> scanFiles(Path root) {

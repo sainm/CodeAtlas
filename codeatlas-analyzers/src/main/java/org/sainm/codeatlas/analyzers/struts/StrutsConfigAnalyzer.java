@@ -16,6 +16,7 @@ import org.sainm.codeatlas.graph.model.SymbolKind;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import org.w3c.dom.Document;
@@ -34,8 +35,11 @@ public final class StrutsConfigAnalyzer {
 
             List<StrutsActionMapping> actions = new ArrayList<>();
             List<StrutsForward> forwards = new ArrayList<>();
+            List<StrutsPlugin> plugins = new ArrayList<>();
+            List<StrutsControllerConfig> controllers = new ArrayList<>();
             List<GraphNode> nodes = new ArrayList<>();
             List<GraphFact> facts = new ArrayList<>();
+            addControllers(scope, projectKey, sourceRootKey, configXml, document, controllers, nodes, facts);
             NodeList actionNodes = document.getElementsByTagName("action");
             for (int i = 0; i < actionNodes.getLength(); i++) {
                 Element action = (Element) actionNodes.item(i);
@@ -44,14 +48,16 @@ public final class StrutsConfigAnalyzer {
                     action.getAttribute("type"),
                     action.getAttribute("name"),
                     action.getAttribute("scope"),
-                    action.getAttribute("input")
+                    action.getAttribute("input"),
+                    action.getAttribute("parameter")
                 );
                 actions.add(mapping);
                 addActionFacts(scope, projectKey, sourceRootKey, configXml, mapping, formsByName, nodes, facts);
                 addForwards(scope, projectKey, sourceRootKey, configXml, mapping.path(), action, forwards, nodes, facts);
             }
+            addPlugins(scope, projectKey, sourceRootKey, configXml, document, plugins, nodes, facts);
 
-            return new StrutsConfigAnalysisResult(forms, actions, forwards, nodes, facts);
+            return new StrutsConfigAnalysisResult(forms, actions, forwards, plugins, controllers, nodes, facts);
         } catch (RuntimeException exception) {
             throw new IllegalStateException("Failed to analyze Struts config: " + configXml, exception);
         }
@@ -94,6 +100,18 @@ public final class StrutsConfigAnalyzer {
             nodes.add(GraphNodeFactory.jspNode(inputJsp, NodeRole.JSP_ARTIFACT));
             facts.add(fact(scope, actionPath, RelationType.FORWARDS_TO, inputJsp, configXml, "input", Confidence.LIKELY));
         }
+        if (mapping.parameter() != null) {
+            SymbolId dispatchParameter = SymbolId.logicalPath(
+                SymbolKind.REQUEST_PARAMETER,
+                projectKey,
+                scope.moduleKey(),
+                "_request",
+                mapping.parameter(),
+                null
+            );
+            nodes.add(GraphNodeFactory.requestParameterNode(dispatchParameter));
+            facts.add(fact(scope, actionPath, RelationType.READS_PARAM, dispatchParameter, configXml, "dispatch-parameter:" + mapping.parameter(), Confidence.CERTAIN));
+        }
     }
 
     private void addForwards(
@@ -117,6 +135,149 @@ public final class StrutsConfigAnalyzer {
             nodes.add(GraphNodeFactory.jspNode(jsp, NodeRole.JSP_ARTIFACT));
             facts.add(fact(scope, actionPath, RelationType.FORWARDS_TO, jsp, configXml, "forward:" + strutsForward.name(), Confidence.CERTAIN));
         }
+    }
+
+    private void addPlugins(
+        AnalyzerScope scope,
+        String projectKey,
+        String sourceRootKey,
+        Path configXml,
+        Document document,
+        List<StrutsPlugin> plugins,
+        List<GraphNode> nodes,
+        List<GraphFact> facts
+    ) {
+        NodeList pluginNodes = document.getElementsByTagName("plug-in");
+        for (int i = 0; i < pluginNodes.getLength(); i++) {
+            int pluginIndex = i;
+            Element pluginElement = (Element) pluginNodes.item(i);
+            String className = pluginElement.getAttribute("className");
+            if (className == null || className.isBlank()) {
+                className = pluginElement.getAttribute("class");
+            }
+            if (className == null || className.isBlank()) {
+                continue;
+            }
+            Map<String, String> properties = pluginProperties(pluginElement);
+            plugins.add(new StrutsPlugin(className, properties));
+
+            SymbolId pluginConfig = SymbolId.logicalPath(
+                SymbolKind.CONFIG_KEY,
+                projectKey,
+                scope.moduleKey(),
+                sourceRootKey,
+                configXml.toString(),
+                "struts-plugin:" + pluginIndex
+            );
+            SymbolId pluginClass = SymbolId.classSymbol(projectKey, scope.moduleKey(), sourceRootKey, className);
+            nodes.add(GraphNodeFactory.configNode(pluginConfig));
+            nodes.add(GraphNodeFactory.classNode(pluginClass, NodeRole.CODE_TYPE));
+            facts.add(fact(scope, pluginConfig, RelationType.USES_CONFIG, pluginClass, configXml, "struts-plugin", Confidence.CERTAIN));
+
+            properties.forEach((name, value) -> {
+                SymbolId property = SymbolId.logicalPath(
+                    SymbolKind.CONFIG_KEY,
+                    projectKey,
+                    scope.moduleKey(),
+                    sourceRootKey,
+                    configXml.toString(),
+                    "struts-plugin:" + pluginIndex + ":property:" + name
+                );
+                nodes.add(GraphNodeFactory.configNode(property));
+                facts.add(fact(scope, pluginConfig, RelationType.USES_CONFIG, property, configXml, "plugin-property:" + name + "=" + value, Confidence.CERTAIN));
+            });
+        }
+    }
+
+    private Map<String, String> pluginProperties(Element pluginElement) {
+        Map<String, String> properties = new LinkedHashMap<>();
+        NodeList propertyNodes = pluginElement.getElementsByTagName("set-property");
+        for (int i = 0; i < propertyNodes.getLength(); i++) {
+            Element property = (Element) propertyNodes.item(i);
+            String name = property.getAttribute("property");
+            String value = property.getAttribute("value");
+            if (name != null && !name.isBlank()) {
+                properties.put(name.trim(), value == null ? "" : value.trim());
+            }
+        }
+        return properties;
+    }
+
+    private void addControllers(
+        AnalyzerScope scope,
+        String projectKey,
+        String sourceRootKey,
+        Path configXml,
+        Document document,
+        List<StrutsControllerConfig> controllers,
+        List<GraphNode> nodes,
+        List<GraphFact> facts
+    ) {
+        NodeList controllerNodes = document.getElementsByTagName("controller");
+        for (int i = 0; i < controllerNodes.getLength(); i++) {
+            int controllerIndex = i;
+            Element controller = (Element) controllerNodes.item(i);
+            Map<String, String> attributes = attributes(controller);
+            controllers.add(new StrutsControllerConfig(attributes));
+
+            SymbolId controllerConfig = SymbolId.logicalPath(
+                SymbolKind.CONFIG_KEY,
+                projectKey,
+                scope.moduleKey(),
+                sourceRootKey,
+                configXml.toString(),
+                "struts-controller:" + controllerIndex
+            );
+            nodes.add(GraphNodeFactory.configNode(controllerConfig));
+
+            attributes.forEach((name, value) -> {
+                SymbolId property = SymbolId.logicalPath(
+                    SymbolKind.CONFIG_KEY,
+                    projectKey,
+                    scope.moduleKey(),
+                    sourceRootKey,
+                    configXml.toString(),
+                    "struts-controller:" + controllerIndex + ":attribute:" + name
+                );
+                nodes.add(GraphNodeFactory.configNode(property));
+                facts.add(fact(scope, controllerConfig, RelationType.USES_CONFIG, property, configXml, "controller-attribute:" + name + "=" + value, Confidence.CERTAIN));
+            });
+
+            addControllerClassFact(scope, projectKey, sourceRootKey, configXml, controllerConfig, "processorClass", attributes, nodes, facts);
+            addControllerClassFact(scope, projectKey, sourceRootKey, configXml, controllerConfig, "multipartClass", attributes, nodes, facts);
+        }
+    }
+
+    private void addControllerClassFact(
+        AnalyzerScope scope,
+        String projectKey,
+        String sourceRootKey,
+        Path configXml,
+        SymbolId controllerConfig,
+        String attributeName,
+        Map<String, String> attributes,
+        List<GraphNode> nodes,
+        List<GraphFact> facts
+    ) {
+        String className = attributes.get(attributeName);
+        if (className == null || className.isBlank()) {
+            return;
+        }
+        SymbolId classSymbol = SymbolId.classSymbol(projectKey, scope.moduleKey(), sourceRootKey, className);
+        nodes.add(GraphNodeFactory.classNode(classSymbol, NodeRole.CODE_TYPE));
+        facts.add(fact(scope, controllerConfig, RelationType.USES_CONFIG, classSymbol, configXml, "controller-" + attributeName, Confidence.CERTAIN));
+    }
+
+    private Map<String, String> attributes(Element element) {
+        Map<String, String> result = new LinkedHashMap<>();
+        var attributes = element.getAttributes();
+        for (int i = 0; i < attributes.getLength(); i++) {
+            var item = attributes.item(i);
+            if (item.getNodeName() != null && item.getNodeValue() != null && !item.getNodeValue().isBlank()) {
+                result.put(item.getNodeName(), item.getNodeValue().trim());
+            }
+        }
+        return result;
     }
 
     public static SymbolId actionPath(String projectKey, String moduleKey, String sourceRootKey, String path) {

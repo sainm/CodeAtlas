@@ -17,6 +17,10 @@ class TolerantJspSemanticExtractorTest {
             <jsp:include page="/part.jsp"/>
             <jsp:forward page="/done.jsp"/>
             <c:if test="${user != null}">${user.name}</c:if>
+            <bean:write name="userForm" property="name"/>
+            <logic:iterate id="row" name="users">
+              <bean:write name="row" property="id"/>
+            </logic:iterate>
             <% String value = request.getParameter("id"); %>
             <%= value %>
             """;
@@ -29,6 +33,10 @@ class TolerantJspSemanticExtractorTest {
         assertTrue(analysis.directives().stream().anyMatch(directive -> directive.name().equals("page")));
         assertTrue(analysis.actions().stream().anyMatch(action -> action.name().equals("jsp:include")));
         assertTrue(analysis.actions().stream().anyMatch(action -> action.name().equals("c:if")));
+        assertTrue(analysis.actions().stream().anyMatch(action -> action.name().equals("bean:write")
+            && action.attributes().get("property").equals("name")));
+        assertTrue(analysis.actions().stream().anyMatch(action -> action.name().equals("logic:iterate")
+            && action.attributes().get("id").equals("row")));
         assertTrue(analysis.expressions().stream().anyMatch(expression -> expression.kind().equals("EL")));
         assertTrue(analysis.expressions().stream().anyMatch(expression -> expression.kind().equals("SCRIPTLET")));
         assertTrue(analysis.expressions().stream().anyMatch(expression -> expression.kind().equals("EXPRESSION")));

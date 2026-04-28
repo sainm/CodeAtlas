@@ -118,6 +118,13 @@ public final class GraphNodeFactory {
         return new GraphNode(tableSymbol, Set.of(NodeRole.DATABASE_OBJECT), Map.of());
     }
 
+    public static GraphNode configNode(SymbolId configSymbol) {
+        if (configSymbol.kind() != SymbolKind.CONFIG_KEY) {
+            throw new IllegalArgumentException("configSymbol must be CONFIG_KEY");
+        }
+        return new GraphNode(configSymbol, Set.of(NodeRole.CONFIG_ARTIFACT), Map.of());
+    }
+
     private static Set<NodeRole> roles(NodeRole primary, NodeRole secondary) {
         TreeSet<NodeRole> roles = new TreeSet<>();
         roles.add(primary);

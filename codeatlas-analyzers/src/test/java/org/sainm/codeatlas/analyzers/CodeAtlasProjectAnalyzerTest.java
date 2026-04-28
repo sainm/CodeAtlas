@@ -40,6 +40,29 @@ class CodeAtlasProjectAnalyzerTest {
               </action-mappings>
             </struts-config>
             """);
+        write("src/main/webapp/WEB-INF/web.xml", """
+            <web-app>
+              <servlet>
+                <servlet-name>action</servlet-name>
+                <servlet-class>org.apache.struts.action.ActionServlet</servlet-class>
+                <init-param>
+                  <param-name>config</param-name>
+                  <param-value>/WEB-INF/struts-config-admin.xml</param-value>
+                </init-param>
+              </servlet>
+              <servlet-mapping>
+                <servlet-name>action</servlet-name>
+                <url-pattern>*.do</url-pattern>
+              </servlet-mapping>
+            </web-app>
+            """);
+        write("src/main/webapp/WEB-INF/struts-config-admin.xml", """
+            <struts-config>
+              <action-mappings>
+                <action path="/admin/save" type="com.acme.AdminAction"/>
+              </action-mappings>
+            </struts-config>
+            """);
         write("src/main/webapp/user/edit.jsp", """
             <html:form action="/user/save.do">
               <html:text property="name"/>
@@ -61,6 +84,8 @@ class CodeAtlasProjectAnalyzerTest {
 
         assertTrue(result.nodes().stream().anyMatch(node -> node.symbolId().kind() == SymbolKind.API_ENDPOINT));
         assertTrue(result.nodes().stream().anyMatch(node -> node.symbolId().kind() == SymbolKind.ACTION_PATH));
+        assertTrue(result.nodes().stream().anyMatch(node -> node.symbolId().kind() == SymbolKind.ACTION_PATH
+            && node.symbolId().ownerQualifiedName().equals("admin/save")));
         assertTrue(result.nodes().stream().anyMatch(node -> node.symbolId().kind() == SymbolKind.JSP_INPUT));
         assertTrue(result.nodes().stream().anyMatch(node -> node.symbolId().kind() == SymbolKind.REQUEST_PARAMETER));
         assertTrue(result.nodes().stream().anyMatch(node -> node.symbolId().kind() == SymbolKind.SQL_STATEMENT));

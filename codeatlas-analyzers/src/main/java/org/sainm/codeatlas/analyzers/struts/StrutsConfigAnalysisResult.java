@@ -8,6 +8,8 @@ public record StrutsConfigAnalysisResult(
     List<StrutsFormBean> formBeans,
     List<StrutsActionMapping> actionMappings,
     List<StrutsForward> forwards,
+    List<StrutsPlugin> plugins,
+    List<StrutsControllerConfig> controllers,
     List<GraphNode> nodes,
     List<GraphFact> facts
 ) {
@@ -15,6 +17,8 @@ public record StrutsConfigAnalysisResult(
         formBeans = List.copyOf(formBeans);
         actionMappings = List.copyOf(actionMappings);
         forwards = List.copyOf(forwards);
+        plugins = List.copyOf(plugins);
+        controllers = List.copyOf(controllers);
         nodes = List.copyOf(nodes);
         facts = List.copyOf(facts);
     }
