@@ -1,0 +1,5 @@
+interface:
+  display_name: "CodeAtlas Graph Model"
+  short_description: "Maintain graph facts and snapshots."
+  default_prompt: "Use this skill when changing CodeAtlas graph schema or fact lifecycle."
+

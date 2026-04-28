@@ -1,0 +1,12 @@
+[versions]
+junit = "5.14.1"
+spoon = "11.3.1-beta-8"
+neo4jDriver = "6.0.3"
+jgit = "7.6.0.202603022253-r"
+
+[libraries]
+junit-jupiter = { module = "org.junit.jupiter:junit-jupiter", version.ref = "junit" }
+junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher" }
+spoon-core = { module = "fr.inria.gforge.spoon:spoon-core", version.ref = "spoon" }
+neo4j-java-driver = { module = "org.neo4j.driver:neo4j-java-driver", version.ref = "neo4jDriver" }
+jgit = { module = "org.eclipse.jgit:org.eclipse.jgit", version.ref = "jgit" }

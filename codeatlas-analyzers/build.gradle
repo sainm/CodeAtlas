@@ -1,0 +1,11 @@
+plugins {
+    id 'java-library'
+}
+
+description = 'CodeAtlas source and framework analyzer contracts.'
+
+dependencies {
+    api project(':codeatlas-graph')
+    implementation libs.spoon.core
+    implementation libs.jgit
+}

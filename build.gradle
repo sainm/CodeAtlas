@@ -1,0 +1,39 @@
+plugins {
+    id 'base'
+}
+
+group = 'org.sainm.codeatlas'
+version = '0.1.0-SNAPSHOT'
+
+ext.javaProjects = [
+    project(':codeatlas-server'),
+    project(':codeatlas-worker'),
+    project(':codeatlas-analyzers'),
+    project(':codeatlas-graph'),
+    project(':codeatlas-ai'),
+    project(':codeatlas-mcp')
+]
+
+configure(javaProjects) {
+    apply plugin: 'java-library'
+
+    java {
+        toolchain {
+            languageVersion = JavaLanguageVersion.of(25)
+        }
+    }
+
+    tasks.withType(JavaCompile).configureEach {
+        options.encoding = 'UTF-8'
+        options.release = 25
+    }
+
+    tasks.withType(Test).configureEach {
+        useJUnitPlatform()
+    }
+
+    dependencies {
+        testImplementation libs.junit.jupiter
+        testRuntimeOnly libs.junit.platform.launcher
+    }
+}

@@ -1,0 +1,10 @@
+plugins {
+    id 'java-library'
+}
+
+description = 'CodeAtlas AI, RAG, and evidence-pack contracts.'
+
+dependencies {
+    api project(':codeatlas-graph')
+}
+

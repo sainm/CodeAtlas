@@ -1,0 +1,9 @@
+plugins {
+    id 'java-library'
+}
+
+description = 'CodeAtlas graph contracts, keys, and fact lifecycle model.'
+
+dependencies {
+    implementation libs.neo4j.java.driver
+}
