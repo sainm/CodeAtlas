@@ -9,7 +9,9 @@ public enum RelationType {
     INJECTS,
     ROUTES_TO,
     SUBMITS_TO,
+    INCLUDES,
     BINDS_TO,
+    PASSES_PARAM,
     READS_PARAM,
     WRITES_PARAM,
     READS_TABLE,
@@ -22,4 +24,3 @@ public enum RelationType {
     BRIDGES_TO,
     SYNTHETIC_OF
 }
-

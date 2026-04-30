@@ -12,8 +12,22 @@ public record WebAppContext(
     String containerProfile,
     List<Path> classpathEntries,
     Map<String, String> taglibs,
+    Map<String, String> tagFiles,
     String defaultEncoding
 ) {
+    public WebAppContext(
+        Path webRoot,
+        Path webXml,
+        String servletVersion,
+        String jspVersion,
+        String containerProfile,
+        List<Path> classpathEntries,
+        Map<String, String> taglibs,
+        String defaultEncoding
+    ) {
+        this(webRoot, webXml, servletVersion, jspVersion, containerProfile, classpathEntries, taglibs, Map.of(), defaultEncoding);
+    }
+
     public WebAppContext {
         if (webRoot == null) {
             throw new IllegalArgumentException("webRoot is required");
@@ -25,6 +39,7 @@ public record WebAppContext(
         containerProfile = containerProfile == null || containerProfile.isBlank() ? "generic" : containerProfile.trim();
         classpathEntries = List.copyOf(classpathEntries);
         taglibs = Map.copyOf(taglibs);
+        tagFiles = Map.copyOf(tagFiles);
         defaultEncoding = defaultEncoding == null || defaultEncoding.isBlank() ? "UTF-8" : defaultEncoding.trim();
     }
 }

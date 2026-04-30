@@ -72,6 +72,56 @@ class SpoonVariableTraceAnalyzerTest {
     }
 
     @Test
+    void extractsArgumentFlowFromRequestParameterAndMethodParameter() throws Exception {
+        Path source = tempDir.resolve("src/main/java/com/acme/UserAction.java");
+        Files.createDirectories(source.getParent());
+        Files.writeString(source, """
+            package com.acme;
+
+            class UserAction {
+                private final UserService service = new UserService();
+
+                void execute(javax.servlet.http.HttpServletRequest request) {
+                    String userId = request.getParameter("userId");
+                    service.save(userId);
+                    service.audit(request.getParameter("token"));
+                }
+            }
+
+            class UserService {
+                private final UserDao dao = new UserDao();
+
+                void save(String userId) {
+                    dao.insert(userId);
+                }
+
+                void audit(String token) {
+                }
+            }
+
+            class UserDao {
+                void insert(String value) {
+                }
+            }
+            """);
+
+        AnalyzerScope scope = new AnalyzerScope("shop", "_root", "snapshot-1", "run-1", "src/main/java", tempDir);
+        VariableTraceResult result = new SpoonVariableTraceAnalyzer().analyze(scope, "shop", "src/main/java", List.of(source));
+
+        assertTrue(result.argumentFlows().stream().anyMatch(flow -> flow.requestParameterName().equals("userId")
+            && flow.argumentName().equals("userId")
+            && flow.calleeMethodSymbol().ownerQualifiedName().equals("com.acme.UserService")
+            && flow.calleeMethodSymbol().memberName().equals("save")));
+        assertTrue(result.argumentFlows().stream().anyMatch(flow -> flow.requestParameterName().equals("token")
+            && flow.flowKind().equals("request-parameter-direct")
+            && flow.calleeMethodSymbol().memberName().equals("audit")));
+        assertTrue(result.argumentFlows().stream().anyMatch(flow -> flow.requestParameterName().isBlank()
+            && flow.flowKind().equals("method-parameter")
+            && flow.callerMethodSymbol().ownerQualifiedName().equals("com.acme.UserService")
+            && flow.calleeMethodSymbol().ownerQualifiedName().equals("com.acme.UserDao")));
+    }
+
+    @Test
     void extractsSimpleGetterAndSetterPropagationEvents() throws Exception {
         Path source = tempDir.resolve("src/main/java/com/acme/UserForm.java");
         Files.createDirectories(source.getParent());

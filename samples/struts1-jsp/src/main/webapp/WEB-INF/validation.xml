@@ -1,0 +1,14 @@
+<form-validation>
+  <formset>
+    <form name="userForm">
+      <field property="userId" depends="required"/>
+      <field property="name" depends="required,maxlength"/>
+      <field property="description" depends="maxlength"/>
+    </form>
+    <form name="adminSearchForm">
+      <field property="keyword" depends="maxlength"/>
+      <field property="page" depends="integer"/>
+      <field property="includeDisabled" depends="boolean"/>
+    </form>
+  </formset>
+</form-validation>

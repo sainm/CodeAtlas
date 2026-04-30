@@ -68,7 +68,9 @@ public final class Neo4jGraphQueryBuilder {
             RelationType.INJECTS.name(),
             RelationType.ROUTES_TO.name(),
             RelationType.SUBMITS_TO.name(),
+            RelationType.INCLUDES.name(),
             RelationType.BINDS_TO.name(),
+            RelationType.PASSES_PARAM.name(),
             RelationType.READS_PARAM.name(),
             RelationType.WRITES_PARAM.name(),
             RelationType.FORWARDS_TO.name(),
@@ -99,9 +101,13 @@ public final class Neo4jGraphQueryBuilder {
 
     public CypherStatement traceVariableSinks(String projectId, String snapshotId, String parameterSymbolId, int limit) {
         return new CypherStatement("""
-            MATCH (sink:Node)-[r:READS_PARAM]->(parameter:Node {symbolId: $symbolId})
+            MATCH (parameter:Node {symbolId: $symbolId})-[r]-(sink:Node)
             WHERE r.projectId = $projectId
               AND r.snapshotId <= $snapshotId
+              AND (
+                (type(r) = 'READS_PARAM' AND startNode(r) = sink AND endNode(r) = parameter)
+                OR (type(r) IN ['BINDS_TO', 'COVERED_BY'] AND startNode(r) = parameter AND endNode(r) = sink)
+              )
             WITH sink, parameter, r
             ORDER BY r.snapshotId DESC
             WITH sink, parameter, r.factKey AS factKey, r.evidenceKey AS evidenceKey, collect(r)[0] AS latest
@@ -114,7 +120,11 @@ public final class Neo4jGraphQueryBuilder {
                    latest.evidenceKey AS evidenceKey
             ORDER BY symbolId
             LIMIT $limit
-            """, baseParameters(projectId, snapshotId, parameterSymbolId, limit, List.of(RelationType.READS_PARAM.name())));
+            """, baseParameters(projectId, snapshotId, parameterSymbolId, limit, List.of(
+            RelationType.READS_PARAM.name(),
+            RelationType.BINDS_TO.name(),
+            RelationType.COVERED_BY.name()
+        )));
     }
 
     public CypherStatement findJspBackendFlow(String projectId, String snapshotId, String jspSymbolId, int maxDepth, int limit) {
@@ -136,12 +146,20 @@ public final class Neo4jGraphQueryBuilder {
             """.formatted(depth), baseParameters(projectId, snapshotId, jspSymbolId, limit, List.of(
             RelationType.DECLARES.name(),
             RelationType.SUBMITS_TO.name(),
+            RelationType.INCLUDES.name(),
+            RelationType.FORWARDS_TO.name(),
             RelationType.ROUTES_TO.name(),
             RelationType.CALLS.name(),
             RelationType.IMPLEMENTS.name(),
             RelationType.INJECTS.name(),
             RelationType.BRIDGES_TO.name(),
             RelationType.BINDS_TO.name(),
+            RelationType.PASSES_PARAM.name(),
+            RelationType.READS_PARAM.name(),
+            RelationType.WRITES_PARAM.name(),
+            RelationType.COVERED_BY.name(),
+            RelationType.USES_CONFIG.name(),
+            RelationType.EXTENDS.name(),
             RelationType.READS_TABLE.name(),
             RelationType.WRITES_TABLE.name()
         )));

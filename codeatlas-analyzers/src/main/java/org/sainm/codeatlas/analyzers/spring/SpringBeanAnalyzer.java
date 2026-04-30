@@ -61,36 +61,32 @@ public final class SpringBeanAnalyzer {
         List<SpringBeanDependency> dependencies = new ArrayList<>();
         List<GraphNode> nodes = new ArrayList<>();
         List<GraphFact> facts = new ArrayList<>();
+        SpringBeanAnalysisContext context = new SpringBeanAnalysisContext(scope, symbols, beanRoles, dependencies, nodes, facts);
 
         for (CtType<?> type : model.getAllTypes()) {
             beanRole(type).ifPresent(role -> {
-                beanRoles.put(type.getQualifiedName(), role);
-                nodes.add(GraphNodeFactory.classNode(symbols.type(type), role));
+                context.beanRoles().put(type.getQualifiedName(), role);
+                context.nodes().add(GraphNodeFactory.classNode(context.symbols().type(type), role));
             });
         }
 
         for (CtType<?> type : model.getAllTypes()) {
-            NodeRole sourceRole = beanRoles.get(type.getQualifiedName());
+            NodeRole sourceRole = context.beanRoles().get(type.getQualifiedName());
             if (sourceRole == null) {
                 continue;
             }
-            SymbolId sourceClass = symbols.type(type);
+            SymbolId sourceClass = context.symbols().type(type);
             for (CtField<?> field : type.getFields()) {
                 if (hasInjectionAnnotation(field.getAnnotations())) {
                     addDependency(
-                        scope,
-                        symbols,
+                        context,
                         sourceClass,
                         type.getQualifiedName(),
                         field.getType(),
                         "field:" + field.getSimpleName(),
                         qualifier(field.getAnnotations()).orElse(""),
                         Confidence.CERTAIN,
-                        field.getPosition(),
-                        beanRoles,
-                        dependencies,
-                        nodes,
-                        facts
+                        field.getPosition()
                     );
                 }
             }
@@ -112,19 +108,14 @@ public final class SpringBeanAnalyzer {
                         .or(() -> qualifier(constructor.getAnnotations()))
                         .orElse("");
                     addDependency(
-                        scope,
-                        symbols,
+                        context,
                         sourceClass,
                         type.getQualifiedName(),
                         parameter.getType(),
                         "constructor:" + parameter.getSimpleName(),
                         parameterQualifier,
                         confidence,
-                        parameter.getPosition(),
-                        beanRoles,
-                        dependencies,
-                        nodes,
-                        facts
+                        parameter.getPosition()
                     );
                 }
             }
@@ -150,27 +141,22 @@ public final class SpringBeanAnalyzer {
     }
 
     private void addDependency(
-        AnalyzerScope scope,
-        SpoonSymbolMapper symbols,
+        SpringBeanAnalysisContext context,
         SymbolId sourceClass,
         String sourceQualifiedName,
         CtTypeReference<?> dependencyType,
         String injectionPoint,
         String qualifier,
         Confidence confidence,
-        SourcePosition position,
-        Map<String, NodeRole> beanRoles,
-        List<SpringBeanDependency> dependencies,
-        List<GraphNode> nodes,
-        List<GraphFact> facts
+        SourcePosition position
     ) {
         if (dependencyType == null || dependencyType.getQualifiedName() == null || dependencyType.getQualifiedName().isBlank()) {
             return;
         }
-        SymbolId targetClass = symbols.typeReference(dependencyType);
-        NodeRole targetRole = beanRoles.getOrDefault(dependencyType.getQualifiedName(), NodeRole.CODE_TYPE);
-        nodes.add(GraphNodeFactory.classNode(targetClass, targetRole));
-        dependencies.add(new SpringBeanDependency(
+        SymbolId targetClass = context.symbols().typeReference(dependencyType);
+        NodeRole targetRole = context.beanRoles().getOrDefault(dependencyType.getQualifiedName(), NodeRole.CODE_TYPE);
+        context.nodes().add(GraphNodeFactory.classNode(targetClass, targetRole));
+        context.dependencies().add(new SpringBeanDependency(
             sourceQualifiedName,
             dependencyType.getQualifiedName(),
             injectionPoint,
@@ -178,13 +164,13 @@ public final class SpringBeanAnalyzer {
             confidence,
             line(position)
         ));
-        facts.add(GraphFact.active(
+        context.facts().add(GraphFact.active(
             new FactKey(sourceClass, RelationType.INJECTS, targetClass, qualifierForFact(injectionPoint, qualifier)),
             evidence(position, injectionPoint, qualifier),
-            scope.projectId(),
-            scope.snapshotId(),
-            scope.analysisRunId(),
-            scope.scopeKey(),
+            context.scope().projectId(),
+            context.scope().snapshotId(),
+            context.scope().analysisRunId(),
+            context.scope().scopeKey(),
             confidence,
             SourceType.SPOON
         ));
@@ -237,5 +223,15 @@ public final class SpringBeanAnalyzer {
 
     private int line(SourcePosition position) {
         return position == null || !position.isValidPosition() ? 0 : Math.max(0, position.getLine());
+    }
+
+    private record SpringBeanAnalysisContext(
+        AnalyzerScope scope,
+        SpoonSymbolMapper symbols,
+        Map<String, NodeRole> beanRoles,
+        List<SpringBeanDependency> dependencies,
+        List<GraphNode> nodes,
+        List<GraphFact> facts
+    ) {
     }
 }

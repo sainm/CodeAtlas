@@ -109,9 +109,6 @@ public final class MyBatisMapperInterfaceAnalyzer {
         if (!type.isInterface()) {
             return false;
         }
-        if (type.getQualifiedName().endsWith("Mapper")) {
-            return true;
-        }
         if (type.getAnnotations().stream().map(this::annotationName).anyMatch(name -> name.equals("Mapper"))) {
             return true;
         }

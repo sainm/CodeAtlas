@@ -18,6 +18,7 @@ public final class StrutsWebXmlAnalyzer {
         Set<String> actionServletNames = new LinkedHashSet<>();
         Set<String> configLocations = new LinkedHashSet<>();
         Set<String> urlPatterns = new LinkedHashSet<>();
+        List<StrutsModuleConfig> moduleConfigs = new ArrayList<>();
 
         NodeList servlets = document.getElementsByTagName("servlet");
         for (int i = 0; i < servlets.getLength(); i++) {
@@ -30,12 +31,24 @@ public final class StrutsWebXmlAnalyzer {
             if (servletName != null) {
                 actionServletNames.add(servletName);
             }
+            boolean hasConfigParam = false;
             NodeList initParams = servlet.getElementsByTagName("init-param");
             for (int j = 0; j < initParams.getLength(); j++) {
                 Element initParam = (Element) initParams.item(j);
-                if ("config".equals(text(initParam, "param-name"))) {
-                    splitConfigLocations(text(initParam, "param-value")).forEach(configLocations::add);
+                String paramName = text(initParam, "param-name");
+                if (paramName != null && (paramName.equals("config") || paramName.startsWith("config/"))) {
+                    hasConfigParam = true;
+                    String modulePrefix = paramName.equals("config") ? "" : paramName.substring("config".length());
+                    for (String location : splitConfigLocations(text(initParam, "param-value"))) {
+                        configLocations.add(location);
+                        moduleConfigs.add(new StrutsModuleConfig(modulePrefix, location));
+                    }
                 }
+            }
+            if (!hasConfigParam) {
+                String defaultLocation = "/WEB-INF/struts-config.xml";
+                configLocations.add(defaultLocation);
+                moduleConfigs.add(new StrutsModuleConfig("", defaultLocation));
             }
         }
 
@@ -54,7 +67,8 @@ public final class StrutsWebXmlAnalyzer {
         return new StrutsWebXmlAnalysisResult(
             new ArrayList<>(actionServletNames),
             new ArrayList<>(configLocations),
-            new ArrayList<>(urlPatterns)
+            new ArrayList<>(urlPatterns),
+            moduleConfigs
         );
     }
 

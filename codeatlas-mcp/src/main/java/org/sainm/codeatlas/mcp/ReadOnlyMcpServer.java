@@ -7,6 +7,7 @@ public final class ReadOnlyMcpServer {
     private final McpToolRegistry toolRegistry;
     private final McpResourceRegistry resourceRegistry;
     private final McpPromptRegistry promptRegistry;
+    private final McpToolCallSafetyGuard toolCallSafetyGuard = new McpToolCallSafetyGuard();
 
     public ReadOnlyMcpServer() {
         this(
@@ -46,7 +47,10 @@ public final class ReadOnlyMcpServer {
         if (!toolRegistry.isAllowed(name)) {
             throw new IllegalArgumentException("Tool is not allowed: " + name.value());
         }
-        return new McpToolCallPlan(toolRegistry.find(name).orElseThrow(), arguments == null ? Map.of() : arguments);
+        McpToolDescriptor descriptor = toolRegistry.find(name).orElseThrow();
+        Map<String, Object> safeArguments = arguments == null ? Map.of() : arguments;
+        toolCallSafetyGuard.validate(descriptor, safeArguments);
+        return new McpToolCallPlan(descriptor, safeArguments);
     }
 
     public McpResourceDescriptor resource(McpResourceName name) {

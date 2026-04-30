@@ -48,4 +48,44 @@ class SpringMvcAnalyzerTest {
             && fact.factKey().source().kind() == SymbolKind.API_ENDPOINT
             && fact.factKey().target().memberName().equals("find")));
     }
+
+    @Test
+    void extractsScheduledAndAsyncEntrypoints() throws Exception {
+        Path source = tempDir.resolve("src/main/java/com/acme/UserJobs.java");
+        Files.createDirectories(source.getParent());
+        Files.writeString(source, """
+            package com.acme;
+
+            import org.springframework.scheduling.annotation.Async;
+            import org.springframework.scheduling.annotation.Scheduled;
+            import org.springframework.stereotype.Component;
+
+            @Component
+            class UserJobs {
+                @Scheduled(cron = "0 0 * * * *")
+                void refreshUsers() {
+                }
+
+                @Async
+                void sendMail() {
+                }
+            }
+            """);
+
+        AnalyzerScope scope = new AnalyzerScope("shop", "_root", "snapshot-1", "run-1", "src/main/java", tempDir);
+        SpringMvcAnalysisResult result = new SpringMvcAnalyzer().analyze(scope, "shop", "src/main/java", List.of(source));
+
+        assertTrue(result.endpoints().stream().anyMatch(endpoint -> endpoint.httpMethod().equals("SCHEDULED")
+            && endpoint.path().contains("UserJobs#refreshUsers")));
+        assertTrue(result.endpoints().stream().anyMatch(endpoint -> endpoint.httpMethod().equals("ASYNC")
+            && endpoint.path().contains("UserJobs#sendMail")));
+        assertTrue(result.facts().stream().anyMatch(fact -> fact.factKey().relationType() == RelationType.ROUTES_TO
+            && fact.factKey().source().kind() == SymbolKind.API_ENDPOINT
+            && fact.factKey().source().localId().equals("SCHEDULED")
+            && fact.factKey().target().memberName().equals("refreshUsers")));
+        assertTrue(result.facts().stream().anyMatch(fact -> fact.factKey().relationType() == RelationType.ROUTES_TO
+            && fact.factKey().source().kind() == SymbolKind.API_ENDPOINT
+            && fact.factKey().source().localId().equals("ASYNC")
+            && fact.factKey().target().memberName().equals("sendMail")));
+    }
 }

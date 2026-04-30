@@ -4,10 +4,15 @@ import org.sainm.codeatlas.analyzers.AnalyzerScope;
 import org.sainm.codeatlas.graph.model.SymbolId;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import spoon.Launcher;
 import spoon.reflect.CtModel;
 import spoon.reflect.code.CtAssignment;
+import spoon.reflect.code.CtExpression;
 import spoon.reflect.code.CtInvocation;
 import spoon.reflect.code.CtLocalVariable;
 import spoon.reflect.code.CtReturn;
@@ -46,22 +51,32 @@ public final class SpoonVariableTraceAnalyzer {
 
         SpoonSymbolMapper symbols = new SpoonSymbolMapper(projectKey, scope.moduleKey(), sourceRootKey);
         List<VariableEvent> events = new ArrayList<>();
+        List<MethodArgumentFlowEvent> argumentFlows = new ArrayList<>();
         for (CtType<?> type : model.getAllTypes()) {
             for (CtConstructor<?> constructor : type.getElements(new TypeFilter<>(CtConstructor.class))) {
                 if (type.equals(constructor.getDeclaringType())) {
-                    collectExecutable(events, symbols.constructor(constructor), constructor);
+                    collectExecutable(events, argumentFlows, symbols, symbols.constructor(constructor), constructor);
                 }
             }
             for (CtMethod<?> method : type.getMethods()) {
-                collectExecutable(events, symbols.method(method), method);
+                collectExecutable(events, argumentFlows, symbols, symbols.method(method), method);
                 collectBeanAccessor(events, symbols.method(method), method);
             }
         }
-        return new VariableTraceResult(events);
+        return new VariableTraceResult(events, argumentFlows);
     }
 
-    private void collectExecutable(List<VariableEvent> events, SymbolId methodSymbol, CtExecutable<?> executable) {
+    private void collectExecutable(
+        List<VariableEvent> events,
+        List<MethodArgumentFlowEvent> argumentFlows,
+        SpoonSymbolMapper symbols,
+        SymbolId methodSymbol,
+        CtExecutable<?> executable
+    ) {
+        Set<String> methodParameters = new LinkedHashSet<>();
+        Map<String, String> requestParameterByVariable = new LinkedHashMap<>();
         for (CtParameter<?> parameter : executable.getParameters()) {
+            methodParameters.add(parameter.getSimpleName());
             events.add(new VariableEvent(
                 methodSymbol,
                 parameter.getSimpleName(),
@@ -71,6 +86,10 @@ public final class SpoonVariableTraceAnalyzer {
             ));
         }
         for (CtLocalVariable<?> local : executable.getElements(new TypeFilter<>(CtLocalVariable.class))) {
+            String requestParameterName = requestParameterName(local.getDefaultExpression());
+            if (!requestParameterName.isBlank()) {
+                requestParameterByVariable.put(local.getSimpleName(), requestParameterName);
+            }
             events.add(new VariableEvent(
                 methodSymbol,
                 local.getSimpleName(),
@@ -80,9 +99,14 @@ public final class SpoonVariableTraceAnalyzer {
             ));
         }
         for (CtAssignment<?, ?> assignment : executable.getElements(new TypeFilter<>(CtAssignment.class))) {
+            String assignedName = variableName(assignment.getAssigned());
+            String requestParameterName = requestParameterName(assignment.getAssignment());
+            if (!assignedName.isBlank() && !requestParameterName.isBlank()) {
+                requestParameterByVariable.put(assignedName, requestParameterName);
+            }
             events.add(new VariableEvent(
                 methodSymbol,
-                variableName(assignment.getAssigned()),
+                assignedName,
                 VariableEventKind.ASSIGNMENT,
                 assignment.getAssignment() == null ? "" : assignment.getAssignment().toString(),
                 line(assignment.getPosition())
@@ -105,6 +129,7 @@ public final class SpoonVariableTraceAnalyzer {
         }
         for (CtInvocation<?> invocation : executable.getElements(new TypeFilter<>(CtInvocation.class))) {
             addRequestInvocation(events, methodSymbol, invocation);
+            addArgumentFlows(argumentFlows, symbols, methodSymbol, methodParameters, requestParameterByVariable, invocation);
         }
     }
 
@@ -161,6 +186,70 @@ public final class SpoonVariableTraceAnalyzer {
         }
         String key = invocation.getArguments().isEmpty() ? "" : stripQuotes(invocation.getArguments().getFirst().toString());
         events.add(new VariableEvent(methodSymbol, key, kind, invocation.toString(), line(invocation.getPosition())));
+    }
+
+    private void addArgumentFlows(
+        List<MethodArgumentFlowEvent> argumentFlows,
+        SpoonSymbolMapper symbols,
+        SymbolId caller,
+        Set<String> methodParameters,
+        Map<String, String> requestParameterByVariable,
+        CtInvocation<?> invocation
+    ) {
+        if (invocation.getExecutable() == null) {
+            return;
+        }
+        SymbolId callee = symbols.executableReference(invocation.getExecutable());
+        for (CtExpression<?> argument : invocation.getArguments()) {
+            String directRequestParameter = requestParameterName(argument);
+            if (!directRequestParameter.isBlank()) {
+                argumentFlows.add(new MethodArgumentFlowEvent(
+                    caller,
+                    callee,
+                    directRequestParameter,
+                    argument.toString(),
+                    "request-parameter-direct",
+                    invocation.toString(),
+                    line(invocation.getPosition())
+                ));
+                continue;
+            }
+            String argumentName = variableName(argument);
+            String requestParameterName = requestParameterByVariable.getOrDefault(argumentName, "");
+            if (!requestParameterName.isBlank()) {
+                argumentFlows.add(new MethodArgumentFlowEvent(
+                    caller,
+                    callee,
+                    requestParameterName,
+                    argumentName,
+                    "request-parameter-local",
+                    invocation.toString(),
+                    line(invocation.getPosition())
+                ));
+                continue;
+            }
+            if (methodParameters.contains(argumentName)) {
+                argumentFlows.add(new MethodArgumentFlowEvent(
+                    caller,
+                    callee,
+                    "",
+                    argumentName,
+                    "method-parameter",
+                    invocation.toString(),
+                    line(invocation.getPosition())
+                ));
+            }
+        }
+    }
+
+    private String requestParameterName(CtExpression<?> expression) {
+        if (!(expression instanceof CtInvocation<?> invocation) || invocation.getExecutable() == null) {
+            return "";
+        }
+        if (!"getParameter".equals(invocation.getExecutable().getSimpleName()) || invocation.getArguments().isEmpty()) {
+            return "";
+        }
+        return stripQuotes(invocation.getArguments().getFirst().toString());
     }
 
     private String variableName(Object assigned) {

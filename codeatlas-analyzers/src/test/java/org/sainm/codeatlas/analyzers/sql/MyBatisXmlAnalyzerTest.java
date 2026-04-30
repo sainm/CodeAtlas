@@ -73,6 +73,56 @@ class MyBatisXmlAnalyzerTest {
     }
 
     @Test
+    void usesJSqlParserForNestedSelectAndJoinTables() throws Exception {
+        Path xml = tempDir.resolve("src/main/resources/com/acme/UserMapper.xml");
+        Files.createDirectories(xml.getParent());
+        Files.writeString(xml, """
+            <?xml version="1.0" encoding="UTF-8"?>
+            <mapper namespace="com.acme.UserMapper">
+              <select id="findWithOrders" resultType="User">
+                select u.id, o.total
+                from users u
+                join orders o on o.user_id = u.id
+                where exists (
+                  select 1 from audit_log a where a.user_id = u.id
+                )
+              </select>
+            </mapper>
+            """);
+
+        AnalyzerScope scope = new AnalyzerScope("shop", "_root", "snapshot-1", "run-1", "src/main/resources", tempDir);
+        MyBatisXmlAnalysisResult result = new MyBatisXmlAnalyzer().analyze(scope, "shop", "src/main/resources", xml);
+
+        assertTrue(result.nodes().stream().anyMatch(node -> node.symbolId().kind() == SymbolKind.DB_TABLE
+            && node.symbolId().ownerQualifiedName().endsWith("users")));
+        assertTrue(result.nodes().stream().anyMatch(node -> node.symbolId().kind() == SymbolKind.DB_TABLE
+            && node.symbolId().ownerQualifiedName().endsWith("orders")));
+        assertTrue(result.nodes().stream().anyMatch(node -> node.symbolId().kind() == SymbolKind.DB_TABLE
+            && node.symbolId().ownerQualifiedName().endsWith("audit_log")));
+        assertTrue(result.facts().stream().filter(fact -> fact.factKey().relationType() == RelationType.READS_TABLE).count() >= 3);
+    }
+
+    @Test
+    void fallsBackForDynamicSqlThatJSqlParserCannotParse() throws Exception {
+        Path xml = tempDir.resolve("src/main/resources/com/acme/UserMapper.xml");
+        Files.createDirectories(xml.getParent());
+        Files.writeString(xml, """
+            <?xml version="1.0" encoding="UTF-8"?>
+            <mapper namespace="com.acme.UserMapper">
+              <select id="dynamicTable" resultType="User">
+                select id, name from users order by ${orderBy}
+              </select>
+            </mapper>
+            """);
+
+        AnalyzerScope scope = new AnalyzerScope("shop", "_root", "snapshot-1", "run-1", "src/main/resources", tempDir);
+        MyBatisXmlAnalysisResult result = new MyBatisXmlAnalyzer().analyze(scope, "shop", "src/main/resources", xml);
+
+        assertEquals(1, result.statements().size());
+        assertTrue(result.facts().stream().anyMatch(fact -> fact.factKey().relationType() == RelationType.READS_TABLE));
+    }
+
+    @Test
     void toleratesMyBatisDoctypeWithoutLoadingExternalDtd() throws Exception {
         Path xml = tempDir.resolve("src/main/resources/com/acme/UserMapper.xml");
         Files.createDirectories(xml.getParent());

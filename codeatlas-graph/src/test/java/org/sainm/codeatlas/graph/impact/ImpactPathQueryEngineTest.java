@@ -9,6 +9,7 @@ import org.sainm.codeatlas.graph.model.GraphFact;
 import org.sainm.codeatlas.graph.model.RelationType;
 import org.sainm.codeatlas.graph.model.SourceType;
 import org.sainm.codeatlas.graph.model.SymbolId;
+import org.sainm.codeatlas.graph.model.SymbolKind;
 import org.sainm.codeatlas.graph.store.InMemoryGraphRepository;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -38,6 +39,8 @@ class ImpactPathQueryEngineTest {
         assertEquals(mapper, path.changedSymbol());
         assertEquals(3, path.steps().size());
         assertEquals(Confidence.LIKELY, path.confidence());
+        assertEquals(1, path.steps().get(1).evidenceKeys().size());
+        assertEquals("UserAction.java", path.steps().get(1).evidenceKeys().getFirst().path());
     }
 
     @Test
@@ -55,6 +58,26 @@ class ImpactPathQueryEngineTest {
         );
 
         assertEquals(0, paths.size());
+    }
+
+    @Test
+    void treatsIncludedJspAsUpstreamImpactRelation() {
+        SymbolId page = SymbolId.logicalPath(SymbolKind.JSP_PAGE, "shop", "_root", "src/main/webapp", "user/edit.jsp", null);
+        SymbolId include = SymbolId.logicalPath(SymbolKind.JSP_PAGE, "shop", "_root", "src/main/webapp", "common/footer.jsp", null);
+        InMemoryGraphRepository repository = new InMemoryGraphRepository();
+        repository.upsertFact(active(new FactKey(page, RelationType.INCLUDES, include, "static_directive:/common/footer.jsp"), "edit.jsp", 1, Confidence.CERTAIN));
+
+        List<ImpactPath> paths = new ImpactPathQueryEngine().findUpstreamImpactPaths(
+            repository.activeFacts("shop", "snapshot-1"),
+            include,
+            symbol -> symbol.equals(page),
+            2,
+            10
+        );
+
+        assertEquals(1, paths.size());
+        assertEquals(page, paths.getFirst().entrypoint());
+        assertEquals(RelationType.INCLUDES, paths.getFirst().steps().get(1).incomingRelation());
     }
 
     private GraphFact active(FactKey factKey, String path, int line, Confidence confidence) {

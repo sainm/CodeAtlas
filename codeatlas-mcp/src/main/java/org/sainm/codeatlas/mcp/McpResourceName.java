@@ -4,6 +4,7 @@ public enum McpResourceName {
     SYMBOL("symbol"),
     JSP("jsp"),
     TABLE("table"),
+    QUERY_VIEW("query-view"),
     REPORT("report");
 
     private final String value;

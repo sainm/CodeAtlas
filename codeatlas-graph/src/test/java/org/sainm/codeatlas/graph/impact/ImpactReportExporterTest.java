@@ -3,6 +3,8 @@ package org.sainm.codeatlas.graph.impact;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import org.sainm.codeatlas.graph.model.Confidence;
+import org.sainm.codeatlas.graph.model.EvidenceKey;
+import org.sainm.codeatlas.graph.model.RelationType;
 import org.sainm.codeatlas.graph.model.SourceType;
 import org.sainm.codeatlas.graph.model.SymbolId;
 import java.time.Instant;
@@ -16,6 +18,10 @@ class ImpactReportExporterTest {
 
         assertTrue(json.contains("\"reportId\": \"r1\""));
         assertTrue(json.contains("\"entrypoint\""));
+        assertTrue(json.contains("\"affectedSymbols\""));
+        assertTrue(json.contains("\"category\": \"METHOD\""));
+        assertTrue(json.contains("\"evidenceKeys\""));
+        assertTrue(json.contains("\"localPath\": \"direct\""));
         assertTrue(json.contains("\"evidenceList\""));
         assertTrue(json.contains("\\\"quoted\\\""));
     }
@@ -25,9 +31,12 @@ class ImpactReportExporterTest {
         String markdown = new ImpactReportMarkdownExporter().export(report());
 
         assertTrue(markdown.contains("# Impact Report"));
+        assertTrue(markdown.contains("## Affected Symbols"));
+        assertTrue(markdown.contains("`METHOD`"));
         assertTrue(markdown.contains("## Paths"));
         assertTrue(markdown.contains("## Evidence"));
         assertTrue(markdown.contains("Path 1"));
+        assertTrue(markdown.contains("evidence=1"));
     }
 
     private ImpactReport report() {
@@ -38,7 +47,13 @@ class ImpactReportExporterTest {
             mapper,
             List.of(
                 new ImpactPathStep(action, null, SourceType.SPOON, Confidence.CERTAIN),
-                new ImpactPathStep(mapper, org.sainm.codeatlas.graph.model.RelationType.CALLS, SourceType.SPOON, Confidence.LIKELY)
+                new ImpactPathStep(
+                    mapper,
+                    RelationType.CALLS,
+                    SourceType.SPOON,
+                    Confidence.LIKELY,
+                    List.of(new EvidenceKey(SourceType.SPOON, "test", "UserAction.java", 12, 12, "direct"))
+                )
             ),
             RiskLevel.MEDIUM,
             "Action reaches mapper \"quoted\".",

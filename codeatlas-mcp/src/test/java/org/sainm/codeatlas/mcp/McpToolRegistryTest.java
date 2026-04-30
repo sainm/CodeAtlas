@@ -31,9 +31,16 @@ class McpToolRegistryTest {
 
         assertTrue(registry.find(McpToolName.SYMBOL_SEARCH).orElseThrow().inputSchema().contains("\"q\""));
         assertTrue(registry.find(McpToolName.GRAPH_FIND_CALLERS).orElseThrow().inputSchema().contains("\"symbolId\""));
+        assertTrue(registry.find(McpToolName.GRAPH_FIND_CALLERS).orElseThrow().inputSchema().contains("maxDepth"));
+        assertTrue(registry.find(McpToolName.GRAPH_FIND_CALLEES).orElseThrow().description().contains("evidence keys"));
+        assertTrue(registry.find(McpToolName.VARIABLE_TRACE).orElseThrow().description().contains("sources and sinks"));
+        assertTrue(registry.find(McpToolName.VARIABLE_TRACE).orElseThrow().description().contains("JSP"));
         assertTrue(registry.find(McpToolName.VARIABLE_TRACE_SOURCE).orElseThrow().inputSchema().contains("REQUEST_PARAMETER"));
         assertTrue(registry.find(McpToolName.JSP_FIND_BACKEND_FLOW).orElseThrow().inputSchema().contains("JSP_PAGE"));
         assertTrue(registry.find(McpToolName.IMPACT_ANALYZE_DIFF).orElseThrow().inputSchema().contains("diffText"));
         assertTrue(registry.find(McpToolName.REPORT_GET_IMPACT_REPORT).orElseThrow().inputSchema().contains("\"reportId\""));
+        assertTrue(registry.find(McpToolName.REPORT_GET_ASSISTANT_SUMMARY).orElseThrow().description().contains("test suggestions"));
+        assertTrue(registry.find(McpToolName.REPORT_GET_ASSISTANT_SUMMARY).orElseThrow().inputSchema().contains("\"reportId\""));
+        assertTrue(registry.find(McpToolName.QUERY_PLAN).orElseThrow().inputSchema().contains("Natural-language"));
     }
 }

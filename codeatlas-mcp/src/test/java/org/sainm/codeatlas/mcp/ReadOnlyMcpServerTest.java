@@ -40,4 +40,18 @@ class ReadOnlyMcpServerTest {
 
         assertThrows(IllegalArgumentException.class, () -> server.planToolCall(McpToolName.SYMBOL_SEARCH, Map.of()));
     }
+
+    @Test
+    void rejectsArbitraryDatabaseQueryArgumentsEvenForAllowedTools() {
+        ReadOnlyMcpServer server = new ReadOnlyMcpServer();
+
+        assertThrows(
+            IllegalArgumentException.class,
+            () -> server.planToolCall(McpToolName.SYMBOL_SEARCH, Map.of("q", "User", "rawCypher", "MATCH (n) RETURN n"))
+        );
+        assertThrows(
+            IllegalArgumentException.class,
+            () -> server.planToolCall(McpToolName.QUERY_PLAN, Map.of("q", "find callers", "sql", "select * from users"))
+        );
+    }
 }

@@ -11,6 +11,7 @@ public enum RelationGroup {
         RelationType.ROUTES_TO,
         RelationType.SUBMITS_TO,
         RelationType.BINDS_TO,
+        RelationType.PASSES_PARAM,
         RelationType.FORWARDS_TO,
         RelationType.READS_TABLE,
         RelationType.WRITES_TABLE,

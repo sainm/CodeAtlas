@@ -8,4 +8,7 @@ dependencies {
     api project(':codeatlas-graph')
     implementation libs.spoon.core
     implementation libs.jgit
+    implementation libs.tomcat.embed.jasper
+    implementation libs.ant
+    implementation libs.jsqlparser
 }

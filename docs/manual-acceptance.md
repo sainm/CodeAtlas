@@ -1,298 +1,251 @@
 # CodeAtlas Current Manual Acceptance Checklist
 
-本文档用于现阶段人工验收。目标不是验收最终完整产品，而是确认当前 MVP 基线已经具备可构建、可分析、可查询、可展示的核心能力。
+This checklist is for the current MVP baseline. It verifies that the project can build, analyze representative legacy Java web code, and expose enough graph facts for later UI, MCP, and AI layers.
 
-## 0. 验收前提
+## 0. Preconditions
 
-- [ ] 本地已安装 JDK 25，并且 `java -version` 可见。
-- [ ] 当前目录为 `D:\source\CodeAtlas`。
-- [ ] 当前分支为 `main`。
-- [ ] `git status --short` 输出为空，或只包含本次验收文档相关变更。
-- [ ] 可以访问 Gradle Wrapper：`.\gradlew.bat --version`。
+- [ ] Current directory is `D:\source\CodeAtlas`.
+- [ ] Current branch is `next`.
+- [ ] JDK 25 is available from `java -version`.
+- [ ] Gradle wrapper is available from `.\gradlew.bat --version`.
+- [ ] `git status --short` is either clean or contains only the expected current task changes.
 
-## 1. 构建与测试
+## 1. Build
 
-执行：
+Run:
 
 ```powershell
 .\gradlew.bat build --no-daemon
 ```
 
-验收点：
+Acceptance:
 
-- [ ] 构建结果为 `BUILD SUCCESSFUL`。
-- [ ] `codeatlas-graph` 测试通过。
-- [ ] `codeatlas-analyzers` 测试通过。
-- [ ] `codeatlas-ai` 测试通过。
-- [ ] `codeatlas-mcp` 测试通过。
-- [ ] `codeatlas-server` 测试通过。
-- [ ] `codeatlas-worker` 测试通过。
-- [ ] `codeatlas-ui:npmBuild` 通过。
+- [ ] The command ends with `BUILD SUCCESSFUL`.
+- [ ] `codeatlas-graph` tests pass.
+- [ ] `codeatlas-analyzers` tests pass.
+- [ ] `codeatlas-ai` tests pass.
+- [ ] `codeatlas-mcp` tests pass.
+- [ ] `codeatlas-server` tests pass.
+- [ ] `codeatlas-worker` tests pass.
+- [ ] `codeatlas-ui:npmBuild` passes.
 
-## 2. 工程结构
+## 2. Project Structure
 
-验收点：
+- [ ] Gradle multi-project structure exists.
+- [ ] `settings.gradle` includes `codeatlas-graph`, `codeatlas-analyzers`, `codeatlas-ai`, `codeatlas-mcp`, `codeatlas-server`, `codeatlas-worker`, and `codeatlas-ui`.
+- [ ] Java group/package uses `org.sainm.codeatlas`.
+- [ ] `docs/design.md`, `docs/plan.md`, and `docs/task.md` exist.
+- [ ] `docs/struts1-analysis.md` exists.
+- [ ] `.gitignore` excludes build output, `node_modules`, dist output, IDE files, local env files, and logs.
 
-- [ ] 根工程使用 Gradle multi-project。
-- [ ] `settings.gradle` 包含以下模块：
-  - `codeatlas-graph`
-  - `codeatlas-analyzers`
-  - `codeatlas-ai`
-  - `codeatlas-mcp`
-  - `codeatlas-server`
-  - `codeatlas-worker`
-  - `codeatlas-ui`
-- [ ] Java group/package 使用 `org.sainm.codeatlas`。
-- [ ] `docs/design.md`、`docs/plan.md`、`docs/task.md` 存在。
-- [ ] `docs/license-review.md` 存在。
-- [ ] `.gitignore` 已忽略 build、node_modules、dist、IDE、本地 env、日志等文件。
+## 3. Graph Contract
 
-## 3. 图谱模型与 Neo4j 查询
+- [ ] `SymbolId` represents project, module, source root, file, class, method, field, JSP, SQL, table, column, action path, config key, and request parameter identities.
+- [ ] `FactKey` and `EvidenceKey` are stable value objects.
+- [ ] `GraphFact` includes `confidence`, `sourceType`, `snapshotId`, `analysisRunId`, and `scopeKey`.
+- [ ] AI-assisted facts are not marked `CERTAIN`.
+- [ ] Neo4j schema/query plan code can produce labels, relationship types, constraints, indexes, caller/callee query plans, and impact path query plans.
 
-验收点：
+## 4. Java Analysis
 
-- [ ] `SymbolId` 能稳定表达 Project、Module、File、Class、Method、Field、JSP、SQL、Table、Column、RequestParameter。
-- [ ] `FactKey` 和 `EvidenceKey` 具备稳定 value。
-- [ ] `GraphFact` 包含 `confidence`、`sourceType`、`snapshotId`、`analysisRunId`、`scopeKey`。
-- [ ] 同一 fact 支持多 evidence 合并。
-- [ ] snapshot/tombstone 能隔离旧关系。
-- [ ] AI 辅助事实不能标记为 `CERTAIN`。
-- [ ] Neo4j schema 能生成 labels、relationship types、constraints、indexes。
-- [ ] Neo4j caller/callee query plan 能生成 Cypher。
-- [ ] Neo4j impact path query plan 包含 `CALLS`、`IMPLEMENTS`、`INJECTS`、`BRIDGES_TO`、`ROUTES_TO`、`SUBMITS_TO`、`BINDS_TO`、`READS_TABLE`、`WRITES_TABLE`。
+- [ ] Spoon noClasspath mode can parse Java source.
+- [ ] Classes, interfaces, enums, annotations, methods, constructors, and fields are extracted.
+- [ ] Direct method invocation edges are extracted.
+- [ ] Extends/implements edges are extracted.
+- [ ] File path, line number, and method signature evidence are preserved.
+- [ ] Basic request parameter reads are extracted.
+- [ ] Basic getter/setter variable propagation is extracted.
+- [ ] Business jars under `WEB-INF/lib` can be indexed as class and method nodes.
+- [ ] Business jar bytecode calls create `CALLS` facts for `invokevirtual`, `invokespecial`, `invokestatic`, and `invokeinterface`.
+- [ ] Bytecode `CALLS` facts include sourceType `ASM`, class-file evidence, qualifier such as `bytecode-static` or `bytecode-virtual`, and confidence.
 
-## 4. Java 源码分析
-
-验收点：
-
-- [ ] Spoon noClasspath 模式可解析 Java 25 源码。
-- [ ] 可提取 class、interface、enum、annotation。
-- [ ] 可提取 method、constructor、field。
-- [ ] 可提取 direct method invocation。
-- [ ] 可提取 extends/implements。
-- [ ] 可输出 line number、file path、method signature。
-- [ ] 可生成统一 `symbolId`。
-- [ ] 可建立接口方法到实现方法候选关系。
-
-## 5. Spring 分析
-
-验收点：
-
-- [ ] 可识别 `@Controller`、`@RestController`。
-- [ ] 可识别 `@RequestMapping`、`@GetMapping`、`@PostMapping` 等入口。
-- [ ] 可生成 API endpoint -> handler method 的 `ROUTES_TO` 关系。
-- [ ] 可识别 `@Service`、`@Repository`、`@Component`。
-- [ ] 可识别字段注入：`@Autowired`、`@Resource`、`@Inject`。
-- [ ] 可识别构造器注入。
-- [ ] 可提取 `@Qualifier`、`@Resource(name=...)`、`@Named` 的 qualifier。
-- [ ] 可生成 class -> dependency class 的 `INJECTS` 关系。
-- [ ] Spring 关系都带 `confidence` 和 `evidence`。
-
-## 6. Struts1 与 Seasar2 分析
-
-Struts1 验收点：
-
-- [ ] 可解析 `struts-config.xml`。
-- [ ] 可建立 Action path -> Action class 的 `ROUTES_TO` 关系。
-- [ ] 可建立 Action path -> ActionForm 的 `BINDS_TO` 关系。
-- [ ] 可建立 Action path -> Forward JSP 的 `FORWARDS_TO` 关系。
-- [ ] 可建立 JSP form action -> Action path 的 `SUBMITS_TO` 关系。
-- [ ] 可识别 ActionForm 字段绑定为 request parameter -> field。
-
-Seasar2 验收点：
-
-- [ ] 可解析 `.dicon` component。
-- [ ] 可输出 service、dao、interceptor 的候选关系。
-- [ ] Seasar2 关系按 MVP 规则标为 discovery/candidate，不作为确定性深度影响链路。
-
-## 7. JSP 分析
-
-验收点：
-
-- [ ] 已建立 `WebAppContext` 模型。
-- [ ] 可提取 JSP directive：`page`、`include`、`taglib`。
-- [ ] 可提取 JSP action：`jsp:include`、`jsp:forward`、`jsp:param`、`jsp:useBean`。
-- [ ] 可提取 EL 表达式。
-- [ ] 可提取 scriptlet 和 expression。
-- [ ] 可提取 JSTL 常见标签。
-- [ ] 可提取 HTML form/action/input/select/textarea。
-- [ ] 可提取 Struts taglib MVP：`html:form`、`html:text`、`html:hidden`、`html:password`、`html:checkbox`、`html:select`。
-- [ ] 可提取 Struts taglib 扩展：`html:textarea`、`html:radio`、`html:multibox`、`bean:write`、`logic:iterate`。
-- [ ] 可建立 JSP input -> request parameter 关系。
-- [ ] include resolver 支持静态 include、`jsp:include`、相对路径、context path。
-- [ ] encoding resolver 支持 BOM、`pageEncoding`、`contentType charset`、项目默认编码。
-- [ ] 明确不使用 jsoup 直接解析 JSP。
-
-## 8. MyBatis 与 SQL 分析
-
-验收点：
-
-- [ ] 可解析 MyBatis XML mapper namespace。
-- [ ] 可解析 XML statement id：`select`、`insert`、`update`、`delete`。
-- [ ] 可解析 MyBatis Mapper interface。
-- [ ] 可建立 Mapper method -> SQL statement 的 `BINDS_TO` 关系。
-- [ ] 可建立 Java 精确方法 symbol -> XML statement `_unknown` 方法 symbol 的 `BRIDGES_TO` 关系。
-- [ ] 可解析 MyBatis 注解 SQL：`@Select`、`@Insert`、`@Update`、`@Delete`。
-- [ ] 可提取 table read/write。
-- [ ] 可提取 column MVP，包括 select columns、insert columns、update set columns、where columns。
-- [ ] 可建立 SQL statement -> DbTable/DbColumn 的 `READS_TABLE` 或 `WRITES_TABLE` 关系。
-- [ ] 动态 SQL 的相关关系降为 `POSSIBLE`。
-
-## 9. 变量追踪
-
-验收点：
-
-- [ ] 可提取方法参数事件。
-- [ ] 可提取局部变量定义事件。
-- [ ] 可提取赋值事件。
-- [ ] 可提取变量 read/write 事件。
-- [ ] 可提取 return 来源。
-- [ ] 可识别 `request.getParameter`。
-- [ ] 可识别 `request.getAttribute`。
-- [ ] 可识别 `request.setAttribute`。
-- [ ] 可识别 getter 简单传播：`getX() -> return x`。
-- [ ] 可识别 setter 简单传播：`setX(v) -> this.x = v`。
-- [ ] 可建立 JSP input -> request parameter -> Java method 的基础链路。
-- [ ] 可建立 ActionForm field 与 request parameter 的绑定候选。
-
-## 10. Git Diff 与影响分析
-
-验收点：
-
-- [ ] JGit 可读取 branch、commit、changed files、diff。
-- [ ] unified diff parser 可定位 changed files。
-- [ ] changed file 可映射 candidate symbols。
-- [ ] 可从 changed symbol 反查 caller。
-- [ ] 可从入口正查下游 callee。
-- [ ] 可使用 Neo4j query plan 和 JVM adjacency cache 进行影响路径查询。
-- [ ] Fast Impact Report 可输出 JSON。
-- [ ] Fast Impact Report 可输出 Markdown。
-- [ ] 每条影响路径包含 confidence。
-- [ ] 每条影响路径可以解释“为什么受影响”。
-- [ ] REST API 可触发基础 impact analyze。
-
-## 11. REST API 手工验收
-
-启动后端服务或使用现有测试中的 HTTP server 构造方式。
-
-建议人工检查 endpoint：
-
-- [ ] `GET /health` 返回 `{"status":"ok"}`。
-- [ ] `GET /api/symbols/search?q=save` 返回 symbol search JSON。
-- [ ] `GET /api/reports/{reportId}` 返回 impact report JSON。
-- [ ] `GET /api/graph/callers?...` 返回 caller Cypher query plan。
-- [ ] `GET /api/graph/callees?...` 返回 callee Cypher query plan。
-- [ ] `GET /api/graph/impact-paths/query?...` 返回 impact path Cypher query plan。
-- [ ] `GET /api/impact/analyze?...` 返回 impact report JSON。
-- [ ] `GET /api/variables/trace-source?...` 返回 `WRITES_PARAM` query plan。
-- [ ] `GET /api/variables/trace-sink?...` 返回 `READS_PARAM` query plan。
-- [ ] `GET /api/jsp/backend-flow/query?...` 返回 JSP backend flow query plan。
-
-## 12. MCP 手工验收
-
-验收点：
-
-- [ ] 只读 MCP server 能初始化 read-only capabilities。
-- [ ] MCP tool registry 暴露：
-  - `symbol.search`
-  - `graph.findCallers`
-  - `graph.findCallees`
-  - `graph.findImpactPaths`
-  - `variable.traceSource`
-  - `variable.traceSink`
-  - `jsp.findBackendFlow`
-  - `impact.analyzeDiff`
-  - `rag.semanticSearch`
-  - `report.getImpactReport`
-- [ ] MCP resources 暴露：`symbol`、`jsp`、`table`、`report`。
-- [ ] MCP prompts 暴露：`impact-review`、`variable-trace`、`jsp-flow-analysis`、`test-recommendation`。
-- [ ] MCP 工具白名单生效。
-- [ ] MCP 不暴露任意 Cypher 执行。
-- [ ] MCP 不暴露写操作。
-
-## 13. AI 能力手工验收
-
-验收点：
-
-- [ ] AI provider 抽象存在。
-- [ ] 支持系统级 AI 配置：provider、baseUrl、apiKey、model、embeddingModel、timeout。
-- [ ] 支持项目级 AI 开关和源码片段发送策略。
-- [ ] 源码和配置片段可脱敏。
-- [ ] 可生成 PR 影响摘要 prompt。
-- [ ] 可生成风险解释 prompt。
-- [ ] 可生成测试建议 prompt。
-- [ ] 可生成调用路径解释 prompt。
-- [ ] AI 关闭或失败时，系统仍能返回纯静态分析结构化结果。
-- [ ] AI 输出必须引用 evidence path。
-- [ ] AI 辅助结果不得标记为确定事实。
-
-## 14. 前端 UI 手工验收
-
-启动：
+Focused command:
 
 ```powershell
-cd D:\source\CodeAtlas\codeatlas-ui
-npm run dev -- --host 127.0.0.1 --port 5173
+.\gradlew.bat :codeatlas-analyzers:test --tests org.sainm.codeatlas.analyzers.bytecode.ClassFileAnalyzerTest --no-daemon
 ```
 
-打开：
+## 5. Spring Analysis
 
-```text
-http://127.0.0.1:5173
+- [ ] `@Controller` and `@RestController` are detected.
+- [ ] `@RequestMapping`, `@GetMapping`, `@PostMapping`, and related mapping annotations create API endpoint nodes.
+- [ ] API endpoint to handler method `ROUTES_TO` facts are generated.
+- [ ] `@Service`, `@Repository`, and `@Component` are detected.
+- [ ] Field and constructor injection candidates are detected.
+- [ ] Qualifiers such as `@Qualifier`, `@Resource(name=...)`, and `@Named` are recorded when present.
+
+## 6. Struts1 Focus
+
+Use `samples/struts1-jsp` as the focused fixture.
+
+- [ ] `WEB-INF/web.xml` detects `org.apache.struts.action.ActionServlet`.
+- [ ] ActionServlet `config` and `config/<module>` init params are parsed.
+- [ ] ActionServlet without a `config` init param falls back to `/WEB-INF/struts-config.xml`.
+- [ ] `config/admin` applies module prefix `/admin` to action path identity.
+- [ ] Root action `/user/save` remains `user/save`.
+- [ ] Admin module action `/user/list` becomes `admin/user/list`.
+- [ ] The same physical Struts config can be analyzed under multiple module prefixes when referenced by multiple `config/<module>` params.
+- [ ] Forward-only actions such as `<action path="/edit" forward="/edit.jsp"/>` do not require an Action class.
+- [ ] Module-scoped `.do` forward, global-forward, and exception paths keep the current module prefix.
+- [ ] `*.do` servlet mapping is parsed.
+- [ ] `form-beans/form-bean` is parsed.
+- [ ] `DynaActionForm` `form-property` entries create request parameter bindings.
+- [ ] `action-mappings/action` creates `ACTION_PATH -ROUTES_TO-> CLASS`.
+- [ ] `parameter="method"` creates `LIKELY` candidate `ACTION_PATH -ROUTES_TO-> METHOD` facts when matching Action methods are visible in Java source.
+- [ ] `LookupDispatchAction#getKeyMethodMap()` simple string-literal `Map.put` entries create keyed `LIKELY` method route facts.
+- [ ] Indirect Action inheritance is supported: `UserAction extends BaseAction extends Action` can route to inherited `execute`.
+- [ ] Indirect LookupDispatchAction inheritance is supported: `UserLookupAction extends BaseLookupAction extends LookupDispatchAction` can use inherited `getKeyMethodMap`.
+- [ ] Action form binding creates `ACTION_PATH -BINDS_TO-> CLASS`.
+- [ ] Local and global forwards create `FORWARDS_TO` to JSP pages or action paths.
+- [ ] Local and global exceptions create exception config facts.
+- [ ] `message-resources` creates message bundle config facts.
+- [ ] `controller` captures attributes and class references such as `processorClass` and `multipartClass`.
+- [ ] `plug-in` and `set-property` capture Tiles and Validator plugin configuration.
+- [ ] Tiles definitions parse `definition`, `extends`, and `put`.
+- [ ] Validator XML parses `form`, `field property`, and `field depends`.
+- [ ] Struts JSP tags create form/input/tag semantic facts.
+- [ ] Struts JSP submit/cancel/button tags with `property` create request parameter write facts.
+- [ ] Static `html:link action` and JSP-valued `html:link page` targets create `JSP_PAGE -FORWARDS_TO-> ...` facts.
+- [ ] Static `html:link paramId` creates link parameter `WRITES_PARAM` facts to `_request` and the static link target.
+- [ ] Static `logic:redirect action/page/href` targets create `JSP_PAGE -FORWARDS_TO-> ...` facts.
+- [ ] Static `logic:forward name` targets create `JSP_PAGE -USES_CONFIG-> CONFIG_KEY` facts for the named Struts forward.
+- [ ] Static JSP include directives and `jsp:include` actions create `JSP_PAGE -INCLUDES-> JSP_PAGE` facts.
+- [ ] Static `jsp:forward page` targets create `JSP_PAGE -FORWARDS_TO-> ...` facts.
+
+Focused commands:
+
+```powershell
+.\gradlew.bat :codeatlas-analyzers:test --tests "org.sainm.codeatlas.analyzers.struts.*" --tests "org.sainm.codeatlas.analyzers.CodeAtlasProjectAnalyzerTest" --no-daemon
+Select-String -Path samples/struts1-jsp/src/main/webapp/WEB-INF/web.xml -Pattern "ActionServlet","config","config/admin","*.do"
+Select-String -Path samples/struts1-jsp/src/main/webapp/WEB-INF/struts-config*.xml -Pattern "controller","plug-in","TilesPlugin","ValidatorPlugIn","DynaActionForm","form-property","global-forwards","message-resources","exception"
+Select-String -Path samples/struts1-jsp/src/main/webapp/WEB-INF/tiles-defs.xml -Pattern "definition","extends","put"
+Select-String -Path samples/struts1-jsp/src/main/webapp/WEB-INF/validation.xml -Pattern "form","field","depends"
+Select-String -Path samples/struts1-jsp/src/main/webapp/**/*.jsp -Pattern "html:form","html:text","html:hidden","html:password","html:checkbox","html:select","html:textarea","html:radio","html:multibox","html:button","html:rewrite","html:img","bean:write","logic:iterate","tiles:getAsString","include","jsp:forward"
 ```
 
-验收点：
+Expected relation keywords:
 
-- [ ] 页面能正常打开，无白屏。
-- [ ] 页面中文显示正常，无乱码。
-- [ ] 左侧包含：影响报告、变量追踪、JSP 链路、图谱探索、SQL/Table。
-- [ ] 顶部有问答式搜索框。
-- [ ] 切换左侧视图时，标题、说明和查询计划会变化。
-- [ ] 页面展示证据路径。
-- [ ] 页面展示证据列表。
-- [ ] 证据列表展示 type、file、line、confidence、evidence text。
-- [ ] 页面展示 certainty/likely/possible 等置信度标签。
-- [ ] 页面展示查询指标：确定路径、可能路径、P95 查询、截断状态。
-- [ ] 页面在窄屏下布局不明显重叠。
+- [ ] `SUBMITS_TO`
+- [ ] `INCLUDES`
+- [ ] `WRITES_PARAM`
+- [ ] `ROUTES_TO`
+- [ ] `BINDS_TO`
+- [ ] `FORWARDS_TO`
+- [ ] `USES_CONFIG`
+- [ ] `EXTENDS`
+- [ ] `COVERED_BY`
 
-## 15. 文档与任务记忆
+## 7. JSP Analysis
 
-验收点：
+- [ ] JSP semantic analysis exposes parser source metadata: Apache Jasper, Jasper plus tokenizer merge, or tokenizer fallback.
+- [ ] Tokenizer fallback records a fallback reason when Apache Jasper cannot run with the available JSP path/webapp context.
+- [ ] `WebAppContext` model exists.
+- [ ] `WebAppContextBuilder` reads web.xml servlet version, derives JSP version, reads jsp-property-group page encoding, scans WEB-INF classpath entries, includes Gradle/Maven build output candidates, scans WEB-INF/lib jar TLDs, and maps TLD URI values.
+- [ ] JSP directives, include directives, taglib directives, JSP actions, EL, scriptlets, and common JSTL tags are extracted.
+- [ ] JSP taglib directives preserve prefix, uri/tagdir, resolved location, confidence, and source line.
+- [ ] JSP tagdir custom tags under WEB-INF/tags are discovered and declared tagdir prefixes produce custom tag actions.
+- [ ] JSP pages emit `USES_CONFIG` facts for taglib directives and resolved tagdir custom tag files.
+- [ ] JSP scriptlet and JSP expression Java code emit request parameter read/write facts for `request.getParameter`, `request.getAttribute`, and `request.setAttribute`.
+- [ ] JSP analysis uses Apache Jasper for standard JSP AST parsing when webapp context is available.
+- [ ] JSP tokenizer fallback skips script/style blocks so JavaScript and CSS string literals do not create false Struts/JSP tag facts.
+- [ ] JSP analysis does not emit JavaScript navigation facts from regex inference; client-side navigation waits for a JS parser/AST integration.
+- [ ] Struts1 JSP tag recognition is centralized through `StrutsJspTagAdapter` rather than scattered parser constants.
+- [ ] Struts1 Tiles JSP tags emit graph facts: `tiles:insert definition` to `USES_CONFIG`, and static JSP `tiles:put value/page` to `INCLUDES`.
+- [ ] JSP include directives and `jsp:include` actions resolve through `WebAppContext`.
+- [ ] HTML form/input/select/textarea are extracted.
+- [ ] Struts taglib MVP covers `html:form`, `html:text`, `html:hidden`, `html:password`, `html:checkbox`, and `html:select`.
+- [ ] Struts taglib extension covers `html:textarea`, `html:radio`, `html:multibox`, `html:button`, `html:rewrite`, `html:img`, `bean:write`, `logic:iterate`, and common Tiles tags.
+- [ ] JSP input to request parameter relation is generated.
+- [ ] Struts1 form controls include `html:file`, `html:image`, and `html:reset` in parameter extraction.
+- [ ] Struts1 option tags include `html:option`, `html:options`, and `html:optionsCollection`; dynamic option sources emit `USES_CONFIG`.
+- [ ] Struts1 display/control tags such as `bean:write` and common `logic:*` conditions emit `READS_PARAM` facts for bean/property references.
+- [ ] Spring form taglib covers `form:form`, common `form:* path` controls, and `form:options items` option-source `USES_CONFIG` facts.
+- [ ] JSP EL expressions emit conservative `READS_PARAM` facts for simple variables and property chains.
+- [ ] JSP EL scope prefixes are normalized so `requestScope.user.name` is reported as `user.name`.
+- [ ] The current tolerant parser does not use jsoup as the direct JSP parser.
 
-- [ ] `docs/design.md` 描述整体设计、架构、图谱模型、AI 位置、JSP/框架支持、性能策略。
-- [ ] `docs/plan.md` 描述分阶段路线和 MVP 顺序。
-- [ ] `docs/task.md` 是当前任务记忆清单。
-- [ ] `docs/task.md` 已勾选项与当前代码能力基本一致。
-- [ ] Tai-e、FFM、Jasper、JetHTMLParser/Jericho、JSqlParser 等增强项没有被误作为 MVP 必选验收项。
-- [ ] `samples/struts1-jsp` 存在，并覆盖 web.xml ActionServlet、多 struts-config、JSP form、ActionForm、Action、Service、Mapper、MyBatis XML。
-- [ ] `samples/struts1-jsp` 覆盖 Struts plug-in：TilesPlugin、ValidatorPlugIn、`set-property`。
-- [ ] `samples/struts1-jsp` 覆盖 Struts controller：`processorClass`、`inputForward`、`maxFileSize`。
+## 8. SQL And MyBatis
 
-## 16. 现阶段不验收范围
+- [ ] MyBatis XML mapper namespace is parsed.
+- [ ] XML statement ids for `select`, `insert`, `update`, and `delete` are parsed.
+- [ ] Mapper interface methods are parsed.
+- [ ] Mapper method to SQL statement `BINDS_TO` facts are generated.
+- [ ] SQL statement to table read/write facts are generated.
+- [ ] Dynamic SQL uncertainty is represented with lower confidence.
 
-以下内容属于增强阶段或后续集成阶段，当前不作为通过/失败标准：
+## 9. Impact And Query
 
-- [ ] Apache Jasper 真正接入和 JSP -> Servlet + SMAP 回映射。
-- [ ] JetHTMLParser 或 Jericho 真实接入。
-- [ ] Tai-e 深度调用图、指针分析、taint analysis。
-- [ ] FFM off-heap graph index。
-- [ ] JSqlParser 完整 SQL AST 解析。
-- [ ] Neo4j Vector Index / embedding provider / 完整 RAG。
-- [ ] Agent 真实多步编排执行。
-- [ ] Cytoscape.js / React Flow 真实图形化交互。
-- [ ] 企业级组件库替换。
-- [ ] 完整权限、限流、审计、API key 加密存储。
+- [ ] Caller report endpoint `/api/graph/callers/report` returns active-facts paths with confidence and evidence keys.
+- [ ] Callee report endpoint `/api/graph/callees/report` returns active-facts paths with confidence and evidence keys.
+- [ ] JGit can read branch, commit, changed files, and diff data.
+- [ ] Unified diff parser identifies changed files and hunks.
+- [ ] Changed files map to candidate symbols.
+- [ ] Caller/callee and impact path Neo4j query plans can be generated.
+- [ ] Fast impact report JSON and Markdown outputs are available.
+- [ ] Each impact path includes confidence and evidence.
+- [ ] Each impact path step includes confidence, sourceType, and evidenceKeys in JSON/Markdown output.
+- [ ] Impact analyze can parse non-method `symbolId` values such as JSP pages, action paths, request parameters, SQL statements, tables, and config keys.
+- [ ] Impact analyze diff endpoint `/api/impact/analyze-diff` accepts unified diff text, maps changed files to active evidence symbols, and returns a Fast Impact Report.
+- [ ] Changing an included JSP can report the parent JSP through `INCLUDES`.
 
-## 17. 验收结论
+## 10. API, MCP, AI, UI
 
-- [ ] 通过：当前基线可作为 CodeAtlas MVP 继续开发基础。
-- [ ] 有条件通过：核心构建通过，但存在需记录的验收问题。
-- [ ] 不通过：构建失败或核心链路不可用。
+- [ ] Natural-language call graph plans prefer evidence-carrying caller/callee report endpoints over raw Cypher-only endpoints.
+- [ ] REST health endpoint returns status.
+- [ ] REST API returns structured `400 bad_request` JSON for missing or invalid query parameters.
+- [ ] REST API responds to browser CORS preflight `OPTIONS` requests with allow-origin and allow-method headers.
+- [ ] Natural-language query planning endpoint `/api/query/plan?q=...` maps user questions to safe read-only API plans.
+- [ ] Query result view endpoint `/api/query/views` exposes stable display contracts for impact, variable trace, JSP flow, graph, SQL/table, and symbol picker results.
+- [ ] Query result view endpoint supports `?name=VIEW_NAME` filtering for focused UI, MCP, and Agent usage.
+- [ ] Symbol search, graph caller/callee, impact path, variable trace, JSP backend flow, and impact analyze endpoints have current MVP coverage.
+- [ ] Variable sink query includes Java `READS_PARAM`, ActionForm `BINDS_TO`, and Validator `COVERED_BY` destinations.
+- [ ] Variable sink query can continue from a Java parameter read through downstream `PASSES_PARAM` and `READS_TABLE`/`WRITES_TABLE` effects.
+- [ ] Java source analysis emits `PASSES_PARAM` when a request-derived local variable or method parameter is passed as a method argument.
+- [ ] Variable trace report endpoints `/api/variables/trace-source/report` and `/api/variables/trace-sink/report` return active-facts paths with confidence, qualifiers, sourceTypes, and evidenceKeys.
+- [ ] Combined variable trace endpoint `/api/variables/trace/report` returns both `SOURCE` and `SINK` paths in one result.
+- [ ] Variable trace JSON includes business display fields such as `directionLabel`, `parameterDisplayName`, `endpointDisplayName`, `displayName`, and `symbolKindLabel`.
+- [ ] JSP backend flow report endpoint `/api/jsp/backend-flow/report` returns active-facts paths from JSP pages through Struts routes, Java calls, SQL/table links, config links, confidence, and evidenceKeys.
+- [ ] MCP exposes read-only tool definitions for query planning, symbol search, graph traversal, variable tracing, JSP flow, impact analysis, RAG semantic search, and report retrieval.
+- [ ] MCP exposes a read-only query view resource for result display contracts.
+- [ ] Agent profiles expose only read-only whitelisted tools with bounded max tool calls, timeout, and evidence-required policy.
+- [ ] Agent tool-call guard rejects out-of-profile tools, non-read-only tools, and calls over the configured step limit.
+- [ ] Agent answer contract carries summary, findings, evidence refs, confidence, sourceType, and truncation state.
+- [ ] AI provider abstraction exists and can be disabled without breaking static analysis output.
+- [ ] AI prompts cite evidence paths and never turn guesses into certain graph facts.
+- [ ] UI can build and displays impact report, variable trace, JSP flow, graph exploration, and SQL/table views.
+- [ ] UI displays query intent, endpoint, required parameters, relation types, evidence path, and evidence table.
+- [ ] UI loads `/api/query/views` and displays primary/evidence field contracts for the active result view.
+- [ ] UI JSON button toggles raw query plan, result view contract, path preview, and evidence preview.
+- [ ] UI Execute action calls planned read-only API endpoints and renders returned path/evidence JSON before falling back to local preview data.
+- [ ] UI displays symbol candidates from `/api/symbols/search` after planning and fills `symbolId` or `changedSymbol` when a candidate is selected.
+- [ ] UI result summary displays path count, confidence, risk, evidence row count, truncated state, and an expand action for large results.
+- [ ] UI variable trace view groups results into "值从哪里来" and "值去了哪里".
+- [ ] UI variable trace view displays JSP input/form/page and request parameter symbols as business-friendly names while preserving raw JSON for detail inspection.
+- [ ] Report assistant endpoint `/api/reports-assistant?reportId=...` returns summary, risk explanation, test suggestions, evidenceCount, and aiAssisted.
+- [ ] UI displays report assistant summary/test suggestions and labels whether the text is AI-assisted or static fallback.
 
-验收人：
+## 11. Not In Current Acceptance Scope
 
-验收日期：
+- [ ] Apache Jasper full JSP compilation and SMAP mapping.
+- [ ] JetHTMLParser or Jericho production integration.
+- [ ] Tai-e advanced call graph, pointer analysis, or taint analysis.
+- [ ] FFM off-heap graph index.
+- [ ] Full JSqlParser AST support.
+- [ ] Neo4j vector index and complete RAG.
+- [ ] Autonomous multi-step production agent orchestration.
+- [ ] Full interactive graph visualization with Cytoscape.js or React Flow.
+- [ ] Enterprise-grade auth, rate limiting, audit, and encrypted API key storage.
 
-问题记录：
+## 12. Result
 
-- 
+- [ ] Pass: current baseline is acceptable for continued MVP development.
+- [ ] Conditional pass: build passes but listed follow-up issues remain.
+- [ ] Fail: build fails or a core Struts1/JSP/graph relation is unavailable.
+
+Acceptance owner:
+
+Acceptance date:
+
+Issue notes:
+
+-

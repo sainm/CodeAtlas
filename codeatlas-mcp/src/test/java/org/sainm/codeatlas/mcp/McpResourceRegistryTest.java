@@ -16,5 +16,7 @@ class McpResourceRegistryTest {
             assertTrue(registry.find(name).orElseThrow().readOnly());
         }
         assertTrue(registry.find(McpResourceName.REPORT).orElseThrow().uriTemplate().contains("{reportId}"));
+        assertTrue(registry.find(McpResourceName.QUERY_VIEW).orElseThrow().uriTemplate().contains("{viewName}"));
+        assertTrue(registry.find(McpResourceName.QUERY_VIEW).orElseThrow().description().contains("evidence fields"));
     }
 }

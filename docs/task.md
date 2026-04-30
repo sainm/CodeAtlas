@@ -1,5 +1,89 @@
 # CodeAtlas Task List
 
+## 0. Recent Progress Memory
+
+- [x] JSP: semantic analysis now records parserSource/parserName/fallbackReason so Jasper, Jasper+tokenizer merge, and tokenizer fallback are distinguishable.
+- [x] Graph Query: added active-facts caller/callee report endpoints with confidence and evidenceKeys for UI/Agent/MCP consumption.
+- [x] MCP: graph caller/callee tool contracts now describe evidence-carrying active-facts results and support maxDepth.
+- [x] Query UX: added `/api/query/plan?q=...` for deterministic natural-language intent routing to existing read-only APIs.
+- [x] Query UX: frontend now shows intent, endpoint, required parameters, relation types, evidence path, and evidence table.
+- [x] Query UX: server responses include CORS headers for local frontend development.
+- [x] Query UX: added `/api/query/views` result view contracts for impact, variable trace, JSP flow, graph, SQL/table, and symbol picker.
+- [x] Query UX: `/api/query/views?name=VIEW_NAME` filters to one result display contract.
+- [x] Query UX: frontend loads `/api/query/views` and displays active primary/evidence field contracts with fallback.
+- [x] Query UX: frontend JSON button toggles raw query plan, result view contract, path preview, and evidence preview.
+- [x] Query UX: natural-language planner prioritizes explicit action caller/impact questions over generic Struts/JSP action flow matching.
+- [x] Query UX: frontend Execute button calls planned read-only endpoints, renders returned paths/evidence first, and falls back to local previews when no server result is available.
+- [x] Query UX: frontend loads symbol candidates after planning and lets the user click a candidate to fill `symbolId` or `changedSymbol`.
+- [x] Query UX: frontend result summary shows path count, confidence, risk, evidence row count, truncated state, and an expand action.
+- [x] Query UX: frontend loads report assistant summary/test suggestions and labels whether it is AI-assisted or static fallback.
+- [x] API: query endpoints return structured `400 bad_request` JSON for missing/invalid required parameters.
+- [x] API: browser CORS preflight `OPTIONS` requests return allow-origin and allow-method headers for local frontend calls.
+- [x] MCP: added read-only `query.plan` tool descriptor for natural-language query planning.
+- [x] MCP: added read-only `query-view` resource descriptor for result display contracts.
+- [x] MCP: added read-only report assistant summary tool descriptor for risk explanation and test suggestions.
+- [x] Agent: added read-only agent tool registry and bounded profiles for impact analysis, variable trace, and code question agents.
+- [x] Agent: added tool call guard that rejects out-of-profile tools, non-read-only tools, and calls over the profile step limit.
+- [x] Agent: added answer/evidence contract so agent output can carry summary, findings, evidence, confidence, sourceType, and truncation state.
+- [x] Agent: added structured in-memory audit log events for allowed/denied tool-call decisions.
+- [x] Agent: added concrete ImpactAnalysisAgent, VariableTraceAgent, and CodeQuestionAgent profile-bound contracts with evidence validation.
+- [x] SQL: MyBatis XML table extraction now uses JSqlParser first and falls back to conservative parsing for dynamic SQL.
+- [x] JSP: WebAppContext now derives JSP version from web.xml servlet version, reads jsp-property-group page encoding, and maps TLD internal uri values.
+- [x] JSP: tolerant semantic extractor now records taglib directive prefix, uri/tagdir, resolved location, confidence, and line number.
+- [x] JSP: WebAppContext classpath candidates include WEB-INF/classes, WEB-INF/lib jars, Gradle build outputs, and Maven target/classes.
+- [x] JSP: WebAppContext scans WEB-INF/lib jar files for META-INF/*.tld and maps internal TLD uri values to jar!/entry locations.
+- [x] JSP: WebAppContext scans WEB-INF/tags .tag/.tagx files and tolerant semantic extraction records declared tagdir custom tag actions.
+- [x] JSP: JspFormAnalyzer emits `JSP_PAGE -USES_CONFIG-> CONFIG_KEY` facts for taglib directives and resolved tagdir custom tag files.
+- [x] JSP: scriptlet and JSP expression Java code with `request.getParameter/getAttribute/setAttribute` emits request parameter read/write facts.
+- [x] JSP: Apache Jasper is wired as the preferred semantic parser for standard JSP nodes, with tokenizer fallback when legacy project context is incomplete.
+- [x] JSP: tokenizer-based form/action extraction skips script/style blocks so JavaScript and CSS string literals do not create false Struts/JSP tag facts.
+- [x] JSP: removed regex-based JavaScript URL inference; client-side navigation requires a future JS parser/AST integration before graph facts are emitted.
+- [x] JSP: Struts1 tag semantics are centralized in `StrutsJspTagAdapter` for `html:*`, `bean:*`, `logic:*`, and `tiles:*` tag recognition.
+- [x] JSP/Struts1 Tiles: static `tiles:insert definition` emits `USES_CONFIG`, and static JSP `tiles:put value/page` emits `INCLUDES`.
+- [x] JSP/Struts1: static `html:link paramId` emits link parameter `WRITES_PARAM` facts to `_request` and static link targets.
+- [x] JSP/Struts1: form parameter extraction covers `html:file`, `html:image`, and `html:reset` in addition to text/hidden/select/submit controls.
+- [x] JSP/Struts1: `logic:redirect` emits `FORWARDS_TO`, while `logic:forward name` emits `USES_CONFIG` to the named Struts forward.
+- [x] JSP/Struts1: `html:option`, `html:options`, and `html:optionsCollection` are parsed; dynamic option sources emit `USES_CONFIG`.
+- [x] JSP/Struts1: `bean:write` and common `logic:*` condition tags emit JSP page `READS_PARAM` facts for bean/property references.
+- [x] JSP: EL expressions emit conservative `READS_PARAM` facts for simple variables and property chains such as `${currentUser.email}`.
+- [x] JSP: EL scope prefixes `pageScope/requestScope/sessionScope/applicationScope` are normalized away for bean/property read facts.
+- [x] JSP/Spring: `form:form` and `form:* path` inputs are parsed, and `form:options items` emits option source `USES_CONFIG` facts.
+- [x] Struts1/JSP: static include directive and static `jsp:include` create `JSP_PAGE -INCLUDES-> JSP_PAGE`.
+- [x] Struts1/JSP: static `jsp:forward page` creates `JSP_PAGE -FORWARDS_TO-> JSP_PAGE/ACTION_PATH`.
+- [x] Impact analysis: `INCLUDES` participates in JSP backend-flow query plans and fast upstream traversal.
+- [x] Impact API: parse `symbolId` values for method, JSP, action path, request parameter, SQL/table/config, not only methods.
+- [x] Impact API: included JSP changes can report parent JSP impact through `INCLUDES`.
+- [x] Impact API: `/api/impact/analyze-diff` maps unified diff changed files to active evidence symbols and emits Fast Impact Report.
+- [x] Impact Report: each path step now carries confidence, sourceType, and evidenceKeys in JSON/Markdown output.
+- [x] Impact Report: JSON/Markdown affected symbol categories no longer guess Java layer names; Java roles must come from graph facts.
+- [x] Impact Report: Fast report regression verifies tombstoned old snapshot relations do not leak into new paths/evidence/affected symbols.
+- [x] Performance: added benchmark result contracts for Neo4j query templates and JVM primitive adjacency cache P95/heap estimates.
+- [x] Performance: Fast Impact Report has a 30-second regression guard on a synthetic 250-edge chain.
+- [x] Variable trace: sink query includes `READS_PARAM`, `BINDS_TO`, and `COVERED_BY` so Struts DynaActionForm and Validator destinations are visible.
+- [x] Variable trace: added active-facts source/sink path reports with confidence, sourceTypes, qualifiers, and evidenceKeys for request parameters.
+- [x] Variable trace: JSP sources now expand from request parameter to JSP input, form, and page through JSP-only `DECLARES` edges.
+- [x] Variable trace: added combined `/api/variables/trace/report` endpoint and UI/query-plan default so source and sink paths load in one request.
+- [x] Variable trace: JSON reports now include displayName, symbolKindLabel, directionLabel, parameterDisplayName, and endpointDisplayName for low-threshold UI/MCP/Agent rendering.
+- [x] Variable trace: sink paths now continue through downstream `PASSES_PARAM` and SQL table effects after a Java method reads the request parameter.
+- [x] Variable trace backend: Spoon emits `PASSES_PARAM` facts when a request-derived local variable or method parameter is passed as a method argument, reducing reliance on generic `CALLS` expansion.
+- [x] MCP/Agent: added combined `variable.trace` read-only tool so AI workflows can fetch source and sink evidence in one step.
+- [x] JSP flow: added active-facts backend-flow path reports from JSP_PAGE through Struts route, Java call, SQL/table, config, and evidence-carrying relations.
+- [x] Sample: added Spring MVC fixture and project-level regression for Controller -> Service -> Repository -> Mapper -> SQL/table chain.
+- [x] Security: MCP read-only tool planning now rejects raw Cypher/SQL/statement-style arguments even when the tool itself is allowed.
+- [x] Java/Binary: added class/jar indexing so ordinary Java source calls can connect to business code packaged in WEB-INF/lib jars.
+- [x] Java/Binary: class/jar analysis now extracts bytecode method invocation edges from `invokevirtual`, `invokespecial`, `invokestatic`, and `invokeinterface`, so business jar internals can join the call graph.
+- [x] Struts1: standard action mappings now link action path to Action#execute, allowing JSP -> Action method -> business layer paths.
+- [x] Struts1: action routing now follows indirect Action/DispatchAction/LookupDispatchAction inheritance chains, including inherited `execute` and inherited `getKeyMethodMap` mappings.
+- [x] SQL: added JDBC SQL literal analysis for prepareStatement/executeQuery/executeUpdate/execute/addBatch, producing method -> SQL -> table facts.
+- [x] Struts1/plugin: plugin XML properties are resolved as initialization/import configuration sources with XML entries and possible table effects.
+- [x] Java/common: stateless static support classes are classified as utility nodes by structure, and static utility calls are marked in the call graph.
+- [x] UI: added business-friendly Chinese labels for relation types, symbols, evidence, confidence, risk, and default path display for non-system users.
+- [x] UI: lowered entry barrier with common-question templates and collapsed advanced technical parameters by default.
+- [x] UI: variable trace paths are grouped into "值从哪里来" and "值去了哪里", with friendly JSP input/form/page and request parameter names.
+- [x] Query UX: added `/api/query/resolve` to turn business words such as request parameters, JSP paths, action paths, and table names into suggested executable symbols.
+- [x] Rules: scattered Java naming heuristics were reduced by centralizing legacy layer conventions and removing name-based entrypoint/report classification.
+- [x] Code quality: reduced long analyzer method signatures by introducing context records for Spoon Java and Spring bean analysis.
+
 ## 1. 基础工程
 
 - [x] 初始化后端服务工程。
@@ -43,6 +127,7 @@
 - [x] 解析 Gradle `settings.gradle(.kts)` 和基础 source sets。
 - [x] 评估 Gradle Tooling API，用于复杂 Gradle 项目增强。
 - [ ] 使用 ASM/ClassGraph 快速扫描 class、annotation、继承、实现、资源文件。
+- [x] 使用轻量 class/jar 索引建立业务 jar class/method 节点，后续再以 ASM/ClassGraph 增强 annotation 和字节码调用边。
 - [x] 建立文件到符号的快速索引。
 - [x] 建立 changed file -> candidate symbol 映射。
 - [x] 从 unified diff 文本定位 changed files。
@@ -58,18 +143,18 @@
 - [x] 提取 extends/implements。
 - [x] 提取 line number、file path、method signature。
 - [x] 将 Spoon `CtMethod` 映射到统一 `symbolId`。
-- [ ] 提取构造器、静态初始化块、内部类、匿名类和 lambda 的稳定标识。
+- [x] 提取构造器、静态初始化块、内部类、匿名类和 lambda 的稳定标识。
 - [ ] 标记 synthetic/bridge/source-only/jvm-only 方法。
 - [ ] 保留 JavaParser 作为可选快速扫描器，不作为主事实源。
 - [ ] 使用 JDT 或 Spoon 内部 JDT 能力作为绑定解析兜底。
 
 ## 5. JSP 分析
 
-- [ ] 接入 Apache Jasper。
+- [x] 接入 Apache Jasper。
 - [x] 建立 WebAppContext 模型。
-- [ ] 解析 web root、WEB-INF/web.xml、Servlet/JSP API 版本和容器 profile。
-- [ ] 构建 JSP classpath：WEB-INF/classes、WEB-INF/lib、Maven/Gradle dependencies、编译输出目录。
-- [ ] 构建 TaglibRegistry：TLD 文件、jar 内 TLD、web.xml taglib 映射。
+- [x] 解析 web root、WEB-INF/web.xml、Servlet/JSP API 版本和容器 profile。
+- [x] 构建 JSP classpath：WEB-INF/classes、WEB-INF/lib、Maven/Gradle dependencies、编译输出目录。
+- [x] 构建 TaglibRegistry：TLD 文件、jar 内 TLD、web.xml taglib 映射。
 - [x] 实现 include resolver，支持静态 include、jsp:include、相对路径和 context path。
 - [x] 实现 encoding resolver，支持 page directive、web.xml、BOM 和项目默认编码。
 - [x] 解析 JSP directive：page、include、taglib。
@@ -79,7 +164,9 @@
 - [x] 解析 JSTL 常见标签。
 - [x] 解析 Struts taglib：html:form、html:text、bean:write、logic:iterate。
 - [x] 解析 Struts taglib MVP：html:form、html:text、html:hidden、html:password、html:checkbox、html:select。
-- [ ] 解析 Spring form tag。
+- [x] 解析 Struts taglib 扩展：html:textarea、html:radio、html:multibox、bean:write、logic:iterate。
+- [x] 记录 Struts JSP tag 语义：html:form -> SUBMITS_TO，html input property -> WRITES_PARAM；logic:iterate 暂不建模控制流。
+- [x] 解析 Spring form tag。
 - [ ] 调研并接入 JetHTMLParser 或 Jericho 作为容错解析器。
 - [x] 提取 form/action/input/select/textarea。
 - [x] 建立 JSP input -> request parameter 关系。
@@ -92,15 +179,36 @@
 - [x] Spring MVC：解析 Controller、RequestMapping、Service、Repository、Autowired。
 - [x] Spring MVC MVP：解析 Controller/RestController 与 RequestMapping/GetMapping/PostMapping 等入口边。
 - [x] Spring Bean：解析构造注入、字段注入、Resource、Qualifier。
-- [ ] Spring 任务：识别 Scheduled、Async，后续接入事件/MQ。
+- [x] Spring 任务：识别 Scheduled、Async，后续接入事件/MQ。
 - [x] Struts1：解析 struts-config.xml。
 - [x] Struts1：建立 path -> Action -> ActionForm -> Forward。
 - [x] Struts1：建立 JSP form action -> Action path。
+- [x] Struts1：解析 web.xml ActionServlet 的 config 和 config/<module-prefix>，并将 module prefix 合并到 Action path。
+- [x] Struts1：ActionServlet 未声明 config 时按 `/WEB-INF/struts-config.xml` 默认配置处理。
+- [x] Struts1：支持同一 struts-config 被多个 config/<module-prefix> 引用并分别生成模块化 Action path。
+- [x] Struts1：支持没有 type 的 forward-only action，并将 action forward 建成 FORWARDS_TO。
+- [x] Struts1：module 内 local/global forward 和 exception 的 .do 目标继承当前 module prefix。
+- [x] Struts1：DispatchAction parameter 存在时，将 action path 连接到符合 Struts 方法签名的候选 METHOD，置信度为 LIKELY。
+- [x] Struts1：解析 LookupDispatchAction#getKeyMethodMap() 的简单 Map.put 字面量映射，输出 keyed METHOD 路由候选。
+- [x] Struts1/JSP：静态 html:link action/page 生成 JSP_PAGE 到 ACTION_PATH/JSP_PAGE 的 FORWARDS_TO。
+- [x] Struts1/JSP：logic:redirect 生成 JSP_PAGE 到 ACTION_PATH/JSP_PAGE 的 FORWARDS_TO。
+- [x] Struts1/JSP：logic:forward name 生成 JSP_PAGE 到 Struts forward 配置名的 USES_CONFIG。
+- [x] Struts1/JSP：html:options/optionsCollection 的 collection/name/property 生成 JSP_PAGE 到 option source 的 USES_CONFIG。
+- [x] Struts1/JSP：bean:write 和 logic 条件标签的 name/property 生成 JSP_PAGE 到 bean/property 引用的 READS_PARAM。
+- [x] Struts1/JSP：静态 html:link paramId 生成 JSP link 参数到 request parameter 和目标 action/JSP 的 WRITES_PARAM。
+- [x] Struts1/JSP：html:submit/html:cancel/html:button/html:image/html:reset 的 property 生成 JSP_INPUT 和 WRITES_PARAM，用于 DispatchAction 参数追踪。
 - [x] Struts1：解析 plug-in、set-property、TilesPlugin、ValidatorPlugIn 等插件配置。
+- [x] Struts1：解析自定义 plug-in 读取的 XML 初始化配置，并将 XML 条目建模为 CONFIG_KEY。
 - [x] Struts1：解析 controller、processorClass、multipartClass、inputForward、maxFileSize 等控制器配置。
+- [x] Struts1：解析 global-forwards、message-resources、global/action exception。
+- [x] Struts1：解析 DynaActionForm、form-property，并建立 request parameter 绑定。
+- [x] Struts1：解析 Tiles definitions、definition extends、put value JSP。
+- [x] Struts1：解析 Validator XML、field depends，并建立 request parameter 覆盖关系。
+- [x] Struts1：将 plug-in、controller、message-resources、exception、Tiles、Validator 映射到 CONFIG_KEY 关系，保留 evidence 和 confidence。
 - [x] Seasar2：解析 dicon component。
 - [x] Seasar2：识别命名约定 binding。
 - [x] Seasar2：识别 service/dao/interceptor 基础关系。
+- [x] Seasar2：识别 dicon include、property injection、aspect/interceptor 候选配置关系，置信度保持 `POSSIBLE`。
 - [x] Seasar2 MVP 只输出 discovery/candidate 结果，确定性影响链路放到增强阶段。
 - [x] 为所有框架关系标注 confidence 和 evidence。
 
@@ -108,14 +216,17 @@
 
 - [x] 解析 MyBatis Mapper interface。
 - [x] 解析 MyBatis XML statement id。
-- [ ] 使用 JSqlParser 解析 SQL。
+- [x] 解析 JDBC 直写 SQL 字面量和常量拼接。
+- [x] 使用 JSqlParser 解析 SQL。
 - [x] 提取 table、column、where condition、read/write 类型。
 - [x] 提取 SQL table 和 read/write 类型的 MVP 候选结果。
 - [x] 建立 Mapper method -> SqlStatement 关系。
 - [x] 建立 SqlStatement -> DbTable/DbColumn 关系。
 - [x] 建立 SqlStatement -> DbTable 关系。
+- [x] 建立 JDBC method -> SqlStatement -> DbTable 关系。
 - [x] 确保 MVP 最小链路包含 Mapper 方法 `Method -[:BINDS_TO]-> SqlStatement`。
 - [x] 支持动态 SQL 的保守解析和 `POSSIBLE` 标注。
+- [x] 支持 JDBC 部分动态拼接 SQL 的保守解析和 `POSSIBLE` 标注。
 - [ ] 后续支持 JPA Entity -> table 映射。
 
 ## 8. 调用关系与变量追踪
@@ -132,9 +243,9 @@
 - [x] 识别 `request.getParameter`、`getAttribute`、`setAttribute`。
 - [x] 识别 ActionForm 字段绑定。
 - [x] 识别 getter/setter 简单传播。
-- [ ] 实现 Controller/Action -> Service -> DAO 参数传播。
+- [x] 实现 Controller/Action -> Service -> DAO 参数传播。
 - [x] 实现 JSP input -> request parameter -> Java parameter 链路。
-- [ ] 输出变量来源和流向证据路径。
+- [x] 输出变量来源和流向证据路径。
 
 ## 9. 影响分析
 
@@ -147,13 +258,13 @@
 - [x] 实现 Impact Report 读取 REST API。
 - [x] 实现 caller/callee/path query REST 查询计划 API。
 - [x] 定义 Impact Report JSON schema：entrypoint、changedSymbol、path、confidence、evidenceList、sourceTypeList、riskLevel、reason、truncated。
-- [ ] 关联受影响 JSP、API、Action、Controller、Service、DAO、Mapper、SQL、table。
+- [x] 关联受影响 JSP、API、Action、Controller、Service、DAO、Mapper、SQL、table。
 - [x] 为每条影响路径计算 confidence。
 - [x] 输出 Fast Impact Report。
 - [ ] 输出 Deep Impact Report 增量补充。
 - [x] 支持 Markdown/JSON 报告格式。
 - [x] 支持“为什么受影响”的路径解释。
-- [ ] 验证删除关系后不会从旧 snapshot 残留到新报告。
+- [x] 验证删除关系后不会从旧 snapshot 残留到新报告。
 
 ## 10. Tai-e 深度分析（增强阶段）
 
@@ -172,8 +283,8 @@
 
 ## 11. FFM OffHeapGraphIndex（benchmark 驱动增强阶段）
 
-- [ ] 建立 Neo4j 查询 P95 耗时 benchmark。
-- [ ] 建立 JVM primitive adjacency cache heap 占用 benchmark。
+- [x] 建立 Neo4j 查询 P95 耗时 benchmark。
+- [x] 建立 JVM primitive adjacency cache heap 占用 benchmark。
 - [ ] 定义启用 FFM 的规模阈值：edge 数、P95 查询耗时、heap 压力。
 - [ ] 设计 CSR/CSC 数据格式。
 - [ ] 设计 node id 和 edge id 压缩编码。
@@ -214,15 +325,15 @@
 
 ## 14. Agent 编排
 
-- [ ] 实现 Tool Registry。
-- [ ] 实现 ImpactAnalysisAgent。
-- [ ] 实现 VariableTraceAgent。
-- [ ] 实现 CodeQuestionAgent。
-- [ ] 定义工具调用步数限制、超时、审计日志。
-- [ ] 禁止 Agent 调用任意 Cypher。
-- [ ] 禁止 Agent 任意读取文件。
-- [ ] 让 Agent 只调用封装后的内部工具。
-- [ ] 所有 Agent 结果输出 evidence、confidence、sourceType。
+- [x] 实现 Tool Registry。
+- [x] 实现 ImpactAnalysisAgent。
+- [x] 实现 VariableTraceAgent。
+- [x] 实现 CodeQuestionAgent。
+- [x] 定义工具调用步数限制、超时、审计日志。
+- [x] 禁止 Agent 调用任意 Cypher。
+- [x] 禁止 Agent 任意读取文件。
+- [x] 让 Agent 只调用封装后的内部工具。
+- [x] 所有 Agent 结果输出 evidence、confidence、sourceType。
 
 ## 15. MCP 扩展层
 
@@ -257,45 +368,46 @@
 - [x] JSP 到后端链路查询页。
 - [x] SQL/table 影响查询页。
 - [x] 全局问答式搜索框，支持自然语言输入。
-- [ ] 意图识别结果展示：symbol search、caller/callee、变量来源/流向、影响分析、JSP 链路、SQL/table 影响。
-- [ ] 候选符号选择器：类型、qualified name/path、文件、行号、模块、最近变更信息。
+- [x] 意图识别结果展示：symbol search、caller/callee、变量来源/流向、影响分析、JSP 链路、SQL/table 影响。
+- [x] 候选符号选择器：类型、qualified name/path、文件、行号、模块、最近变更信息。
 - [x] 答案摘要区：确定路径数、可能路径数、主要来源/流向/影响点、风险等级、后台分析状态。
 - [x] 纵向证据路径视图：每条边展示 edge type、confidence、sourceType。
 - [x] 证据列表表格：文件、行号、证据类型、证据片段、分析器来源。
-- [ ] AI 风险摘要展示。
+- [x] AI 风险摘要展示。
 - [x] 证据路径展示。
 - [x] 置信度标识。
 - [ ] 后台深度分析状态展示。
 - [ ] Graph Explorer 支持 caller/callee、入口到 SQL 链路、节点展开和深度限制。
-- [ ] Impact Report 支持风险等级、建议测试、AI 摘要、证据路径。
+- [x] Impact Report 支持风险等级、建议测试、AI 摘要、证据路径。
 - [ ] Variable Trace View 支持来源/流向双向切换。
-- [ ] JSP Flow View 支持 JSP -> Action/Controller -> Service -> DAO/Mapper -> SQL/table。
+- [x] JSP Flow View 支持 JSP -> Action/Controller -> Service -> DAO/Mapper -> SQL/table。
 - [x] Symbol Search 支持 class/method/JSP/SQL/table/config 统一搜索。
 - [ ] AI Q&A 页面要求答案旁展示证据节点和路径。
-- [ ] UI 对所有大图查询展示 `truncated` 状态和继续展开入口。
-- [ ] AI 摘要旁显示“基于 N 条静态分析证据生成”。
-- [ ] 提供原始 JSON 明细查看入口。
+- [x] UI 对所有大图查询展示 `truncated` 状态和继续展开入口。
+- [x] AI 摘要旁显示“基于 N 条静态分析证据生成”。
+- [x] 提供原始 JSON 明细查看入口。
 
 ## 17. 测试与样例工程
 
-- [ ] 创建 Spring MVC 样例项目。
+- [x] 创建 Spring MVC 样例项目。
 - [x] 创建 Struts1 + JSP 样例项目。
-- [ ] 创建 Seasar2 dicon 样例片段。
-- [ ] 创建 MyBatis XML 样例。
+- [x] 样例覆盖 Struts1 module config、多 struts-config、plug-in、controller、DynaActionForm、Tiles、Validator、JSP tag。
+- [x] 创建 Seasar2 dicon 样例片段。
+- [x] 创建 MyBatis XML 样例。
 - [x] 创建 JSP form -> Action -> Service -> Mapper -> SQL 样例链路。
-- [ ] 测试 Java 方法调用解析。
+- [x] 测试 Java 方法调用解析。
 - [x] 测试 JSP input 到 request parameter。
 - [x] 测试 ActionForm 字段绑定。
 - [x] 测试 SQL table/column 识别。
-- [ ] 测试 Git diff 影响报告。
-- [ ] 测试问答式查询存在多个候选时先显示候选列表。
-- [ ] 测试变量追踪结果按摘要、路径、证据、明细展示。
+- [x] 测试 Git diff 影响报告。
+- [x] 测试问答式查询存在多个候选时先显示候选列表。
+- [x] 测试变量追踪结果按摘要、路径、证据、明细展示。
 - [x] 测试 AI 关闭时结构化结果仍能展示。
 - [x] 测试 tombstone 后旧边不会出现在 current snapshot 查询中。
 - [x] 测试同一 fact 多 evidence 合并和 confidence 聚合。
-- [ ] 测试 AI 关闭和开启两种模式。
-- [ ] 测试 Neo4j 查询性能。
-- [ ] 测试 JVM primitive adjacency cache 内存和速度。
+- [x] 测试 AI 关闭和开启两种模式。
+- [x] 测试 Neo4j 查询性能。
+- [x] 测试 JVM primitive adjacency cache 内存和速度。
 - [ ] 增强阶段测试 FFM 图索引内存和速度。
 
 ## 18. 安全与治理
@@ -304,10 +416,10 @@
 - [ ] API key 加密存储。
 - [ ] AI 请求日志脱敏。
 - [x] MCP 工具白名单。
-- [ ] 禁止任意数据库查询暴露。
+- [x] 禁止任意数据库查询暴露。
 - [ ] 禁止无确认写操作。
 - [ ] 项目级访问控制。
-- [ ] 审计 Agent 和 MCP 调用。
+- [x] 审计 Agent 和 MCP 调用。
 - [x] 标记 AI_ASSISTED 结果，禁止混淆为确定事实。
 
 ## 19. MVP 验收清单
@@ -315,23 +427,25 @@
 - [x] 能扫描一个混合 Java Web 项目。
 - [x] 能识别 Spring Controller 和 Struts1 Action。
 - [x] 能解析 JSP form/input/action。
+- [x] 能解析 Struts1 module prefix、plug-in、controller、Tiles、Validator、DynaActionForm 和 JSP tag 语义。
 - [x] 能解析 Java class/method/call。
 - [x] 能解析 MyBatis XML 和 SQL table。
 - [x] 能写入 Neo4j 图谱。
 - [x] 能稳定生成 symbolId、factKey、evidenceKey。
 - [x] 能处理 snapshot/tombstone，避免旧关系残留。
 - [x] 能打通 Spring RequestMapping、Struts action、JSP form/action、method direct call、MyBatis statement 五类最小边。
-- [ ] Seasar2 只要求 dicon/component discovery，不要求确定性影响链路。
-- [ ] 能从 Git diff 输出影响报告。
+- [x] Seasar2 只要求 dicon/component discovery，不要求确定性影响链路。
+- [x] 能从 Git diff 输出影响报告。
 - [x] 能通过 REST API 查询 symbol、impact report、path query、variable trace、jsp flow。
-- [ ] 能通过问答式搜索触发符号检索、变量追踪、影响分析、JSP 链路、SQL/table 影响。
-- [ ] 查询结果能按答案摘要、证据路径、证据列表、图谱与明细展示。
-- [ ] 能展示 JSP -> Action/Controller -> Service -> DAO/SQL/table 路径。
-- [ ] 能追踪 request parameter 的来源和流向。
-- [ ] 能给每条影响路径标注 evidence 和 confidence。
-- [ ] 能在 10 到 30 秒输出初版报告。
-- [ ] 能用 AI 生成风险摘要和测试建议。
-- [ ] 能通过 MCP 只读查询核心分析能力。
+- [x] 能通过问答式搜索触发符号检索、变量追踪、影响分析、JSP 链路、SQL/table 影响。
+- [x] 查询结果能按答案摘要、证据路径、证据列表、图谱与明细展示。
+- [x] 查询结果默认以业务友好文案展示，原始 symbolId/JSON 作为下钻细节保留。
+- [x] 能展示 JSP -> Action/Controller -> Service -> DAO/SQL/table 路径。
+- [x] 能追踪 request parameter 的来源和流向。
+- [x] 能给每条影响路径标注 evidence 和 confidence。
+- [x] 能在 10 到 30 秒输出初版报告。
+- [x] 能用 AI 生成风险摘要和测试建议。
+- [x] 能通过 MCP 只读查询核心分析能力。
 - [x] 项目使用 Java 25 + Gradle 构建。
-- [ ] 能通过可视化前端查看项目概览、影响报告、调用路径、变量流和 JSP 链路。
-- [ ] Tai-e 和 FFM 不作为 MVP 验收前置条件。
+- [x] 能通过可视化前端查看项目概览、影响报告、调用路径、变量流和 JSP 链路。
+- [x] Tai-e 和 FFM 不作为 MVP 验收前置条件。

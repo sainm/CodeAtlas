@@ -4,6 +4,9 @@ import org.sainm.codeatlas.graph.model.SymbolId;
 import org.sainm.codeatlas.graph.model.SymbolKind;
 import java.nio.file.Path;
 import java.util.stream.Collectors;
+import spoon.reflect.code.CtLambda;
+import spoon.reflect.cu.SourcePosition;
+import spoon.reflect.declaration.CtAnonymousExecutable;
 import spoon.reflect.declaration.CtConstructor;
 import spoon.reflect.declaration.CtExecutable;
 import spoon.reflect.declaration.CtField;
@@ -63,6 +66,30 @@ public final class SpoonSymbolMapper {
         );
     }
 
+    public SymbolId initializer(CtAnonymousExecutable initializer) {
+        return SymbolId.method(
+            projectKey,
+            moduleKey,
+            sourceRootKey,
+            initializer.getDeclaringType().getQualifiedName(),
+            initializer.isStatic() ? "<clinit>" : "<init-block>",
+            "():void@" + stablePosition(initializer.getPosition())
+        );
+    }
+
+    public SymbolId lambda(CtLambda<?> lambda, int index) {
+        CtType<?> ownerType = lambda.getParent(CtType.class);
+        String owner = ownerType == null ? "_unknown" : ownerType.getQualifiedName();
+        return SymbolId.method(
+            projectKey,
+            moduleKey,
+            sourceRootKey,
+            owner,
+            "lambda$" + stablePosition(lambda.getPosition()) + "$" + index,
+            "():_lambda"
+        );
+    }
+
     public SymbolId field(CtField<?> field) {
         return SymbolId.field(
             projectKey,
@@ -112,6 +139,13 @@ public final class SpoonSymbolMapper {
 
     private String typeName(CtTypeReference<?> reference) {
         return reference == null ? "_unknown" : reference.getQualifiedName();
+    }
+
+    private String stablePosition(SourcePosition position) {
+        if (position == null || !position.isValidPosition()) {
+            return "0";
+        }
+        return Math.max(0, position.getLine()) + ":" + Math.max(0, position.getColumn());
     }
 
     private SymbolKind kind(CtType<?> type) {

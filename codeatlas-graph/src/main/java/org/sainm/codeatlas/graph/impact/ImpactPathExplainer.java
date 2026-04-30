@@ -31,6 +31,7 @@ public final class ImpactPathExplainer {
             case READS_TABLE -> "reads table";
             case WRITES_TABLE -> "writes table";
             case FORWARDS_TO -> "forwards to";
+            case PASSES_PARAM -> "passes parameter to";
             case READS_PARAM -> "reads request parameter from";
             case WRITES_PARAM -> "writes request parameter to";
             case null -> "continues to";

@@ -45,16 +45,25 @@ public final class SpringMvcAnalyzer {
         List<GraphFact> facts = new ArrayList<>();
 
         for (CtType<?> type : model.getAllTypes()) {
-            if (!isController(type)) {
-                continue;
-            }
-            String classPath = requestPath(type.getAnnotations()).orElse("");
             SymbolId controllerClass = symbols.type(type);
-            nodes.add(GraphNodeFactory.classNode(controllerClass, NodeRole.CONTROLLER));
+            if (isController(type)) {
+                String classPath = requestPath(type.getAnnotations()).orElse("");
+                nodes.add(GraphNodeFactory.classNode(controllerClass, NodeRole.CONTROLLER));
+                for (CtMethod<?> method : type.getMethods()) {
+                    mapping(method.getAnnotations()).ifPresent(mapping -> {
+                        String fullPath = joinPaths(classPath, mapping.path());
+                        SpringEndpoint endpoint = new SpringEndpoint(mapping.httpMethod(), fullPath, type.getQualifiedName(), method.getSimpleName(), line(method.getPosition()));
+                        endpoints.add(endpoint);
+                        addEndpointFact(scope, projectKey, sourceRootKey, symbols.method(method), endpoint, method.getPosition(), nodes, facts);
+                    });
+                }
+            }
             for (CtMethod<?> method : type.getMethods()) {
-                mapping(method.getAnnotations()).ifPresent(mapping -> {
-                    String fullPath = joinPaths(classPath, mapping.path());
-                    SpringEndpoint endpoint = new SpringEndpoint(mapping.httpMethod(), fullPath, type.getQualifiedName(), method.getSimpleName(), line(method.getPosition()));
+                scheduledEndpoint(type, method).ifPresent(endpoint -> {
+                    endpoints.add(endpoint);
+                    addEndpointFact(scope, projectKey, sourceRootKey, symbols.method(method), endpoint, method.getPosition(), nodes, facts);
+                });
+                asyncEndpoint(type, method).ifPresent(endpoint -> {
                     endpoints.add(endpoint);
                     addEndpointFact(scope, projectKey, sourceRootKey, symbols.method(method), endpoint, method.getPosition(), nodes, facts);
                 });
@@ -94,6 +103,32 @@ public final class SpringMvcAnalyzer {
             }
         }
         return Optional.empty();
+    }
+
+    private Optional<SpringEndpoint> scheduledEndpoint(CtType<?> type, CtMethod<?> method) {
+        return method.getAnnotations().stream()
+            .filter(annotation -> annotation.getAnnotationType().getSimpleName().equals("Scheduled"))
+            .findFirst()
+            .map(annotation -> new SpringEndpoint(
+                "SCHEDULED",
+                "/spring/scheduled/" + type.getQualifiedName() + "#" + method.getSimpleName(),
+                type.getQualifiedName(),
+                method.getSimpleName(),
+                line(method.getPosition())
+            ));
+    }
+
+    private Optional<SpringEndpoint> asyncEndpoint(CtType<?> type, CtMethod<?> method) {
+        return method.getAnnotations().stream()
+            .filter(annotation -> annotation.getAnnotationType().getSimpleName().equals("Async"))
+            .findFirst()
+            .map(annotation -> new SpringEndpoint(
+                "ASYNC",
+                "/spring/async/" + type.getQualifiedName() + "#" + method.getSimpleName(),
+                type.getQualifiedName(),
+                method.getSimpleName(),
+                line(method.getPosition())
+            ));
     }
 
     private String pathFromAnnotation(CtAnnotation<?> annotation) {

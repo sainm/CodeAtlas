@@ -23,6 +23,7 @@ public final class ImpactPathQueryEngine {
         RelationType.CALLS,
         RelationType.ROUTES_TO,
         RelationType.SUBMITS_TO,
+        RelationType.INCLUDES,
         RelationType.BINDS_TO,
         RelationType.FORWARDS_TO,
         RelationType.READS_TABLE,
@@ -96,13 +97,14 @@ public final class ImpactPathQueryEngine {
         List<ImpactPathStep> steps = new ArrayList<>();
         SymbolId entrypoint = forwardEdges.getFirst().factKey().source();
         ActiveFact firstEdge = forwardEdges.getFirst();
-        steps.add(new ImpactPathStep(entrypoint, null, firstSourceType(firstEdge), firstEdge.confidence()));
+        steps.add(new ImpactPathStep(entrypoint, null, firstSourceType(firstEdge), firstEdge.confidence(), List.of()));
         for (ActiveFact edge : forwardEdges) {
             steps.add(new ImpactPathStep(
                 edge.factKey().target(),
                 edge.factKey().relationType(),
                 firstSourceType(edge),
-                edge.confidence()
+                edge.confidence(),
+                edge.evidenceKeys()
             ));
         }
 
