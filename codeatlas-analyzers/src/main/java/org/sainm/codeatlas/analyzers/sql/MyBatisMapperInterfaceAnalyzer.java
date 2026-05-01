@@ -1,6 +1,7 @@
 package org.sainm.codeatlas.analyzers.sql;
 
 import org.sainm.codeatlas.analyzers.AnalyzerScope;
+import org.sainm.codeatlas.analyzers.java.SpoonAnnotationValues;
 import org.sainm.codeatlas.analyzers.java.SpoonSymbolMapper;
 import org.sainm.codeatlas.graph.model.Confidence;
 import org.sainm.codeatlas.graph.model.EvidenceKey;
@@ -20,8 +21,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import spoon.Launcher;
 import spoon.reflect.CtModel;
 import spoon.reflect.cu.SourcePosition;
@@ -30,7 +29,6 @@ import spoon.reflect.declaration.CtMethod;
 import spoon.reflect.declaration.CtType;
 
 public final class MyBatisMapperInterfaceAnalyzer {
-    private static final Pattern STRING_LITERAL = Pattern.compile("\"([^\"]*)\"");
     private static final Set<String> SQL_ANNOTATIONS = Set.of("Select", "Insert", "Update", "Delete");
     private static final Set<String> PROVIDER_ANNOTATIONS = Set.of("SelectProvider", "InsertProvider", "UpdateProvider", "DeleteProvider");
     private final SimpleSqlTableExtractor tableExtractor = new SimpleSqlTableExtractor();
@@ -109,9 +107,6 @@ public final class MyBatisMapperInterfaceAnalyzer {
         if (!type.isInterface()) {
             return false;
         }
-        if (type.getQualifiedName().endsWith("Mapper")) {
-            return true;
-        }
         if (type.getAnnotations().stream().map(this::annotationName).anyMatch(name -> name.equals("Mapper"))) {
             return true;
         }
@@ -130,9 +125,9 @@ public final class MyBatisMapperInterfaceAnalyzer {
         for (CtAnnotation<?> annotation : method.getAnnotations()) {
             String name = annotationName(annotation);
             if (SQL_ANNOTATIONS.contains(name)) {
-                Matcher matcher = STRING_LITERAL.matcher(annotation.toString());
-                if (matcher.find()) {
-                    return Optional.of(new SqlAnnotation(name.toLowerCase(), matcher.group(1)));
+                List<String> sqlLines = SpoonAnnotationValues.strings(annotation, "value");
+                if (!sqlLines.isEmpty()) {
+                    return Optional.of(new SqlAnnotation(name.toLowerCase(), String.join(" ", sqlLines)));
                 }
             }
         }

@@ -1,0 +1,37 @@
+<struts-config>
+  <controller processorClass="com.acme.legacy.web.LegacyRequestProcessor"
+              multipartClass="org.apache.struts.upload.CommonsMultipartRequestHandler"
+              inputForward="true"
+              locale="true"
+              nocache="true"
+              maxFileSize="20M"/>
+  <message-resources parameter="com.acme.legacy.ApplicationResources" null="false"/>
+  <message-resources key="admin" parameter="com.acme.legacy.AdminResources"/>
+  <global-forwards>
+    <forward name="login" path="/login.jsp"/>
+    <forward name="adminHome" path="/admin/user/list.do"/>
+  </global-forwards>
+  <global-exceptions>
+    <exception key="error.system" type="com.acme.legacy.SystemException" path="/error.jsp" handler="com.acme.legacy.web.LegacyExceptionHandler"/>
+  </global-exceptions>
+  <form-beans>
+    <form-bean name="userForm" type="com.acme.legacy.web.UserForm"/>
+  </form-beans>
+  <action-mappings>
+    <action path="/user/save" type="com.acme.legacy.web.UserAction" name="userForm" scope="request" input="/user/edit.jsp" validate="true">
+      <forward name="success" path="legacy.user.detail"/>
+      <exception key="error.save" type="com.acme.legacy.SaveException" path="/user/edit.jsp"/>
+    </action>
+  </action-mappings>
+  <plug-in className="org.apache.struts.tiles.TilesPlugin">
+    <set-property property="definitions-config" value="/WEB-INF/tiles-defs.xml"/>
+    <set-property property="moduleAware" value="true"/>
+  </plug-in>
+  <plug-in className="org.apache.struts.validator.ValidatorPlugIn">
+    <set-property property="pathnames" value="/WEB-INF/validator-rules.xml,/WEB-INF/validation.xml"/>
+    <set-property property="stopOnFirstError" value="false"/>
+  </plug-in>
+  <plug-in className="com.acme.legacy.plugin.MasterDataInitPlugin">
+    <set-property property="configLocation" value="/WEB-INF/master-data.xml"/>
+  </plug-in>
+</struts-config>

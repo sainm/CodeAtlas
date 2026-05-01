@@ -15,5 +15,7 @@ class McpPromptRegistryTest {
         assertTrue(registry.find(McpPromptName.VARIABLE_TRACE).orElseThrow().requiredArguments().contains("symbolId"));
         assertTrue(registry.find(McpPromptName.JSP_FLOW_ANALYSIS).orElseThrow().template().contains("backend path"));
         assertTrue(registry.find(McpPromptName.TEST_RECOMMENDATION).orElseThrow().requiredArguments().contains("reportId"));
+        assertTrue(registry.find(McpPromptName.CODE_QUESTION).orElseThrow().requiredArguments().contains("q"));
+        assertTrue(registry.find(McpPromptName.CODE_QUESTION).orElseThrow().template().contains("rag.answerDraft"));
     }
 }

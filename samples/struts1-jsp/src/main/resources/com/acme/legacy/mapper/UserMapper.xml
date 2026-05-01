@@ -1,0 +1,8 @@
+<mapper namespace="com.acme.legacy.mapper.UserMapper">
+  <update id="updateUser">
+    update users
+       set name = #{name},
+           description = #{description}
+     where user_id = #{userId}
+  </update>
+</mapper>

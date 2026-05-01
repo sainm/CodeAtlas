@@ -37,6 +37,7 @@ public final class McpPromptRegistry {
             case IMPACT_REVIEW -> "Review an impact report using only static evidence paths.";
             case VARIABLE_TRACE -> "Explain variable source/sink paths with confidence and evidence.";
             case JSP_FLOW_ANALYSIS -> "Explain JSP to backend flow through Action/Controller, Service, Mapper, SQL, and table nodes.";
+            case CODE_QUESTION -> "Answer a natural-language code question using RAG answer draft evidence.";
             case TEST_RECOMMENDATION -> "Recommend focused tests from changed symbols and impact paths.";
         };
     }
@@ -46,6 +47,7 @@ public final class McpPromptRegistry {
             case IMPACT_REVIEW, TEST_RECOMMENDATION -> List.of("reportId");
             case VARIABLE_TRACE -> List.of("projectId", "snapshotId", "symbolId");
             case JSP_FLOW_ANALYSIS -> List.of("projectId", "snapshotId", "jspSymbolId");
+            case CODE_QUESTION -> List.of("projectId", "snapshotId", "q");
         };
     }
 
@@ -54,6 +56,7 @@ public final class McpPromptRegistry {
             case IMPACT_REVIEW -> "Summarize report {reportId}. Only cite evidence paths and mark uncertain paths explicitly.";
             case VARIABLE_TRACE -> "Trace variable {symbolId} in project {projectId} snapshot {snapshotId}. Separate sources, sinks, confidence, and evidence.";
             case JSP_FLOW_ANALYSIS -> "Analyze JSP flow {jspSymbolId} in project {projectId} snapshot {snapshotId}. Show each backend path and table touchpoint.";
+            case CODE_QUESTION -> "Use rag.answerDraft for question {q} in project {projectId} snapshot {snapshotId}. Answer only from returned evidence and say when evidence is missing.";
             case TEST_RECOMMENDATION -> "Recommend tests for report {reportId}. Tie each test to changed symbols and evidence paths.";
         };
     }

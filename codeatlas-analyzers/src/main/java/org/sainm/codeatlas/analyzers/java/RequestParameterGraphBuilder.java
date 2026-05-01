@@ -7,6 +7,7 @@ import org.sainm.codeatlas.graph.model.FactKey;
 import org.sainm.codeatlas.graph.model.GraphFact;
 import org.sainm.codeatlas.graph.model.GraphNode;
 import org.sainm.codeatlas.graph.model.GraphNodeFactory;
+import org.sainm.codeatlas.graph.model.NodeRole;
 import org.sainm.codeatlas.graph.model.RelationType;
 import org.sainm.codeatlas.graph.model.SourceType;
 import org.sainm.codeatlas.graph.model.SymbolId;
@@ -34,7 +35,7 @@ public final class RequestParameterGraphBuilder {
             nodes.add(GraphNodeFactory.requestParameterNode(parameter));
             facts.add(GraphFact.active(
                 new FactKey(event.methodSymbol(), relationType, parameter, event.variableName()),
-                new EvidenceKey(SourceType.SPOON, "request-parameter", "_unknown", event.line(), event.line(), event.variableName()),
+                new EvidenceKey(SourceType.SPOON, "request-parameter", event.sourcePath(), event.line(), event.line(), event.variableName()),
                 scope.projectId(),
                 scope.snapshotId(),
                 scope.analysisRunId(),
@@ -43,7 +44,53 @@ public final class RequestParameterGraphBuilder {
                 SourceType.SPOON
             ));
         }
+        for (MethodArgumentFlowEvent flow : traceResult.argumentFlows()) {
+            nodes.add(GraphNodeFactory.methodNode(flow.callerMethodSymbol(), NodeRole.CODE_MEMBER));
+            nodes.add(GraphNodeFactory.methodNode(flow.calleeMethodSymbol(), NodeRole.CODE_MEMBER));
+            if (!flow.requestParameterName().isBlank()) {
+                SymbolId parameter = requestParameter(projectKey, flow.callerMethodSymbol(), flow.requestParameterName());
+                nodes.add(GraphNodeFactory.requestParameterNode(parameter));
+                facts.add(GraphFact.active(
+                    new FactKey(flow.callerMethodSymbol(), RelationType.READS_PARAM, parameter, flow.flowKind() + ":" + flow.requestParameterName()),
+                    new EvidenceKey(SourceType.SPOON, "method-argument-parameter-read", flow.sourcePath(), flow.line(), flow.line(), flow.expression()),
+                    scope.projectId(),
+                    scope.snapshotId(),
+                    scope.analysisRunId(),
+                    scope.scopeKey(),
+                    Confidence.LIKELY,
+                    SourceType.SPOON
+                ));
+            }
+            facts.add(GraphFact.active(
+                new FactKey(flow.callerMethodSymbol(), RelationType.PASSES_PARAM, flow.calleeMethodSymbol(), flowQualifier(flow)),
+                new EvidenceKey(SourceType.SPOON, "method-argument-flow", flow.sourcePath(), flow.line(), flow.line(), flow.expression()),
+                scope.projectId(),
+                scope.snapshotId(),
+                scope.analysisRunId(),
+                scope.scopeKey(),
+                flow.requestParameterName().isBlank() ? Confidence.POSSIBLE : Confidence.LIKELY,
+                SourceType.SPOON
+            ));
+        }
         return new RequestParameterGraphResult(nodes, facts);
+    }
+
+    private SymbolId requestParameter(String projectKey, SymbolId methodSymbol, String parameterName) {
+        return SymbolId.logicalPath(
+            SymbolKind.REQUEST_PARAMETER,
+            projectKey,
+            methodSymbol.moduleKey(),
+            "_request",
+            parameterName,
+            null
+        );
+    }
+
+    private String flowQualifier(MethodArgumentFlowEvent flow) {
+        if (flow.requestParameterName().isBlank()) {
+            return "method-parameter:" + flow.argumentName();
+        }
+        return flow.flowKind() + ":" + flow.requestParameterName() + " argument:" + flow.argumentName();
     }
 
     private RelationType relationType(VariableEventKind kind) {

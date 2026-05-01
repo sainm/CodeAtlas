@@ -3,12 +3,8 @@ package org.sainm.codeatlas.analyzers.jsp;
 import org.sainm.codeatlas.graph.model.Confidence;
 import java.util.Locale;
 import java.util.Optional;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 public final class JspEncodingResolver {
-    private static final Pattern CHARSET = Pattern.compile("(?i)charset\\s*=\\s*([^;\\s]+)");
-
     public JspEncodingResolution resolve(byte[] bytes, JspSemanticAnalysis analysis, WebAppContext context) {
         Optional<String> bomEncoding = bomEncoding(bytes);
         if (bomEncoding.isPresent()) {
@@ -54,10 +50,31 @@ public final class JspEncodingResolver {
         if (contentType == null || contentType.isBlank()) {
             return Optional.empty();
         }
-        Matcher matcher = CHARSET.matcher(contentType);
-        if (!matcher.find()) {
+        String lower = contentType.toLowerCase(Locale.ROOT);
+        int charsetIndex = lower.indexOf("charset");
+        if (charsetIndex < 0) {
             return Optional.empty();
         }
-        return Optional.of(matcher.group(1).replace("\"", "").replace("'", "").toUpperCase(Locale.ROOT));
+        int cursor = charsetIndex + "charset".length();
+        cursor = JspTextScanner.skipWhitespace(contentType, cursor);
+        if (cursor >= contentType.length() || contentType.charAt(cursor) != '=') {
+            return Optional.empty();
+        }
+        cursor = JspTextScanner.skipWhitespace(contentType, cursor + 1);
+        if (cursor >= contentType.length()) {
+            return Optional.empty();
+        }
+        JspTextScanner.QuotedValue quoted = JspTextScanner.readQuotedValue(contentType, cursor);
+        if (quoted != null) {
+            return Optional.of(quoted.value().toUpperCase(Locale.ROOT));
+        }
+        int end = cursor;
+        while (end < contentType.length() && contentType.charAt(end) != ';' && !Character.isWhitespace(contentType.charAt(end))) {
+            end++;
+        }
+        if (end <= cursor) {
+            return Optional.empty();
+        }
+        return Optional.of(contentType.substring(cursor, end).toUpperCase(Locale.ROOT));
     }
 }

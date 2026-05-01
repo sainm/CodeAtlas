@@ -41,6 +41,7 @@ public final class McpResourceRegistry {
             case SYMBOL -> "codeatlas://projects/{projectId}/snapshots/{snapshotId}/symbols/{symbolId}";
             case JSP -> "codeatlas://projects/{projectId}/snapshots/{snapshotId}/jsp/{symbolId}";
             case TABLE -> "codeatlas://projects/{projectId}/snapshots/{snapshotId}/tables/{symbolId}";
+            case QUERY_VIEW -> "codeatlas://query/views/{viewName}";
             case REPORT -> "codeatlas://reports/{reportId}";
         };
     }
@@ -50,6 +51,7 @@ public final class McpResourceRegistry {
             case SYMBOL -> "Read symbol metadata, neighbors, confidence, and evidence references.";
             case JSP -> "Read JSP page/form/input facts and backend flow entrypoints.";
             case TABLE -> "Read database table impact facts and SQL statement references.";
+            case QUERY_VIEW -> "Read result view display contracts such as primary fields and evidence fields.";
             case REPORT -> "Read generated impact reports.";
         };
     }

@@ -26,7 +26,13 @@ This file tracks third-party dependencies before they enter the default CodeAtla
 | JetHTMLParser / Jericho | JSP-tolerant fallback parser | Pick one after compatibility check. |
 | JSqlParser | SQL table/column parsing | MVP SQL parser candidate. |
 | ASM / ClassGraph | Fast classpath scanning | Needed for fast indexing. |
-| Tai-e | Deep static analysis | Enhancement only. |
+| Tai-e | Deep static analysis | Reviewed 2026-05-01: GPL-3.0/LGPL-3.0 licenses found; enhancement-only optional worker. Do not add to default distribution without legal approval and dependency notice packaging. Source: https://github.com/pascal-lab/Tai-e |
+
+## Review Decisions
+
+| Dependency | Decision | Conditions |
+| --- | --- | --- |
+| Tai-e | Conditionally allowed only as an optional enhancement worker. | Keep out of the MVP/default runtime path; run in an isolated worker JVM; do not shade into CodeAtlas default artifacts; require explicit operator opt-in, license notice packaging, and legal approval before production distribution. |
 
 ## Gate
 

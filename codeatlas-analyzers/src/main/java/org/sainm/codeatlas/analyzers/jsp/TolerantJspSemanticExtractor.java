@@ -1,25 +1,72 @@
 package org.sainm.codeatlas.analyzers.jsp;
 
+import org.sainm.codeatlas.graph.model.Confidence;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+import java.util.Set;
 
 public final class TolerantJspSemanticExtractor {
-    private static final Pattern DIRECTIVE = Pattern.compile("(?is)<%@\\s*(\\w+)\\s+([^%]*)%>");
-    private static final Pattern JSP_ACTION = Pattern.compile("(?is)<(jsp:(?:include|forward|param|useBean))\\b([^>]*)>");
-    private static final Pattern JSTL_ACTION = Pattern.compile("(?is)<(c:(?:if|forEach|choose|when|otherwise|out|set))\\b([^>]*)>");
-    private static final Pattern EL = Pattern.compile("\\$\\{([^}]*)}");
-    private static final Pattern SCRIPTLET = Pattern.compile("(?is)<%(?!@|=)(.*?)%>");
-    private static final Pattern EXPRESSION = Pattern.compile("(?is)<%=(.*?)%>");
-    private static final Pattern ATTR = Pattern.compile("(?is)([a-zA-Z_:.-]+)\\s*=\\s*(\"([^\"]*)\"|'([^']*)'|([^\\s>]+))");
+    private static final Set<String> STANDARD_ACTIONS = Set.of("jsp:include", "jsp:forward", "jsp:param", "jsp:useBean");
+    private static final Set<String> JSTL_ACTIONS = Set.of("c:if", "c:forEach", "c:choose", "c:when", "c:otherwise", "c:out", "c:set");
+    private final ApacheJasperJspSemanticExtractor jasperExtractor = new ApacheJasperJspSemanticExtractor();
+    private final boolean useJerichoFallback;
+    private final StrutsJspTagAdapter strutsTagAdapter = new StrutsJspTagAdapter();
+    private final SpringJspTagAdapter springTagAdapter = new SpringJspTagAdapter();
+
+    public TolerantJspSemanticExtractor() {
+        this(true);
+    }
+
+    TolerantJspSemanticExtractor(boolean useJerichoFallback) {
+        this.useJerichoFallback = useJerichoFallback;
+    }
 
     public JspSemanticAnalysis extract(String jspText, WebAppContext context) {
+        return extract(jspText, context, null);
+    }
+
+    public JspSemanticAnalysis extract(String jspText, WebAppContext context, Path jspFile) {
+        JspSemanticAnalysis scannerAnalysis = scannerAnalysis(jspText, context);
+        JspSemanticAnalysis jasperAnalysis = jasperExtractor.extract(jspFile, context);
+        if (jasperAnalysis == null) {
+            JspSemanticAnalysis fallbackAnalysis = useJerichoFallback
+                ? new JerichoJspSemanticExtractor().extract(jspText, context)
+                : scannerAnalysis;
+            return withFallbackReason(fallbackAnalysis, fallbackReason(jspFile, context), missingContext(jspFile, context, scannerAnalysis));
+        }
+        return merge(jasperAnalysis, scannerAnalysis);
+    }
+
+    JspSemanticAnalysis scannerOnly(String jspText, WebAppContext context) {
+        return scannerAnalysis(jspText, context);
+    }
+
+    static JspTaglibReference taglib(JspDirective directive, WebAppContext context) {
+        String prefix = directive.attributes().get("prefix");
+        String uri = directive.attributes().get("uri");
+        String tagdir = directive.attributes().get("tagdir");
+        String resolved = null;
+        Confidence confidence = Confidence.POSSIBLE;
+        if (uri != null && !uri.isBlank()) {
+            resolved = context.taglibs().get(uri);
+            confidence = resolved == null ? Confidence.LIKELY : Confidence.CERTAIN;
+        } else if (tagdir != null && !tagdir.isBlank()) {
+            resolved = tagdir;
+            confidence = Confidence.CERTAIN;
+        }
+        return new JspTaglibReference(prefix, uri, tagdir, resolved, confidence, directive.line());
+    }
+
+    private JspSemanticAnalysis scannerAnalysis(String jspText, WebAppContext context) {
         List<JspDirective> directives = directives(jspText);
-        List<JspAction> actions = actions(jspText);
-        List<JspExpressionFragment> expressions = expressions(jspText);
+        List<JspTaglibReference> taglibs = taglibs(directives, context);
+        List<JspAction> actions = actions(jspText, taglibs);
+        List<JspExpressionFragment> expressions = JspTextScanner.expressions(jspText);
         List<String> includes = directives.stream()
             .filter(directive -> directive.name().equals("include"))
             .map(directive -> directive.attributes().get("file"))
@@ -31,65 +78,188 @@ public final class TolerantJspSemanticExtractor {
             .filter(value -> value != null && !value.isBlank())
             .findFirst()
             .orElse(context.defaultEncoding());
-        return new JspSemanticAnalysis(directives, actions, expressions, includes, encoding);
+        return new JspSemanticAnalysis(
+            directives,
+            actions,
+            expressions,
+            taglibs,
+            List.of(),
+            includes,
+            encoding,
+            JspSemanticParserSource.TOKENIZER_FALLBACK,
+            "tolerant-jsp-tokenizer",
+            null,
+            List.of()
+        );
     }
 
     private List<JspDirective> directives(String text) {
-        List<JspDirective> result = new ArrayList<>();
-        Matcher matcher = DIRECTIVE.matcher(text);
-        while (matcher.find()) {
-            result.add(new JspDirective(matcher.group(1), attrs(matcher.group(2)), lineOf(text, matcher.start())));
-        }
-        return result;
+        return JspTextScanner.directives(text).stream()
+            .map(token -> new JspDirective(token.name(), token.attributes(), token.line()))
+            .toList();
     }
 
-    private List<JspAction> actions(String text) {
+    private List<JspTaglibReference> taglibs(List<JspDirective> directives, WebAppContext context) {
+        return directives.stream()
+            .filter(directive -> directive.name().equals("taglib"))
+            .map(directive -> taglib(directive, context))
+            .toList();
+    }
+
+    private List<JspAction> actions(String text, List<JspTaglibReference> taglibs) {
         List<JspAction> result = new ArrayList<>();
-        collectActions(text, JSP_ACTION, result);
-        collectActions(text, JSTL_ACTION, result);
-        return result;
-    }
-
-    private void collectActions(String text, Pattern pattern, List<JspAction> result) {
-        Matcher matcher = pattern.matcher(text);
-        while (matcher.find()) {
-            result.add(new JspAction(matcher.group(1), attrs(matcher.group(2)), lineOf(text, matcher.start())));
-        }
-    }
-
-    private List<JspExpressionFragment> expressions(String text) {
-        List<JspExpressionFragment> result = new ArrayList<>();
-        collectExpressions(text, EL, "EL", result);
-        collectExpressions(text, SCRIPTLET, "SCRIPTLET", result);
-        collectExpressions(text, EXPRESSION, "EXPRESSION", result);
-        return result;
-    }
-
-    private void collectExpressions(String text, Pattern pattern, String kind, List<JspExpressionFragment> result) {
-        Matcher matcher = pattern.matcher(text);
-        while (matcher.find()) {
-            result.add(new JspExpressionFragment(kind, matcher.group(1), lineOf(text, matcher.start())));
-        }
-    }
-
-    private Map<String, String> attrs(String text) {
-        Map<String, String> attrs = new LinkedHashMap<>();
-        Matcher matcher = ATTR.matcher(text);
-        while (matcher.find()) {
-            String value = matcher.group(3) != null ? matcher.group(3) : matcher.group(4) != null ? matcher.group(4) : matcher.group(5);
-            attrs.put(matcher.group(1), value == null ? "" : value.trim());
-        }
-        return attrs;
-    }
-
-    private int lineOf(String text, int offset) {
-        int line = 1;
-        for (int i = 0; i < offset && i < text.length(); i++) {
-            if (text.charAt(i) == '\n') {
-                line++;
+        Set<String> tagdirPrefixes = new LinkedHashSet<>();
+        for (JspTaglibReference taglib : taglibs) {
+            if (taglib.tagdir() != null && taglib.prefix() != null && !taglib.prefix().isBlank()) {
+                tagdirPrefixes.add(taglib.prefix());
             }
         }
-        return line;
+        for (JspTextScanner.TagToken tag : JspTextScanner.tags(text)) {
+            if (tag.closing()) {
+                continue;
+            }
+            if (isKnownAction(tag.name(), tagdirPrefixes)) {
+                result.add(new JspAction(tag.name(), tag.attributes(), tag.line()));
+            }
+        }
+        return result;
+    }
+
+    private boolean isKnownAction(String name, Set<String> tagdirPrefixes) {
+        if (STANDARD_ACTIONS.contains(name)
+            || JSTL_ACTIONS.contains(name)
+            || strutsTagAdapter.isActionTag(name)
+            || springTagAdapter.isActionTag(name)) {
+            return true;
+        }
+        int separator = name.indexOf(':');
+        return separator > 0 && tagdirPrefixes.contains(name.substring(0, separator));
+    }
+
+    private JspSemanticAnalysis merge(JspSemanticAnalysis first, JspSemanticAnalysis second) {
+        List<JspDirective> directives = mergeDirectives(first.directives(), second.directives());
+        List<JspAction> actions = mergeActions(first.actions(), second.actions());
+        List<JspExpressionFragment> expressions = mergeExpressions(first.expressions(), second.expressions());
+        List<JspTaglibReference> taglibs = mergeTaglibs(first.taglibs(), second.taglibs());
+        List<String> includes = mergeStrings(first.includes(), second.includes());
+        String encoding = first.encoding() == null || first.encoding().isBlank() ? second.encoding() : first.encoding();
+        return new JspSemanticAnalysis(
+            directives,
+            actions,
+            expressions,
+            taglibs,
+            List.of(),
+            includes,
+            encoding,
+            JspSemanticParserSource.JASPER_WITH_TOKENIZER_MERGE,
+            "apache-jasper+tolerant-jsp-tokenizer",
+            null,
+            List.of()
+        );
+    }
+
+    private JspSemanticAnalysis withFallbackReason(JspSemanticAnalysis analysis, String fallbackReason, List<String> missingContext) {
+        return new JspSemanticAnalysis(
+            analysis.directives(),
+            analysis.actions(),
+            analysis.expressions(),
+            analysis.taglibs(),
+            analysis.clientNavigations(),
+            analysis.includes(),
+            analysis.encoding(),
+            analysis.parserSource(),
+            analysis.parserName(),
+            fallbackReason,
+            missingContext
+        );
+    }
+
+    private List<String> missingContext(Path jspFile, WebAppContext context, JspSemanticAnalysis scannerAnalysis) {
+        Set<String> missing = new LinkedHashSet<>();
+        if (jspFile == null) {
+            missing.add("jspFile");
+        }
+        if (context == null) {
+            missing.add("webAppContext");
+            return List.copyOf(missing);
+        }
+        if (context.webXml() == null || !Files.exists(context.webXml())) {
+            missing.add("web.xml");
+        }
+        if (context.classpathEntries().isEmpty()) {
+            missing.add("classpathEntries");
+        }
+        if (scannerAnalysis != null
+            && context.taglibs().isEmpty()
+            && scannerAnalysis.taglibs().stream().anyMatch(taglib -> taglib.uri() != null)) {
+            missing.add("taglibRegistry");
+        }
+        return List.copyOf(missing);
+    }
+
+    private String fallbackReason(Path jspFile, WebAppContext context) {
+        if (jspFile == null) {
+            return "jsp file path unavailable for Apache Jasper";
+        }
+        if (context == null || context.webRoot() == null) {
+            return "web application context unavailable for Apache Jasper";
+        }
+        Path webRoot = context.webRoot().toAbsolutePath().normalize();
+        Path jspPath = jspFile.toAbsolutePath().normalize();
+        if (!jspPath.startsWith(webRoot)) {
+            return "jsp file is outside web root: " + webRoot;
+        }
+        return "Apache Jasper could not parse this JSP with the available webapp context";
+    }
+
+    private List<JspDirective> mergeDirectives(List<JspDirective> first, List<JspDirective> second) {
+        Map<String, JspDirective> merged = new LinkedHashMap<>();
+        for (JspDirective directive : first) {
+            merged.put(directive.name() + directive.line() + directive.attributes(), directive);
+        }
+        for (JspDirective directive : second) {
+            merged.putIfAbsent(directive.name() + directive.line() + directive.attributes(), directive);
+        }
+        return List.copyOf(merged.values());
+    }
+
+    private List<JspAction> mergeActions(List<JspAction> first, List<JspAction> second) {
+        Map<String, JspAction> merged = new LinkedHashMap<>();
+        for (JspAction action : first) {
+            merged.put(action.name() + action.line() + action.attributes(), action);
+        }
+        for (JspAction action : second) {
+            merged.putIfAbsent(action.name() + action.line() + action.attributes(), action);
+        }
+        return List.copyOf(merged.values());
+    }
+
+    private List<JspExpressionFragment> mergeExpressions(List<JspExpressionFragment> first, List<JspExpressionFragment> second) {
+        Map<String, JspExpressionFragment> merged = new LinkedHashMap<>();
+        for (JspExpressionFragment expression : first) {
+            merged.put(expression.kind() + expression.line() + expression.expression(), expression);
+        }
+        for (JspExpressionFragment expression : second) {
+            merged.putIfAbsent(expression.kind() + expression.line() + expression.expression(), expression);
+        }
+        return List.copyOf(merged.values());
+    }
+
+    private List<JspTaglibReference> mergeTaglibs(List<JspTaglibReference> first, List<JspTaglibReference> second) {
+        Map<String, JspTaglibReference> merged = new LinkedHashMap<>();
+        for (JspTaglibReference taglib : first) {
+            merged.put(taglib.prefix() + taglib.line(), taglib);
+        }
+        for (JspTaglibReference taglib : second) {
+            merged.putIfAbsent(taglib.prefix() + taglib.line(), taglib);
+        }
+        return List.copyOf(merged.values());
+    }
+
+    private List<String> mergeStrings(List<String> first, List<String> second) {
+        Set<String> merged = new LinkedHashSet<>(first);
+        merged.addAll(second);
+        return List.copyOf(merged);
     }
 
     private String firstNonBlank(String first, String second) {

@@ -13,6 +13,20 @@ public final class ImpactReportMarkdownExporter {
         builder.append("- Depth: `").append(report.depth()).append("`\n");
         builder.append("- Truncated: `").append(report.truncated()).append("`\n\n");
 
+        builder.append("## Affected Symbols\n\n");
+        if (report.affectedSymbols().isEmpty()) {
+            builder.append("No affected symbols found.\n\n");
+        } else {
+            builder.append("| Category | Symbol | Display |\n");
+            builder.append("| --- | --- | --- |\n");
+            for (ImpactAffectedSymbol symbol : report.affectedSymbols()) {
+                builder.append("| `").append(symbol.category()).append("` | `")
+                    .append(symbol.symbolId().value()).append("` | ")
+                    .append(symbol.displayName()).append(" |\n");
+            }
+            builder.append("\n");
+        }
+
         builder.append("## Paths\n\n");
         if (report.paths().isEmpty()) {
             builder.append("No impact paths found.\n\n");
@@ -51,8 +65,15 @@ public final class ImpactReportMarkdownExporter {
         for (ImpactPathStep step : path.steps()) {
             String relation = step.incomingRelation() == null ? "ENTRY" : step.incomingRelation().name();
             joiner.add("- `" + relation + "` `" + step.symbolId().value() + "`"
-                + " [" + step.confidence() + ", " + step.sourceType() + "]");
+                + " [" + step.confidence() + ", " + step.sourceType() + ", " + analysisLayer(step)
+                + ", evidence=" + step.evidenceKeys().size() + "]");
         }
         return joiner.toString();
+    }
+
+    private String analysisLayer(ImpactPathStep step) {
+        return step.sourceType() == org.sainm.codeatlas.graph.model.SourceType.TAI_E
+            ? "DEEP_SUPPLEMENT"
+            : "STATIC_FACT";
     }
 }

@@ -3,6 +3,11 @@ junit = "5.14.1"
 spoon = "11.3.1-beta-8"
 neo4jDriver = "6.0.3"
 jgit = "7.6.0.202603022253-r"
+tomcat = "9.0.116"
+ant = "1.10.17"
+jsqlparser = "5.3"
+javaparser = "3.28.0"
+jericho = "3.4"
 
 [libraries]
 junit-jupiter = { module = "org.junit.jupiter:junit-jupiter", version.ref = "junit" }
@@ -10,3 +15,8 @@ junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher
 spoon-core = { module = "fr.inria.gforge.spoon:spoon-core", version.ref = "spoon" }
 neo4j-java-driver = { module = "org.neo4j.driver:neo4j-java-driver", version.ref = "neo4jDriver" }
 jgit = { module = "org.eclipse.jgit:org.eclipse.jgit", version.ref = "jgit" }
+tomcat-embed-jasper = { module = "org.apache.tomcat.embed:tomcat-embed-jasper", version.ref = "tomcat" }
+ant = { module = "org.apache.ant:ant", version.ref = "ant" }
+jsqlparser = { module = "com.github.jsqlparser:jsqlparser", version.ref = "jsqlparser" }
+javaparser-core = { module = "com.github.javaparser:javaparser-core", version.ref = "javaparser" }
+jericho-html = { module = "net.htmlparser.jericho:jericho-html", version.ref = "jericho" }

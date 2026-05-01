@@ -12,6 +12,14 @@ import org.xml.sax.InputSource;
 public final class SafeXmlDocumentLoader {
     public Document load(Path xml) {
         try (InputStream input = Files.newInputStream(xml)) {
+            return load(input, xml.toString());
+        } catch (Exception exception) {
+            throw new IllegalStateException("Failed to load XML document: " + xml, exception);
+        }
+    }
+
+    public Document load(InputStream input, String description) {
+        try {
             DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
             factory.setExpandEntityReferences(false);
             setFeature(factory, "http://xml.org/sax/features/external-general-entities", false);
@@ -21,7 +29,7 @@ public final class SafeXmlDocumentLoader {
             builder.setEntityResolver((publicId, systemId) -> new InputSource(new StringReader("")));
             return builder.parse(input);
         } catch (Exception exception) {
-            throw new IllegalStateException("Failed to load XML document: " + xml, exception);
+            throw new IllegalStateException("Failed to load XML document: " + description, exception);
         }
     }
 

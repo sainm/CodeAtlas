@@ -2,6 +2,7 @@ package org.sainm.codeatlas.graph.model;
 
 public enum SourceType {
     SPOON,
+    JAVAPARSER_FAST,
     JASPER,
     JSP_FALLBACK,
     XML,

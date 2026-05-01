@@ -31,7 +31,28 @@ public record GraphNode(
         mergedRoles.addAll(other.roles);
         TreeMap<String, String> mergedProperties = new TreeMap<>(properties);
         mergedProperties.putAll(other.properties);
+        mergeCodeOriginProperties(mergedProperties, properties, other.properties);
         return new GraphNode(symbolId, mergedRoles, mergedProperties);
     }
-}
 
+    private static void mergeCodeOriginProperties(
+        TreeMap<String, String> mergedProperties,
+        Map<String, String> left,
+        Map<String, String> right
+    ) {
+        boolean hasSource = flag(left, "hasSource") || flag(right, "hasSource");
+        boolean hasJvm = flag(left, "hasJvm") || flag(right, "hasJvm");
+        if (!hasSource && !hasJvm) {
+            return;
+        }
+        mergedProperties.put("hasSource", Boolean.toString(hasSource));
+        mergedProperties.put("hasJvm", Boolean.toString(hasJvm));
+        mergedProperties.put("sourceOnly", Boolean.toString(hasSource && !hasJvm));
+        mergedProperties.put("jvmOnly", Boolean.toString(hasJvm && !hasSource));
+        mergedProperties.put("codeOrigin", hasSource && hasJvm ? "source+jvm" : hasSource ? "source" : "jvm");
+    }
+
+    private static boolean flag(Map<String, String> properties, String key) {
+        return Boolean.parseBoolean(properties.getOrDefault(key, "false"));
+    }
+}

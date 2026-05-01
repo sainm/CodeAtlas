@@ -5,14 +5,28 @@ public record StrutsActionMapping(
     String type,
     String name,
     String scope,
-    String input
+    String input,
+    String parameter,
+    String forward,
+    String className
 ) {
+    public StrutsActionMapping(String path, String type, String name, String scope, String input, String parameter, String forward) {
+        this(path, type, name, scope, input, parameter, forward, null);
+    }
+
+    public StrutsActionMapping(String path, String type, String name, String scope, String input, String parameter) {
+        this(path, type, name, scope, input, parameter, null, null);
+    }
+
     public StrutsActionMapping {
         path = require(path, "path");
-        type = require(type, "type");
+        type = blankToNull(type);
         name = blankToNull(name);
         scope = blankToNull(scope);
         input = blankToNull(input);
+        parameter = blankToNull(parameter);
+        forward = blankToNull(forward);
+        className = blankToNull(className);
     }
 
     private static String require(String value, String name) {

@@ -48,4 +48,21 @@ class GraphNodeFactoryTest {
         assertEquals(Set.of(NodeRole.CODE_MEMBER, NodeRole.SERVICE), GraphNodeFactory.methodNode(method, NodeRole.SERVICE).roles());
         assertEquals(Set.of(NodeRole.CODE_MEMBER, NodeRole.DAO), GraphNodeFactory.fieldNode(field, NodeRole.DAO).roles());
     }
+
+    @Test
+    void methodNodesCanCarryCodeOriginPropertiesAndMergeThem() {
+        SymbolId method = SymbolId.method("shop", "_root", "src/main/java", "com.acme.UserService", "save", "()V");
+        GraphNode source = GraphNodeFactory.methodNode(method, NodeRole.SERVICE, GraphNodeFactory.sourceMethodProperties());
+        GraphNode jvm = GraphNodeFactory.methodNode(method, NodeRole.SERVICE, GraphNodeFactory.jvmMethodProperties(true, true));
+
+        GraphNode merged = source.merge(jvm);
+
+        assertEquals("source+jvm", merged.properties().get("codeOrigin"));
+        assertEquals("true", merged.properties().get("hasSource"));
+        assertEquals("true", merged.properties().get("hasJvm"));
+        assertEquals("false", merged.properties().get("sourceOnly"));
+        assertEquals("false", merged.properties().get("jvmOnly"));
+        assertEquals("true", merged.properties().get("synthetic"));
+        assertEquals("true", merged.properties().get("bridge"));
+    }
 }

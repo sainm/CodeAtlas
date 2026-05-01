@@ -18,10 +18,12 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import spoon.reflect.code.CtLambda;
 import spoon.Launcher;
 import spoon.reflect.CtModel;
 import spoon.reflect.code.CtInvocation;
 import spoon.reflect.cu.SourcePosition;
+import spoon.reflect.declaration.CtAnonymousExecutable;
 import spoon.reflect.declaration.CtConstructor;
 import spoon.reflect.declaration.CtField;
 import spoon.reflect.declaration.CtMethod;
@@ -55,61 +57,163 @@ public final class SpoonJavaAnalyzer {
         SpoonSymbolMapper symbols = new SpoonSymbolMapper(projectKey, scope.moduleKey(), sourceRootKey);
         List<GraphNode> nodes = new ArrayList<>();
         List<GraphFact> facts = new ArrayList<>();
+        Map<String, NodeRole> rolesByType = rolesByType(model.getAllTypes());
 
+        JavaAnalysisContext context = new JavaAnalysisContext(scope, symbols, nodes, facts, rolesByType);
         for (CtType<?> type : model.getAllTypes()) {
-            analyzeType(scope, symbols, nodes, facts, type);
+            analyzeType(context, type);
         }
-        addMethodImplementationFacts(scope, symbols, model.getAllTypes(), facts);
+        addMethodImplementationFacts(context, model.getAllTypes());
 
         return new JavaAnalysisResult(nodes, facts);
     }
 
     private void analyzeType(
-        AnalyzerScope scope,
-        SpoonSymbolMapper symbols,
-        List<GraphNode> nodes,
-        List<GraphFact> facts,
+        JavaAnalysisContext context,
         CtType<?> type
     ) {
-        SymbolId typeSymbol = symbols.type(type);
-        nodes.add(GraphNodeFactory.classNode(typeSymbol, NodeRole.CODE_TYPE));
-        addFileDeclaration(scope, symbols, nodes, facts, typeSymbol, type.getPosition());
+        SymbolId typeSymbol = context.symbols().type(type);
+        context.nodes().add(GraphNodeFactory.classNode(typeSymbol, roleForType(type, context.rolesByType())));
+        addFileDeclaration(context, typeSymbol, type.getPosition());
 
         CtTypeReference<?> superClass = type.getSuperclass();
         if (superClass != null) {
-            addFact(scope, facts, typeSymbol, RelationType.EXTENDS, symbols.typeReference(superClass), type.getPosition(), "extends", Confidence.LIKELY);
+            addFact(context, typeSymbol, RelationType.EXTENDS, context.symbols().typeReference(superClass), type.getPosition(), "extends", Confidence.LIKELY);
         }
         for (CtTypeReference<?> implementedType : type.getSuperInterfaces()) {
-            addFact(scope, facts, typeSymbol, RelationType.IMPLEMENTS, symbols.typeReference(implementedType), type.getPosition(), "implements", Confidence.LIKELY);
+            addFact(context, typeSymbol, RelationType.IMPLEMENTS, context.symbols().typeReference(implementedType), type.getPosition(), "implements", Confidence.LIKELY);
         }
 
         for (CtField<?> field : type.getFields()) {
-            SymbolId fieldSymbol = symbols.field(field);
-            nodes.add(GraphNodeFactory.fieldNode(fieldSymbol, NodeRole.CODE_MEMBER));
-            addFact(scope, facts, typeSymbol, RelationType.DECLARES, fieldSymbol, field.getPosition(), "field", Confidence.CERTAIN);
+            SymbolId fieldSymbol = context.symbols().field(field);
+            context.nodes().add(GraphNodeFactory.fieldNode(fieldSymbol, NodeRole.CODE_MEMBER));
+            addFact(context, typeSymbol, RelationType.DECLARES, fieldSymbol, field.getPosition(), "field", Confidence.CERTAIN);
+            addLayerDependency(context, type, typeSymbol, field);
+        }
+        for (CtAnonymousExecutable initializer : type.getElements(new TypeFilter<>(CtAnonymousExecutable.class))) {
+            if (!type.equals(initializer.getDeclaringType())) {
+                continue;
+            }
+            SymbolId initializerSymbol = context.symbols().initializer(initializer);
+            context.nodes().add(GraphNodeFactory.methodNode(initializerSymbol, NodeRole.CODE_MEMBER, GraphNodeFactory.sourceMethodProperties()));
+            addFact(context, typeSymbol, RelationType.DECLARES, initializerSymbol, initializer.getPosition(), initializer.isStatic() ? "static-initializer" : "instance-initializer", Confidence.CERTAIN);
+            addInvocations(context, initializerSymbol, initializer.getElements(new TypeFilter<>(CtInvocation.class)));
         }
         for (CtConstructor<?> constructor : type.getElements(new TypeFilter<>(CtConstructor.class))) {
             if (!type.equals(constructor.getDeclaringType())) {
                 continue;
             }
-            SymbolId constructorSymbol = symbols.constructor(constructor);
-            nodes.add(GraphNodeFactory.methodNode(constructorSymbol, NodeRole.CODE_MEMBER));
-            addFact(scope, facts, typeSymbol, RelationType.DECLARES, constructorSymbol, constructor.getPosition(), "constructor", Confidence.CERTAIN);
-            addInvocations(scope, symbols, facts, constructorSymbol, constructor.getElements(new TypeFilter<>(CtInvocation.class)));
+            SymbolId constructorSymbol = context.symbols().constructor(constructor);
+            context.nodes().add(GraphNodeFactory.methodNode(constructorSymbol, NodeRole.CODE_MEMBER, GraphNodeFactory.sourceMethodProperties()));
+            addFact(context, typeSymbol, RelationType.DECLARES, constructorSymbol, constructor.getPosition(), "constructor", Confidence.CERTAIN);
+            addInvocations(context, constructorSymbol, constructor.getElements(new TypeFilter<>(CtInvocation.class)));
         }
         for (CtMethod<?> method : type.getMethods()) {
-            SymbolId methodSymbol = symbols.method(method);
-            nodes.add(GraphNodeFactory.methodNode(methodSymbol, NodeRole.CODE_MEMBER));
-            addFact(scope, facts, typeSymbol, RelationType.DECLARES, methodSymbol, method.getPosition(), "method", Confidence.CERTAIN);
-            addInvocations(scope, symbols, facts, methodSymbol, method.getElements(new TypeFilter<>(CtInvocation.class)));
+            SymbolId methodSymbol = context.symbols().method(method);
+            context.nodes().add(GraphNodeFactory.methodNode(methodSymbol, NodeRole.CODE_MEMBER, GraphNodeFactory.sourceMethodProperties()));
+            addFact(context, typeSymbol, RelationType.DECLARES, methodSymbol, method.getPosition(), "method", Confidence.CERTAIN);
+            addInvocations(context, methodSymbol, method.getElements(new TypeFilter<>(CtInvocation.class)));
+            addLambdas(context, typeSymbol, methodSymbol, method.getElements(new TypeFilter<>(CtLambda.class)));
+        }
+    }
+
+    private void addLayerDependency(
+        JavaAnalysisContext context,
+        CtType<?> ownerType,
+        SymbolId ownerSymbol,
+        CtField<?> field
+    ) {
+        CtTypeReference<?> fieldType = field.getType();
+        if (fieldType == null || fieldType.getQualifiedName() == null || fieldType.getQualifiedName().isBlank()) {
+            return;
+        }
+        NodeRole ownerRole = roleForType(ownerType, context.rolesByType());
+        NodeRole dependencyRole = roleForTypeReference(fieldType, context.rolesByType());
+        if (!isApplicationLayer(ownerRole) || !ApplicationLayerClassifier.isSupportLayer(dependencyRole)) {
+            return;
+        }
+        SymbolId dependencySymbol = context.symbols().typeReference(fieldType);
+        context.nodes().add(GraphNodeFactory.classNode(dependencySymbol, dependencyRole));
+        addFact(
+            context,
+            ownerSymbol,
+            RelationType.INJECTS,
+            dependencySymbol,
+            field.getPosition(),
+            "field-layer-dependency:" + field.getSimpleName(),
+            Confidence.LIKELY
+        );
+    }
+
+    private boolean isApplicationLayer(NodeRole role) {
+        return ApplicationLayerClassifier.isApplicationLayer(role);
+    }
+
+    private Map<String, NodeRole> rolesByType(Collection<CtType<?>> types) {
+        Map<String, NodeRole> roles = new HashMap<>();
+        for (CtType<?> type : types) {
+            roles.put(type.getQualifiedName(), inferRoleForType(type));
+        }
+        boolean changed;
+        do {
+            changed = false;
+            for (CtType<?> type : types) {
+                if (roles.get(type.getQualifiedName()) == NodeRole.STRUTS_ACTION) {
+                    continue;
+                }
+                CtTypeReference<?> superClass = type.getSuperclass();
+                if (superClass != null && roles.get(superClass.getQualifiedName()) == NodeRole.STRUTS_ACTION) {
+                    roles.put(type.getQualifiedName(), NodeRole.STRUTS_ACTION);
+                    changed = true;
+                }
+            }
+        } while (changed);
+        return roles;
+    }
+
+    private NodeRole roleForType(CtType<?> type, Map<String, NodeRole> rolesByType) {
+        return rolesByType.getOrDefault(type.getQualifiedName(), inferRoleForType(type));
+    }
+
+    private NodeRole inferRoleForType(CtType<?> type) {
+        if (isStrutsActionType(type)) {
+            return NodeRole.STRUTS_ACTION;
+        }
+        NodeRole namedRole = ApplicationLayerClassifier.roleForQualifiedName(type.getQualifiedName());
+        if (namedRole != NodeRole.CODE_TYPE) {
+            return namedRole;
+        }
+        if (isStatelessStaticSupportType(type)) {
+            return NodeRole.UTILITY;
+        }
+        return NodeRole.CODE_TYPE;
+    }
+
+    private boolean isStrutsActionType(CtType<?> type) {
+        CtTypeReference<?> superClass = type.getSuperclass();
+        return superClass != null && superClass.getQualifiedName() != null && superClass.getQualifiedName().contains("org.apache.struts");
+    }
+
+
+    private void addLambdas(
+        JavaAnalysisContext context,
+        SymbolId typeSymbol,
+        SymbolId enclosingExecutable,
+        List<CtLambda<?>> lambdas
+    ) {
+        for (int i = 0; i < lambdas.size(); i++) {
+            CtLambda<?> lambda = lambdas.get(i);
+            SymbolId lambdaSymbol = context.symbols().lambda(lambda, i);
+            context.nodes().add(GraphNodeFactory.methodNode(lambdaSymbol, NodeRole.CODE_MEMBER, GraphNodeFactory.sourceMethodProperties()));
+            addFact(context, typeSymbol, RelationType.DECLARES, lambdaSymbol, lambda.getPosition(), "lambda", Confidence.CERTAIN);
+            addFact(context, enclosingExecutable, RelationType.CALLS, lambdaSymbol, lambda.getPosition(), "lambda-expression", Confidence.LIKELY);
+            addInvocations(context, lambdaSymbol, lambda.getElements(new TypeFilter<>(CtInvocation.class)));
         }
     }
 
     private void addMethodImplementationFacts(
-        AnalyzerScope scope,
-        SpoonSymbolMapper symbols,
-        Collection<CtType<?>> types,
-        List<GraphFact> facts
+        JavaAnalysisContext context,
+        Collection<CtType<?>> types
     ) {
         Map<String, CtType<?>> typesByName = new HashMap<>();
         for (CtType<?> type : types) {
@@ -128,11 +232,10 @@ public final class SpoonJavaAnalyzer {
                     for (CtMethod<?> interfaceMethod : interfaceType.getMethods()) {
                         if (sameMethodShape(implementationMethod, interfaceMethod)) {
                             addFact(
-                                scope,
-                                facts,
-                                symbols.method(implementationMethod),
+                                context,
+                                context.symbols().method(implementationMethod),
                                 RelationType.IMPLEMENTS,
-                                symbols.method(interfaceMethod),
+                                context.symbols().method(interfaceMethod),
                                 implementationMethod.getPosition(),
                                 "interface-method",
                                 Confidence.LIKELY
@@ -150,25 +253,20 @@ public final class SpoonJavaAnalyzer {
     }
 
     private void addFileDeclaration(
-        AnalyzerScope scope,
-        SpoonSymbolMapper symbols,
-        List<GraphNode> nodes,
-        List<GraphFact> facts,
+        JavaAnalysisContext context,
         SymbolId declaredSymbol,
         SourcePosition position
     ) {
         if (position == null || !position.isValidPosition() || position.getFile() == null) {
             return;
         }
-        SymbolId fileSymbol = symbols.sourceFile(scope.root(), position.getFile().toPath());
-        nodes.add(GraphNodeFactory.sourceFile(declaredSymbol.projectKey(), declaredSymbol.moduleKey(), declaredSymbol.sourceRootKey(), relativePath(scope.root(), position.getFile())));
-        addFact(scope, facts, fileSymbol, RelationType.DECLARES, declaredSymbol, position, "file-declares", Confidence.CERTAIN);
+        SymbolId fileSymbol = context.symbols().sourceFile(context.scope().root(), position.getFile().toPath());
+        context.nodes().add(GraphNodeFactory.sourceFile(declaredSymbol.projectKey(), declaredSymbol.moduleKey(), declaredSymbol.sourceRootKey(), relativePath(context.scope().root(), position.getFile())));
+        addFact(context, fileSymbol, RelationType.DECLARES, declaredSymbol, position, "file-declares", Confidence.CERTAIN);
     }
 
     private void addInvocations(
-        AnalyzerScope scope,
-        SpoonSymbolMapper symbols,
-        List<GraphFact> facts,
+        JavaAnalysisContext context,
         SymbolId caller,
         List<CtInvocation<?>> invocations
     ) {
@@ -177,13 +275,66 @@ public final class SpoonJavaAnalyzer {
             if (executable == null) {
                 continue;
             }
-            addFact(scope, facts, caller, RelationType.CALLS, symbols.executableReference(executable), invocation.getPosition(), "direct", Confidence.LIKELY);
+            SymbolId target = context.symbols().executableReference(executable);
+            NodeRole targetRole = roleForExecutableReference(executable, context.rolesByType());
+            if (ApplicationLayerClassifier.isSupportLayer(targetRole)) {
+                CtTypeReference<?> declaringType = executable.getDeclaringType();
+                if (declaringType != null) {
+                    context.nodes().add(GraphNodeFactory.classNode(context.symbols().typeReference(declaringType), targetRole));
+                }
+                context.nodes().add(GraphNodeFactory.methodNode(target, targetRole));
+            }
+            addFact(context, caller, RelationType.CALLS, target, invocation.getPosition(), invocationQualifier(executable, targetRole), Confidence.LIKELY);
         }
     }
 
+    private NodeRole roleForExecutableReference(CtExecutableReference<?> executable, Map<String, NodeRole> rolesByType) {
+        CtTypeReference<?> declaringType = executable.getDeclaringType();
+        if (declaringType == null || declaringType.getQualifiedName() == null) {
+            return NodeRole.CODE_MEMBER;
+        }
+        return roleForTypeReference(declaringType, rolesByType);
+    }
+
+    private NodeRole roleForTypeReference(CtTypeReference<?> typeReference, Map<String, NodeRole> rolesByType) {
+        String qualifiedName = typeReference.getQualifiedName();
+        if (qualifiedName == null || qualifiedName.isBlank()) {
+            return NodeRole.CODE_TYPE;
+        }
+        return rolesByType.getOrDefault(qualifiedName, ApplicationLayerClassifier.roleForQualifiedName(qualifiedName));
+    }
+
+    private boolean isStatelessStaticSupportType(CtType<?> type) {
+        if (type.isInterface() || type.isAnonymous()) {
+            return false;
+        }
+        boolean hasMethod = !type.getMethods().isEmpty();
+        boolean hasStaticMethod = type.getMethods().stream().anyMatch(CtMethod::isStatic);
+        boolean hasInstanceMethod = type.getMethods().stream().anyMatch(method -> !method.isStatic());
+        boolean hasField = !type.getFields().isEmpty();
+        boolean hasStaticOnlyFields = hasField && type.getFields().stream().allMatch(CtField::isStatic);
+        boolean hasInstanceField = type.getFields().stream().anyMatch(field -> !field.isStatic());
+        if (hasInstanceMethod || hasInstanceField) {
+            return false;
+        }
+        return (hasMethod && hasStaticMethod) || hasStaticOnlyFields;
+    }
+
+    private String invocationQualifier(CtExecutableReference<?> executable, NodeRole targetRole) {
+        if (targetRole == NodeRole.UTILITY && executable.isStatic()) {
+            return "static-utility";
+        }
+        if (targetRole == NodeRole.UTILITY) {
+            return "utility";
+        }
+        if (executable.isStatic()) {
+            return "static-direct";
+        }
+        return "direct";
+    }
+
     private void addFact(
-        AnalyzerScope scope,
-        List<GraphFact> facts,
+        JavaAnalysisContext context,
         SymbolId source,
         RelationType relationType,
         SymbolId target,
@@ -192,13 +343,13 @@ public final class SpoonJavaAnalyzer {
         Confidence confidence
     ) {
         EvidenceKey evidenceKey = evidenceKey(position, qualifier);
-        facts.add(GraphFact.active(
+        context.facts().add(GraphFact.active(
             new FactKey(source, relationType, target, qualifier),
             evidenceKey,
-            scope.projectId(),
-            scope.snapshotId(),
-            scope.analysisRunId(),
-            scope.scopeKey(),
+            context.scope().projectId(),
+            context.scope().snapshotId(),
+            context.scope().analysisRunId(),
+            context.scope().scopeKey(),
             confidence,
             SourceType.SPOON
         ));
@@ -220,5 +371,14 @@ public final class SpoonJavaAnalyzer {
 
     private Path relativePath(Path root, File file) {
         return root.relativize(file.toPath()).normalize();
+    }
+
+    private record JavaAnalysisContext(
+        AnalyzerScope scope,
+        SpoonSymbolMapper symbols,
+        List<GraphNode> nodes,
+        List<GraphFact> facts,
+        Map<String, NodeRole> rolesByType
+    ) {
     }
 }

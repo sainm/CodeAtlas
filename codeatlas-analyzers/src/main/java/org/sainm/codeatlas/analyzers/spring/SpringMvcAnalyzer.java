@@ -1,6 +1,7 @@
 package org.sainm.codeatlas.analyzers.spring;
 
 import org.sainm.codeatlas.analyzers.AnalyzerScope;
+import org.sainm.codeatlas.analyzers.java.SpoonAnnotationValues;
 import org.sainm.codeatlas.analyzers.java.SpoonSymbolMapper;
 import org.sainm.codeatlas.graph.model.Confidence;
 import org.sainm.codeatlas.graph.model.EvidenceKey;
@@ -18,8 +19,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import spoon.Launcher;
 import spoon.reflect.CtModel;
 import spoon.reflect.cu.SourcePosition;
@@ -28,8 +27,6 @@ import spoon.reflect.declaration.CtMethod;
 import spoon.reflect.declaration.CtType;
 
 public final class SpringMvcAnalyzer {
-    private static final Pattern STRING_LITERAL = Pattern.compile("\"([^\"]*)\"");
-
     public SpringMvcAnalysisResult analyze(AnalyzerScope scope, String projectKey, String sourceRootKey, List<Path> sourceFiles) {
         Launcher launcher = new Launcher();
         launcher.getEnvironment().setComplianceLevel(25);
@@ -45,16 +42,25 @@ public final class SpringMvcAnalyzer {
         List<GraphFact> facts = new ArrayList<>();
 
         for (CtType<?> type : model.getAllTypes()) {
-            if (!isController(type)) {
-                continue;
-            }
-            String classPath = requestPath(type.getAnnotations()).orElse("");
             SymbolId controllerClass = symbols.type(type);
-            nodes.add(GraphNodeFactory.classNode(controllerClass, NodeRole.CONTROLLER));
+            if (isController(type)) {
+                String classPath = requestPath(type.getAnnotations()).orElse("");
+                nodes.add(GraphNodeFactory.classNode(controllerClass, NodeRole.CONTROLLER));
+                for (CtMethod<?> method : type.getMethods()) {
+                    mapping(method.getAnnotations()).ifPresent(mapping -> {
+                        String fullPath = joinPaths(classPath, mapping.path());
+                        SpringEndpoint endpoint = new SpringEndpoint(mapping.httpMethod(), fullPath, type.getQualifiedName(), method.getSimpleName(), line(method.getPosition()));
+                        endpoints.add(endpoint);
+                        addEndpointFact(scope, projectKey, sourceRootKey, symbols.method(method), endpoint, method.getPosition(), nodes, facts);
+                    });
+                }
+            }
             for (CtMethod<?> method : type.getMethods()) {
-                mapping(method.getAnnotations()).ifPresent(mapping -> {
-                    String fullPath = joinPaths(classPath, mapping.path());
-                    SpringEndpoint endpoint = new SpringEndpoint(mapping.httpMethod(), fullPath, type.getQualifiedName(), method.getSimpleName(), line(method.getPosition()));
+                scheduledEndpoint(type, method).ifPresent(endpoint -> {
+                    endpoints.add(endpoint);
+                    addEndpointFact(scope, projectKey, sourceRootKey, symbols.method(method), endpoint, method.getPosition(), nodes, facts);
+                });
+                asyncEndpoint(type, method).ifPresent(endpoint -> {
                     endpoints.add(endpoint);
                     addEndpointFact(scope, projectKey, sourceRootKey, symbols.method(method), endpoint, method.getPosition(), nodes, facts);
                 });
@@ -96,9 +102,34 @@ public final class SpringMvcAnalyzer {
         return Optional.empty();
     }
 
+    private Optional<SpringEndpoint> scheduledEndpoint(CtType<?> type, CtMethod<?> method) {
+        return method.getAnnotations().stream()
+            .filter(annotation -> annotation.getAnnotationType().getSimpleName().equals("Scheduled"))
+            .findFirst()
+            .map(annotation -> new SpringEndpoint(
+                "SCHEDULED",
+                "/spring/scheduled/" + type.getQualifiedName() + "#" + method.getSimpleName(),
+                type.getQualifiedName(),
+                method.getSimpleName(),
+                line(method.getPosition())
+            ));
+    }
+
+    private Optional<SpringEndpoint> asyncEndpoint(CtType<?> type, CtMethod<?> method) {
+        return method.getAnnotations().stream()
+            .filter(annotation -> annotation.getAnnotationType().getSimpleName().equals("Async"))
+            .findFirst()
+            .map(annotation -> new SpringEndpoint(
+                "ASYNC",
+                "/spring/async/" + type.getQualifiedName() + "#" + method.getSimpleName(),
+                type.getQualifiedName(),
+                method.getSimpleName(),
+                line(method.getPosition())
+            ));
+    }
+
     private String pathFromAnnotation(CtAnnotation<?> annotation) {
-        Matcher matcher = STRING_LITERAL.matcher(annotation.toString());
-        return matcher.find() ? matcher.group(1) : "/";
+        return SpoonAnnotationValues.firstString(annotation, "path", "value").orElse("/");
     }
 
     private String methodFromRequestMapping(String annotationText) {

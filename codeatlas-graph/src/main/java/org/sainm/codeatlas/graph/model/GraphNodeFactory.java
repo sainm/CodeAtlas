@@ -51,27 +51,63 @@ public final class GraphNodeFactory {
     }
 
     public static GraphNode classNode(SymbolId classSymbol, NodeRole role) {
+        return classNode(classSymbol, role, Map.of());
+    }
+
+    public static GraphNode classNode(SymbolId classSymbol, NodeRole role, Map<String, String> properties) {
         if (classSymbol.kind() != SymbolKind.CLASS
             && classSymbol.kind() != SymbolKind.INTERFACE
             && classSymbol.kind() != SymbolKind.ENUM
             && classSymbol.kind() != SymbolKind.ANNOTATION) {
             throw new IllegalArgumentException("classSymbol must be CLASS, INTERFACE, ENUM or ANNOTATION");
         }
-        return new GraphNode(classSymbol, roles(NodeRole.CODE_TYPE, role), Map.of());
+        return new GraphNode(classSymbol, roles(NodeRole.CODE_TYPE, role), properties);
     }
 
     public static GraphNode methodNode(SymbolId methodSymbol, NodeRole role) {
+        return methodNode(methodSymbol, role, Map.of());
+    }
+
+    public static GraphNode methodNode(SymbolId methodSymbol, NodeRole role, Map<String, String> properties) {
         if (methodSymbol.kind() != SymbolKind.METHOD) {
             throw new IllegalArgumentException("methodSymbol must be METHOD");
         }
-        return new GraphNode(methodSymbol, roles(NodeRole.CODE_MEMBER, role), Map.of());
+        return new GraphNode(methodSymbol, roles(NodeRole.CODE_MEMBER, role), properties);
+    }
+
+    public static Map<String, String> sourceMethodProperties() {
+        return Map.of(
+            "codeOrigin", "source",
+            "hasSource", "true",
+            "hasJvm", "false",
+            "sourceOnly", "true",
+            "jvmOnly", "false",
+            "synthetic", "false",
+            "bridge", "false"
+        );
+    }
+
+    public static Map<String, String> jvmMethodProperties(boolean synthetic, boolean bridge) {
+        return Map.of(
+            "codeOrigin", "jvm",
+            "hasSource", "false",
+            "hasJvm", "true",
+            "sourceOnly", "false",
+            "jvmOnly", "true",
+            "synthetic", Boolean.toString(synthetic),
+            "bridge", Boolean.toString(bridge)
+        );
     }
 
     public static GraphNode fieldNode(SymbolId fieldSymbol, NodeRole role) {
+        return fieldNode(fieldSymbol, role, Map.of());
+    }
+
+    public static GraphNode fieldNode(SymbolId fieldSymbol, NodeRole role, Map<String, String> properties) {
         if (fieldSymbol.kind() != SymbolKind.FIELD) {
             throw new IllegalArgumentException("fieldSymbol must be FIELD");
         }
-        return new GraphNode(fieldSymbol, roles(NodeRole.CODE_MEMBER, role), Map.of());
+        return new GraphNode(fieldSymbol, roles(NodeRole.CODE_MEMBER, role), properties);
     }
 
     public static GraphNode jspNode(SymbolId jspSymbol, NodeRole role) {
@@ -116,6 +152,13 @@ public final class GraphNodeFactory {
             throw new IllegalArgumentException("tableSymbol must be DB_TABLE or DB_COLUMN");
         }
         return new GraphNode(tableSymbol, Set.of(NodeRole.DATABASE_OBJECT), Map.of());
+    }
+
+    public static GraphNode configNode(SymbolId configSymbol) {
+        if (configSymbol.kind() != SymbolKind.CONFIG_KEY) {
+            throw new IllegalArgumentException("configSymbol must be CONFIG_KEY");
+        }
+        return new GraphNode(configSymbol, Set.of(NodeRole.CONFIG_ARTIFACT), Map.of());
     }
 
     private static Set<NodeRole> roles(NodeRole primary, NodeRole secondary) {

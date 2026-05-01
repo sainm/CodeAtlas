@@ -1,5 +1,6 @@
 package org.sainm.codeatlas.graph.impact;
 
+import org.sainm.codeatlas.graph.model.EvidenceKey;
 import java.time.format.DateTimeFormatter;
 import java.util.stream.Collectors;
 
@@ -14,6 +15,7 @@ public final class ImpactReportJsonExporter {
               "depth": "%s",
               "createdAt": "%s",
               "truncated": %s,
+              "affectedSymbols": [%s],
               "paths": [%s],
               "evidenceList": [%s]
             }
@@ -25,9 +27,24 @@ public final class ImpactReportJsonExporter {
             report.depth(),
             DateTimeFormatter.ISO_INSTANT.format(report.createdAt()),
             report.truncated(),
+            report.affectedSymbols().stream().map(this::affectedSymbol).collect(Collectors.joining(",")),
             report.paths().stream().map(this::path).collect(Collectors.joining(",")),
             report.evidenceList().stream().map(this::evidence).collect(Collectors.joining(","))
         ).strip();
+    }
+
+    private String affectedSymbol(ImpactAffectedSymbol symbol) {
+        return """
+
+                {
+                  "category": "%s",
+                  "symbolId": "%s",
+                  "displayName": "%s"
+                }""".formatted(
+            escape(symbol.category()),
+            escape(symbol.symbolId().value()),
+            escape(symbol.displayName())
+        );
     }
 
     private String path(ImpactPath path) {
@@ -64,12 +81,42 @@ public final class ImpactReportJsonExporter {
                       "symbolId": "%s",
                       "incomingRelation": "%s",
                       "sourceType": "%s",
-                      "confidence": "%s"
+                      "analysisLayer": "%s",
+                      "confidence": "%s",
+                      "evidenceKeys": [%s]
                     }""".formatted(
             escape(step.symbolId().value()),
             relation,
             step.sourceType(),
-            step.confidence()
+            analysisLayer(step),
+            step.confidence(),
+            step.evidenceKeys().stream().map(this::evidenceKey).collect(Collectors.joining(","))
+        );
+    }
+
+    private String analysisLayer(ImpactPathStep step) {
+        return step.sourceType() == org.sainm.codeatlas.graph.model.SourceType.TAI_E
+            ? "DEEP_SUPPLEMENT"
+            : "STATIC_FACT";
+    }
+
+    private String evidenceKey(EvidenceKey evidenceKey) {
+        return """
+
+                        {
+                          "sourceType": "%s",
+                          "analyzer": "%s",
+                          "path": "%s",
+                          "lineStart": %d,
+                          "lineEnd": %d,
+                          "localPath": "%s"
+                        }""".formatted(
+            evidenceKey.sourceType(),
+            escape(evidenceKey.analyzer()),
+            escape(evidenceKey.path()),
+            evidenceKey.lineStart(),
+            evidenceKey.lineEnd(),
+            escape(evidenceKey.localPath())
         );
     }
 

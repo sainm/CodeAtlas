@@ -24,7 +24,7 @@ public final class MyBatisXmlAnalyzer {
     private static final List<String> COMMANDS = List.of("select", "insert", "update", "delete");
 
     private final SafeXmlDocumentLoader xmlLoader = new SafeXmlDocumentLoader();
-    private final SimpleSqlTableExtractor tableExtractor = new SimpleSqlTableExtractor();
+    private final JSqlParserTableExtractor tableExtractor = new JSqlParserTableExtractor();
 
     public MyBatisXmlAnalysisResult analyze(AnalyzerScope scope, String projectKey, String sourceRootKey, Path mapperXml) {
         return analyze(scope, projectKey, sourceRootKey, "src/main/java", mapperXml);

@@ -6,7 +6,9 @@ public enum NodeRole {
     SOURCE_FILE,
     CODE_TYPE,
     CODE_MEMBER,
+    UTILITY,
     CONTROLLER,
+    BUSINESS_LOGIC,
     SERVICE,
     DAO,
     MAPPER,
@@ -16,5 +18,6 @@ public enum NodeRole {
     JSP_ARTIFACT,
     REQUEST_PARAMETER,
     SQL_ARTIFACT,
-    DATABASE_OBJECT
+    DATABASE_OBJECT,
+    CONFIG_ARTIFACT
 }

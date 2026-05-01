@@ -5,6 +5,7 @@ import org.sainm.codeatlas.graph.model.EvidenceKey;
 import org.sainm.codeatlas.graph.model.FactKey;
 import org.sainm.codeatlas.graph.model.RelationType;
 import org.sainm.codeatlas.graph.model.SymbolId;
+import org.sainm.codeatlas.graph.benchmark.FfmActivationDecision;
 import org.sainm.codeatlas.graph.store.ActiveFact;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -15,6 +16,7 @@ import java.util.function.Predicate;
 
 public final class FastImpactAnalyzer {
     private final ImpactPathQueryEngine pathQueryEngine = new ImpactPathQueryEngine();
+    private final ImpactPathQueryRouter pathQueryRouter = new ImpactPathQueryRouter();
 
     public ImpactReport analyze(
         String reportId,
@@ -35,6 +37,42 @@ public final class FastImpactAnalyzer {
                 entrypointPredicate,
                 maxDepth,
                 maxPathsPerSymbol
+            ));
+        }
+        return new ImpactReport(
+            reportId,
+            projectId,
+            snapshotId,
+            changeSetId,
+            ReportDepth.FAST,
+            Instant.now(),
+            paths,
+            evidenceForPaths(activeFacts, paths),
+            paths.stream().anyMatch(ImpactPath::truncated)
+        );
+    }
+
+    public ImpactReport analyzeWithFfmDecision(
+        String reportId,
+        String projectId,
+        String snapshotId,
+        String changeSetId,
+        List<ActiveFact> activeFacts,
+        List<SymbolId> changedSymbols,
+        Predicate<SymbolId> entrypointPredicate,
+        int maxDepth,
+        int maxPathsPerSymbol,
+        FfmActivationDecision ffmDecision
+    ) {
+        List<ImpactPath> paths = new ArrayList<>();
+        for (SymbolId changedSymbol : changedSymbols) {
+            paths.addAll(pathQueryRouter.findUpstreamImpactPaths(
+                activeFacts,
+                changedSymbol,
+                entrypointPredicate,
+                maxDepth,
+                maxPathsPerSymbol,
+                ffmDecision
             ));
         }
         return new ImpactReport(

@@ -3,97 +3,107 @@ package org.sainm.codeatlas.analyzers.jsp;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+import java.util.Map;
 
 final class TolerantJspFormExtractor {
-    private static final Pattern FORM_PATTERN = Pattern.compile(
-        "(?is)<(?:html:form|form)\\b([^>]*)>(.*?)</(?:html:form|form)>"
-    );
-    private static final Pattern INPUT_PATTERN = Pattern.compile(
-        "(?is)<(?:html:text|html:password|html:hidden|html:checkbox|html:select|input|select|textarea)\\b([^>]*)>"
-    );
-    private static final Pattern ATTR_PATTERN = Pattern.compile("(?is)([a-zA-Z_:.-]+)\\s*=\\s*(\"([^\"]*)\"|'([^']*)'|([^\\s>]+))");
+    private final StrutsJspTagAdapter strutsTagAdapter = new StrutsJspTagAdapter();
+    private final SpringJspTagAdapter springTagAdapter = new SpringJspTagAdapter();
 
     List<JspForm> extract(String jspText) {
+        List<JspTextScanner.TagToken> tags = JspTextScanner.tags(jspText);
         List<JspForm> forms = new ArrayList<>();
-        Matcher formMatcher = FORM_PATTERN.matcher(jspText);
-        while (formMatcher.find()) {
-            String attributes = formMatcher.group(1);
-            String body = formMatcher.group(2);
+        for (int i = 0; i < tags.size(); i++) {
+            JspTextScanner.TagToken tag = tags.get(i);
+            if (tag.closing() || !isFormTag(tag.name())) {
+                continue;
+            }
+            Map<String, String> attributes = tag.attributes();
             String action = firstAttr(attributes, "action", "path");
             if (action == null) {
                 continue;
             }
             String method = attr(attributes, "method");
-            List<JspInput> inputs = inputs(body, lineOf(jspText, formMatcher.start(2)));
-            forms.add(new JspForm(action, method, lineOf(jspText, formMatcher.start()), inputs));
+            List<JspInput> inputs = inputs(tags, i + 1, tag.name());
+            forms.add(new JspForm(action, method, tag.line(), inputs));
         }
         return forms;
     }
 
-    private List<JspInput> inputs(String body, int bodyStartLine) {
+    private List<JspInput> inputs(List<JspTextScanner.TagToken> tags, int startIndex, String formTagName) {
         List<JspInput> inputs = new ArrayList<>();
-        Matcher matcher = INPUT_PATTERN.matcher(body);
-        while (matcher.find()) {
-            String attrs = matcher.group(1);
-            String name = firstAttr(attrs, "property", "name");
+        int depth = 1;
+        for (int i = startIndex; i < tags.size() && depth > 0; i++) {
+            JspTextScanner.TagToken tag = tags.get(i);
+            if (tag.name().equals(formTagName)) {
+                if (tag.closing()) {
+                    depth--;
+                    continue;
+                }
+                if (!tag.selfClosing()) {
+                    depth++;
+                }
+            }
+            if (tag.closing() || !isInputTag(tag.name())) {
+                continue;
+            }
+            Map<String, String> attributes = tag.attributes();
+            String name = firstAttr(attributes, "property", "name", "path");
             if (name == null) {
                 continue;
             }
-            String type = attr(attrs, "type");
+            String type = attr(attributes, "type");
             if (type == null) {
-                type = tagType(matcher.group());
+                type = tagType(tag.name());
             }
-            inputs.add(new JspInput(name, type, bodyStartLine + lineOf(body, matcher.start()) - 1));
+            inputs.add(new JspInput(name, type, tag.line()));
         }
         return inputs;
     }
 
-    private String tagType(String tag) {
-        String lower = tag.toLowerCase(Locale.ROOT);
-        if (lower.startsWith("<html:")) {
-            int end = lower.indexOf(' ');
-            String local = end < 0 ? lower.substring(6, lower.length() - 1) : lower.substring(6, end);
-            return local;
+    private String tagType(String tagName) {
+        String lower = tagName.toLowerCase(Locale.ROOT);
+        if (lower.startsWith("html:")) {
+            return lower.substring("html:".length());
         }
-        if (lower.startsWith("<select")) {
+        if (lower.startsWith("form:")) {
+            return lower.substring("form:".length());
+        }
+        if (lower.equals("select")) {
             return "select";
         }
-        if (lower.startsWith("<textarea")) {
+        if (lower.equals("textarea")) {
             return "textarea";
         }
         return "text";
     }
 
-    private String firstAttr(String attributes, String first, String second) {
-        String value = attr(attributes, first);
-        return value == null ? attr(attributes, second) : value;
+    private String firstAttr(Map<String, String> attributes, String first, String second) {
+        return firstAttr(attributes, first, second, null);
     }
 
-    private String attr(String attributes, String name) {
-        Matcher matcher = ATTR_PATTERN.matcher(attributes);
-        while (matcher.find()) {
-            if (matcher.group(1).equalsIgnoreCase(name)) {
-                if (matcher.group(3) != null) {
-                    return matcher.group(3).trim();
-                }
-                if (matcher.group(4) != null) {
-                    return matcher.group(4).trim();
-                }
-                return matcher.group(5).trim();
+    private String firstAttr(Map<String, String> attributes, String first, String second, String third) {
+        String value = attr(attributes, first);
+        if (value != null) {
+            return value;
+        }
+        value = attr(attributes, second);
+        return value == null && third != null ? attr(attributes, third) : value;
+    }
+
+    private String attr(Map<String, String> attributes, String name) {
+        for (Map.Entry<String, String> entry : attributes.entrySet()) {
+            if (entry.getKey().equalsIgnoreCase(name)) {
+                return entry.getValue().trim();
             }
         }
         return null;
     }
 
-    private int lineOf(String text, int offset) {
-        int line = 1;
-        for (int i = 0; i < offset && i < text.length(); i++) {
-            if (text.charAt(i) == '\n') {
-                line++;
-            }
-        }
-        return line;
+    private boolean isFormTag(String tagName) {
+        return strutsTagAdapter.isFormTag(tagName) || springTagAdapter.isFormTag(tagName);
+    }
+
+    private boolean isInputTag(String tagName) {
+        return strutsTagAdapter.isInputTag(tagName) || springTagAdapter.isInputTag(tagName);
     }
 }
