@@ -54,4 +54,26 @@ class ReadOnlyMcpServerTest {
             () -> server.planToolCall(McpToolName.QUERY_PLAN, Map.of("q", "find callers", "sql", "select * from users"))
         );
     }
+
+    @Test
+    void safetyGuardRequiresExplicitConfirmationForWriteTools() {
+        McpToolCallSafetyGuard guard = new McpToolCallSafetyGuard();
+        McpToolDescriptor writeTool = new McpToolDescriptor(
+            McpToolName.REPORT_GET_IMPACT_REPORT,
+            "hypothetical write-capable tool",
+            false,
+            30,
+            "{}"
+        );
+
+        assertThrows(
+            IllegalArgumentException.class,
+            () -> guard.validate(writeTool, Map.of())
+        );
+        assertThrows(
+            IllegalArgumentException.class,
+            () -> guard.validate(writeTool, Map.of("confirmWrite", true, "confirmationIntent", "READ_ONLY"))
+        );
+        guard.validate(writeTool, Map.of("confirmWrite", true, "confirmationIntent", "ALLOW_WRITE"));
+    }
 }

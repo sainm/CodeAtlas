@@ -33,8 +33,8 @@ class StrutsConfigAnalyzerTest {
               <form-beans>
                 <form-bean name="userForm" type="com.acme.UserForm"/>
               </form-beans>
-              <action-mappings>
-                <action path="/user/save" type="com.acme.UserAction" name="userForm" scope="request" input="/user/edit.jsp" parameter="method">
+              <action-mappings type="com.acme.CustomActionMapping">
+                <action path="/user/save" type="com.acme.UserAction" name="userForm" scope="request" input="/user/edit.jsp" parameter="method" className="com.acme.UserSaveActionMapping">
                   <forward name="success" path="/user/detail.jsp"/>
                   <exception key="error.save" type="com.acme.SaveException" path="/user/edit.jsp"/>
                 </action>
@@ -52,6 +52,7 @@ class StrutsConfigAnalyzerTest {
         assertEquals(1, result.formBeans().size());
         assertEquals(1, result.actionMappings().size());
         assertEquals("method", result.actionMappings().getFirst().parameter());
+        assertEquals("com.acme.UserSaveActionMapping", result.actionMappings().getFirst().className());
         assertEquals(2, result.forwards().size());
         assertTrue(result.forwards().stream().anyMatch(forward -> forward.actionPath().equals("_global")
             && forward.name().equals("login")));
@@ -85,6 +86,10 @@ class StrutsConfigAnalyzerTest {
             && node.symbolId().ownerQualifiedName().equals("com.acme.AuthException")));
         assertTrue(result.nodes().stream().anyMatch(node -> node.symbolId().kind() == SymbolKind.CLASS
             && node.symbolId().ownerQualifiedName().equals("com.acme.MessageFactory")));
+        assertTrue(result.nodes().stream().anyMatch(node -> node.symbolId().kind() == SymbolKind.CLASS
+            && node.symbolId().ownerQualifiedName().equals("com.acme.CustomActionMapping")));
+        assertTrue(result.nodes().stream().anyMatch(node -> node.symbolId().kind() == SymbolKind.CLASS
+            && node.symbolId().ownerQualifiedName().equals("com.acme.UserSaveActionMapping")));
         assertTrue(result.nodes().stream().anyMatch(node -> node.symbolId().kind() == SymbolKind.CONFIG_KEY
             && node.symbolId().localId().contains("definitions-config")));
         assertTrue(result.facts().stream().anyMatch(fact -> fact.factKey().relationType() == RelationType.ROUTES_TO));
@@ -101,8 +106,31 @@ class StrutsConfigAnalyzerTest {
             && fact.factKey().qualifier().contains("plugin-property:definitions-config")));
         assertTrue(result.facts().stream().anyMatch(fact -> fact.factKey().relationType() == RelationType.USES_CONFIG
             && fact.factKey().qualifier().equals("message-resources:com.acme.ApplicationResources")));
+        assertTrue(result.facts().stream().anyMatch(fact -> fact.factKey().relationType() == RelationType.USES_CONFIG
+            && fact.factKey().target().ownerQualifiedName().equals("com.acme.CustomActionMapping")
+            && fact.factKey().qualifier().equals("action-mappings-type")));
+        assertTrue(result.facts().stream().anyMatch(fact -> fact.factKey().relationType() == RelationType.USES_CONFIG
+            && fact.factKey().source().kind() == SymbolKind.ACTION_PATH
+            && fact.factKey().source().ownerQualifiedName().equals("user/save")
+            && fact.factKey().target().ownerQualifiedName().equals("com.acme.UserSaveActionMapping")
+            && fact.factKey().qualifier().equals("action-mapping-className")));
         assertTrue(result.facts().stream().anyMatch(fact -> fact.factKey().relationType() == RelationType.FORWARDS_TO
             && fact.factKey().qualifier().equals("global-forward:login")));
+        assertTrue(result.nodes().stream().anyMatch(node -> node.symbolId().kind() == SymbolKind.CONFIG_KEY
+            && node.symbolId().ownerQualifiedName().equals("struts-forward")
+            && node.symbolId().localId().equals("success")));
+        assertTrue(result.facts().stream().anyMatch(fact -> fact.factKey().relationType() == RelationType.USES_CONFIG
+            && fact.factKey().source().kind() == SymbolKind.ACTION_PATH
+            && fact.factKey().source().ownerQualifiedName().equals("user/save")
+            && fact.factKey().target().kind() == SymbolKind.CONFIG_KEY
+            && fact.factKey().target().ownerQualifiedName().equals("struts-forward")
+            && fact.factKey().target().localId().equals("success")));
+        assertTrue(result.facts().stream().anyMatch(fact -> fact.factKey().relationType() == RelationType.FORWARDS_TO
+            && fact.factKey().source().kind() == SymbolKind.CONFIG_KEY
+            && fact.factKey().source().ownerQualifiedName().equals("struts-forward")
+            && fact.factKey().source().localId().equals("success")
+            && fact.factKey().target().kind() == SymbolKind.JSP_PAGE
+            && fact.factKey().target().ownerQualifiedName().equals("user/detail.jsp")));
         assertTrue(result.facts().stream().anyMatch(fact -> fact.factKey().relationType() == RelationType.FORWARDS_TO
             && fact.factKey().qualifier().equals("exception-path:error.auth")));
         assertTrue(result.facts().stream().anyMatch(fact -> fact.factKey().relationType() == RelationType.READS_PARAM

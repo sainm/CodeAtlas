@@ -8,9 +8,11 @@ import org.sainm.codeatlas.graph.model.FactKey;
 import org.sainm.codeatlas.graph.model.GraphFact;
 import org.sainm.codeatlas.graph.model.GraphNode;
 import org.sainm.codeatlas.graph.model.GraphNodeFactory;
+import org.sainm.codeatlas.graph.model.NodeRole;
 import org.sainm.codeatlas.graph.model.RelationType;
 import org.sainm.codeatlas.graph.model.SourceType;
 import org.sainm.codeatlas.graph.model.SymbolId;
+import org.sainm.codeatlas.graph.model.SymbolKind;
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.IOException;
@@ -19,6 +21,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.jar.JarFile;
 
 public final class ClassFileAnalyzer {
@@ -87,8 +91,12 @@ public final class ClassFileAnalyzer {
     ) {
         try {
             ClassFileInfo classFile = ClassFileInfo.read(bytes);
-            SymbolId classSymbol = SymbolId.classSymbol(projectKey, scope.moduleKey(), sourceRootKey, classFile.className());
-            nodes.add(GraphNodeFactory.classNode(classSymbol, ApplicationLayerClassifier.roleForQualifiedName(classFile.className())));
+            SymbolId classSymbol = typeSymbol(projectKey, scope.moduleKey(), sourceRootKey, classFile.className(), classFile.symbolKind());
+            nodes.add(GraphNodeFactory.classNode(
+                classSymbol,
+                roleForClass(classFile.className(), classFile.annotationNames()),
+                classProperties(classFile.annotationNames())
+            ));
             if (classFile.superClassName() != null && !classFile.superClassName().equals("java.lang.Object")) {
                 SymbolId superClass = SymbolId.classSymbol(projectKey, scope.moduleKey(), sourceRootKey, classFile.superClassName());
                 nodes.add(GraphNodeFactory.classNode(superClass, ApplicationLayerClassifier.roleForQualifiedName(classFile.superClassName())));
@@ -96,7 +104,7 @@ public final class ClassFileAnalyzer {
             }
             for (String interfaceName : classFile.interfaceNames()) {
                 SymbolId interfaceSymbol = new SymbolId(
-                    org.sainm.codeatlas.graph.model.SymbolKind.INTERFACE,
+                    SymbolKind.INTERFACE,
                     projectKey,
                     scope.moduleKey(),
                     sourceRootKey,
@@ -108,6 +116,7 @@ public final class ClassFileAnalyzer {
                 nodes.add(GraphNodeFactory.classNode(interfaceSymbol, ApplicationLayerClassifier.roleForQualifiedName(interfaceName)));
                 facts.add(fact(scope, classSymbol, RelationType.IMPLEMENTS, interfaceSymbol, evidencePath, localPath, "classfile-implements", Confidence.CERTAIN));
             }
+            addClassFileFieldFacts(scope, projectKey, sourceRootKey, evidencePath, localPath, classFile, classSymbol, nodes, facts);
             for (ClassFileMethod method : classFile.methods()) {
                 if (method.name().startsWith("<")) {
                     continue;
@@ -120,8 +129,13 @@ public final class ClassFileAnalyzer {
                     method.name(),
                     method.sourceDescriptor()
                 );
-                nodes.add(GraphNodeFactory.methodNode(methodSymbol, ApplicationLayerClassifier.roleForQualifiedName(classFile.className())));
+                nodes.add(GraphNodeFactory.methodNode(
+                    methodSymbol,
+                    ApplicationLayerClassifier.roleForQualifiedName(classFile.className()),
+                    GraphNodeFactory.jvmMethodProperties(method.synthetic(), method.bridge())
+                ));
                 facts.add(fact(scope, classSymbol, RelationType.DECLARES, methodSymbol, evidencePath, localPath, "classfile-method:" + method.name(), Confidence.CERTAIN));
+                addClassFileSpringEndpointFacts(scope, projectKey, sourceRootKey, evidencePath, localPath, classFile, method, methodSymbol, nodes, facts);
                 for (MethodCall call : method.calls()) {
                     if (call.methodName().startsWith("<")) {
                         continue;
@@ -152,6 +166,196 @@ public final class ClassFileAnalyzer {
         }
     }
 
+    private void addClassFileSpringEndpointFacts(
+        AnalyzerScope scope,
+        String projectKey,
+        String sourceRootKey,
+        Path evidencePath,
+        String localPath,
+        ClassFileInfo classFile,
+        ClassFileMethod method,
+        SymbolId methodSymbol,
+        List<GraphNode> nodes,
+        List<GraphFact> facts
+    ) {
+        if (!springController(classFile.annotationNames())) {
+            return;
+        }
+        EndpointMapping mapping = endpointMapping(method.annotations());
+        if (mapping == null) {
+            return;
+        }
+        String classPath = annotationValue(classFile.annotations(), "RequestMapping", "path")
+            .or(() -> annotationValue(classFile.annotations(), "RequestMapping", "value"))
+            .orElse("");
+        String fullPath = joinPaths(classPath, mapping.path());
+        SymbolId endpoint = SymbolId.logicalPath(SymbolKind.API_ENDPOINT, projectKey, scope.moduleKey(), sourceRootKey, fullPath, mapping.httpMethod());
+        nodes.add(GraphNodeFactory.apiEndpointNode(endpoint));
+        nodes.add(GraphNodeFactory.methodNode(methodSymbol, NodeRole.SPRING_HANDLER, GraphNodeFactory.jvmMethodProperties(method.synthetic(), method.bridge())));
+        facts.add(fact(scope, endpoint, RelationType.ROUTES_TO, methodSymbol, evidencePath, localPath, "classfile-spring-endpoint:" + mapping.httpMethod(), Confidence.LIKELY));
+    }
+
+    private void addClassFileFieldFacts(
+        AnalyzerScope scope,
+        String projectKey,
+        String sourceRootKey,
+        Path evidencePath,
+        String localPath,
+        ClassFileInfo classFile,
+        SymbolId classSymbol,
+        List<GraphNode> nodes,
+        List<GraphFact> facts
+    ) {
+        boolean entity = hasSimpleAnnotation(classFile.annotationNames(), "Entity");
+        SymbolId table = null;
+        if (entity) {
+            String tableName = annotationValue(classFile.annotations(), "Table", "name")
+                .or(() -> annotationValue(classFile.annotations(), "Table", "value"))
+                .orElseGet(() -> simpleClassName(classFile.className()));
+            table = SymbolId.logicalPath(SymbolKind.DB_TABLE, projectKey, scope.moduleKey(), "_database", tableName, null);
+            nodes.add(GraphNodeFactory.tableNode(table));
+            facts.add(fact(scope, classSymbol, RelationType.BINDS_TO, table, evidencePath, localPath, "classfile-jpa-entity-table:" + tableName, Confidence.POSSIBLE));
+        }
+        for (ClassFileField field : classFile.fields()) {
+            if (field.synthetic()) {
+                continue;
+            }
+            SymbolId fieldSymbol = SymbolId.field(projectKey, scope.moduleKey(), sourceRootKey, classFile.className(), field.name(), field.sourceDescriptor());
+            nodes.add(GraphNodeFactory.fieldNode(
+                fieldSymbol,
+                ApplicationLayerClassifier.roleForQualifiedName(classFile.className()),
+                fieldProperties(field)
+            ));
+            facts.add(fact(scope, classSymbol, RelationType.DECLARES, fieldSymbol, evidencePath, localPath, "classfile-field:" + field.name(), Confidence.CERTAIN));
+            if (entity && table != null && !field.staticField() && !hasSimpleAnnotation(field.annotationNames(), "Transient")) {
+                String columnName = annotationValue(field.annotations(), "Column", "name")
+                    .or(() -> annotationValue(field.annotations(), "Column", "value"))
+                    .or(() -> annotationValue(field.annotations(), "JoinColumn", "name"))
+                    .orElse(field.name());
+                SymbolId column = SymbolId.logicalPath(SymbolKind.DB_COLUMN, projectKey, scope.moduleKey(), "_database", table.ownerQualifiedName(), columnName);
+                nodes.add(GraphNodeFactory.tableNode(column));
+                facts.add(fact(
+                    scope,
+                    fieldSymbol,
+                    RelationType.BINDS_TO,
+                    column,
+                    evidencePath,
+                    localPath,
+                    "classfile-jpa-field-column:" + table.ownerQualifiedName() + "." + columnName,
+                    hasSimpleAnnotation(field.annotationNames(), "Column") ? Confidence.LIKELY : Confidence.POSSIBLE
+                ));
+            }
+        }
+    }
+
+    private Map<String, String> fieldProperties(ClassFileField field) {
+        java.util.LinkedHashMap<String, String> properties = new java.util.LinkedHashMap<>();
+        properties.put("codeOrigin", "jvm");
+        properties.put("hasSource", "false");
+        properties.put("hasJvm", "true");
+        properties.put("sourceOnly", "false");
+        properties.put("jvmOnly", "true");
+        properties.put("static", Boolean.toString(field.staticField()));
+        properties.put("synthetic", Boolean.toString(field.synthetic()));
+        if (!field.annotationNames().isEmpty()) {
+            properties.put("annotations", String.join(",", field.annotationNames()));
+        }
+        return Map.copyOf(properties);
+    }
+
+    private SymbolId typeSymbol(String projectKey, String moduleKey, String sourceRootKey, String className, org.sainm.codeatlas.graph.model.SymbolKind kind) {
+        return new SymbolId(kind, projectKey, moduleKey, sourceRootKey, className, null, null, null);
+    }
+
+    private NodeRole roleForClass(String className, List<String> annotationNames) {
+        if (springController(annotationNames)) {
+            return NodeRole.CONTROLLER;
+        }
+        if (annotationNames.contains("org.springframework.stereotype.Service")) {
+            return NodeRole.SERVICE;
+        }
+        if (annotationNames.contains("org.springframework.stereotype.Repository")) {
+            return NodeRole.DAO;
+        }
+        return ApplicationLayerClassifier.roleForQualifiedName(className);
+    }
+
+    private boolean springController(List<String> annotationNames) {
+        return annotationNames.stream().anyMatch(Set.of(
+            "org.springframework.stereotype.Controller",
+            "org.springframework.web.bind.annotation.RestController"
+        )::contains);
+    }
+
+    private Map<String, String> classProperties(List<String> annotationNames) {
+        if (annotationNames.isEmpty()) {
+            return Map.of();
+        }
+        return Map.of("annotations", String.join(",", annotationNames));
+    }
+
+    private boolean hasSimpleAnnotation(List<String> annotationNames, String simpleName) {
+        return annotationNames.stream().anyMatch(annotation -> simpleClassName(annotation).equals(simpleName));
+    }
+
+    private java.util.Optional<String> annotationValue(List<ClassFileAnnotation> annotations, String simpleName, String key) {
+        return annotations.stream()
+            .filter(annotation -> simpleClassName(annotation.name()).equals(simpleName))
+            .map(annotation -> annotation.values().getOrDefault(key, ""))
+            .filter(value -> !value.isBlank())
+            .findFirst();
+    }
+
+    private EndpointMapping endpointMapping(List<ClassFileAnnotation> annotations) {
+        for (ClassFileAnnotation annotation : annotations) {
+            String simpleName = simpleClassName(annotation.name());
+            String httpMethod = switch (simpleName) {
+                case "GetMapping" -> "GET";
+                case "PostMapping" -> "POST";
+                case "PutMapping" -> "PUT";
+                case "DeleteMapping" -> "DELETE";
+                case "PatchMapping" -> "PATCH";
+                case "RequestMapping" -> requestMappingMethod(annotation);
+                default -> null;
+            };
+            if (httpMethod != null) {
+                String path = firstAnnotationValue(annotation, "path", "value").orElse("/");
+                return new EndpointMapping(httpMethod, path);
+            }
+        }
+        return null;
+    }
+
+    private String requestMappingMethod(ClassFileAnnotation annotation) {
+        String method = firstAnnotationValue(annotation, "method").orElse("");
+        if (method.contains(",")) {
+            return method.split(",")[0].trim();
+        }
+        return method.isBlank() ? "ANY" : method;
+    }
+
+    private java.util.Optional<String> firstAnnotationValue(ClassFileAnnotation annotation, String... keys) {
+        for (String key : keys) {
+            String value = annotation.values().getOrDefault(key, "");
+            if (!value.isBlank()) {
+                return java.util.Optional.of(value);
+            }
+        }
+        return java.util.Optional.empty();
+    }
+
+    private String joinPaths(String left, String right) {
+        String normalizedLeft = left == null || left.isBlank() || left.equals("/") ? "" : left;
+        String normalizedRight = right == null || right.isBlank() || right.equals("/") ? "" : right;
+        String joined = normalizedLeft + "/" + (normalizedRight.startsWith("/") ? normalizedRight.substring(1) : normalizedRight);
+        return joined.equals("/") || joined.isBlank() ? "/" : joined.replaceAll("/{2,}", "/");
+    }
+
+    private String simpleClassName(String className) {
+        int separator = className == null ? -1 : className.lastIndexOf('.');
+        return separator < 0 ? className : className.substring(separator + 1);
+    }
+
     private GraphFact fact(
         AnalyzerScope scope,
         SymbolId source,
@@ -174,16 +378,87 @@ public final class ClassFileAnalyzer {
         );
     }
 
-    private record ClassFileMethod(String name, String sourceDescriptor, List<MethodCall> calls) {
+    private record EndpointMapping(String httpMethod, String path) {
+    }
+
+    private record ClassFileMethod(String name, String sourceDescriptor, int accessFlags, List<ClassFileAnnotation> annotations, List<MethodCall> calls) {
+        private static final int ACC_BRIDGE = 0x0040;
+        private static final int ACC_SYNTHETIC = 0x1000;
+
         private ClassFileMethod {
+            annotations = List.copyOf(annotations);
             calls = List.copyOf(calls);
+        }
+
+        boolean bridge() {
+            return (accessFlags & ACC_BRIDGE) != 0;
+        }
+
+        boolean synthetic() {
+            return (accessFlags & ACC_SYNTHETIC) != 0;
+        }
+    }
+
+    private record ClassFileAnnotation(String name, Map<String, String> values) {
+        private ClassFileAnnotation {
+            values = Map.copyOf(values);
+        }
+    }
+
+    private record ClassFileField(String name, String sourceDescriptor, int accessFlags, List<ClassFileAnnotation> annotations) {
+        private static final int ACC_STATIC = 0x0008;
+        private static final int ACC_SYNTHETIC = 0x1000;
+
+        private ClassFileField {
+            annotations = List.copyOf(annotations);
+        }
+
+        List<String> annotationNames() {
+            return annotations.stream().map(ClassFileAnnotation::name).toList();
+        }
+
+        boolean staticField() {
+            return (accessFlags & ACC_STATIC) != 0;
+        }
+
+        boolean synthetic() {
+            return (accessFlags & ACC_SYNTHETIC) != 0;
         }
     }
 
     private record MethodCall(String ownerClassName, String methodName, String sourceDescriptor, String qualifier, Confidence confidence) {
     }
 
-    private record ClassFileInfo(String className, String superClassName, List<String> interfaceNames, List<ClassFileMethod> methods) {
+    private record ClassFileInfo(
+        String className,
+        String superClassName,
+        int accessFlags,
+        List<String> interfaceNames,
+        List<ClassFileAnnotation> annotations,
+        List<ClassFileField> fields,
+        List<ClassFileMethod> methods
+    ) {
+        private static final int ACC_INTERFACE = 0x0200;
+        private static final int ACC_ANNOTATION = 0x2000;
+        private static final int ACC_ENUM = 0x4000;
+
+        org.sainm.codeatlas.graph.model.SymbolKind symbolKind() {
+            if ((accessFlags & ACC_ANNOTATION) != 0) {
+                return org.sainm.codeatlas.graph.model.SymbolKind.ANNOTATION;
+            }
+            if ((accessFlags & ACC_ENUM) != 0) {
+                return org.sainm.codeatlas.graph.model.SymbolKind.ENUM;
+            }
+            if ((accessFlags & ACC_INTERFACE) != 0) {
+                return org.sainm.codeatlas.graph.model.SymbolKind.INTERFACE;
+            }
+            return org.sainm.codeatlas.graph.model.SymbolKind.CLASS;
+        }
+
+        List<String> annotationNames() {
+            return annotations.stream().map(ClassFileAnnotation::name).toList();
+        }
+
         static ClassFileInfo read(byte[] bytes) throws IOException {
             try (DataInputStream input = new DataInputStream(new ByteArrayInputStream(bytes))) {
                 if (input.readInt() != 0xCAFEBABE) {
@@ -192,7 +467,7 @@ public final class ClassFileAnalyzer {
                 input.readUnsignedShort();
                 input.readUnsignedShort();
                 ConstantPool constantPool = ConstantPool.read(input);
-                input.readUnsignedShort();
+                int accessFlags = input.readUnsignedShort();
                 String className = constantPool.className(input.readUnsignedShort());
                 int superIndex = input.readUnsignedShort();
                 String superClassName = superIndex == 0 ? null : constantPool.className(superIndex);
@@ -201,47 +476,177 @@ public final class ClassFileAnalyzer {
                 for (int i = 0; i < interfaceCount; i++) {
                     interfaces.add(constantPool.className(input.readUnsignedShort()));
                 }
-                skipMembers(input, constantPool);
+                List<ClassFileField> fields = readFields(input, constantPool);
                 List<ClassFileMethod> methods = readMethods(input, constantPool);
-                return new ClassFileInfo(className, superClassName, interfaces, methods);
+                List<ClassFileAnnotation> annotations = readClassAttributes(input, constantPool);
+                return new ClassFileInfo(className, superClassName, accessFlags, interfaces, annotations, fields, methods);
             }
         }
 
-        private static void skipMembers(DataInputStream input, ConstantPool constantPool) throws IOException {
+        private static List<ClassFileField> readFields(DataInputStream input, ConstantPool constantPool) throws IOException {
             int fields = input.readUnsignedShort();
+            List<ClassFileField> result = new ArrayList<>();
             for (int i = 0; i < fields; i++) {
-                skipMember(input, constantPool);
+                int accessFlags = input.readUnsignedShort();
+                String name = constantPool.utf8(input.readUnsignedShort());
+                String descriptor = constantPool.utf8(input.readUnsignedShort());
+                List<ClassFileAnnotation> annotations = readAnnotationMemberAttributes(input, constantPool);
+                result.add(new ClassFileField(name, DescriptorParser.toSourceTypeName(descriptor), accessFlags, annotations));
             }
+            return result;
         }
 
         private static List<ClassFileMethod> readMethods(DataInputStream input, ConstantPool constantPool) throws IOException {
             int methodCount = input.readUnsignedShort();
             List<ClassFileMethod> methods = new ArrayList<>();
             for (int i = 0; i < methodCount; i++) {
-                input.readUnsignedShort();
+                int accessFlags = input.readUnsignedShort();
                 String name = constantPool.utf8(input.readUnsignedShort());
                 String descriptor = constantPool.utf8(input.readUnsignedShort());
-                List<MethodCall> calls = readMethodAttributes(input, constantPool);
-                methods.add(new ClassFileMethod(name, DescriptorParser.toSourceDescriptor(descriptor), calls));
+                MethodAttributeInfo attributes = readMethodAttributes(input, constantPool);
+                methods.add(new ClassFileMethod(name, DescriptorParser.toSourceDescriptor(descriptor), accessFlags, attributes.annotations(), attributes.calls()));
             }
-            skipAttributes(input);
             return methods;
         }
 
-        private static List<MethodCall> readMethodAttributes(DataInputStream input, ConstantPool constantPool) throws IOException {
+        private static List<ClassFileAnnotation> readClassAttributes(DataInputStream input, ConstantPool constantPool) throws IOException {
+            int attributes = input.readUnsignedShort();
+            List<ClassFileAnnotation> annotations = new ArrayList<>();
+            for (int i = 0; i < attributes; i++) {
+                String name = constantPool.utf8(input.readUnsignedShort());
+                int length = input.readInt();
+                if ("RuntimeVisibleAnnotations".equals(name) || "RuntimeInvisibleAnnotations".equals(name)) {
+                    byte[] attribute = input.readNBytes(length);
+                    annotations.addAll(readAnnotationAttribute(attribute, constantPool));
+                } else {
+                    input.skipNBytes(length);
+                }
+            }
+            return annotations;
+        }
+
+        private static List<ClassFileAnnotation> readAnnotationMemberAttributes(DataInputStream input, ConstantPool constantPool) throws IOException {
+            int attributes = input.readUnsignedShort();
+            List<ClassFileAnnotation> annotations = new ArrayList<>();
+            for (int i = 0; i < attributes; i++) {
+                String name = constantPool.utf8(input.readUnsignedShort());
+                int length = input.readInt();
+                if ("RuntimeVisibleAnnotations".equals(name) || "RuntimeInvisibleAnnotations".equals(name)) {
+                    byte[] attribute = input.readNBytes(length);
+                    annotations.addAll(readAnnotationAttribute(attribute, constantPool));
+                } else {
+                    input.skipNBytes(length);
+                }
+            }
+            return annotations;
+        }
+
+        private static List<ClassFileAnnotation> readAnnotationAttribute(byte[] attribute, ConstantPool constantPool) throws IOException {
+            try (DataInputStream input = new DataInputStream(new ByteArrayInputStream(attribute))) {
+                int annotationCount = input.readUnsignedShort();
+                List<ClassFileAnnotation> annotations = new ArrayList<>();
+                for (int i = 0; i < annotationCount; i++) {
+                    String annotationName = descriptorToClassName(constantPool.utf8(input.readUnsignedShort()));
+                    int pairs = input.readUnsignedShort();
+                    java.util.LinkedHashMap<String, String> values = new java.util.LinkedHashMap<>();
+                    for (int pair = 0; pair < pairs; pair++) {
+                        String elementName = constantPool.utf8(input.readUnsignedShort());
+                        String elementValue = readElementValue(input, constantPool);
+                        if (!elementValue.isBlank()) {
+                            values.put(elementName, elementValue);
+                        }
+                    }
+                    annotations.add(new ClassFileAnnotation(annotationName, values));
+                }
+                return annotations;
+            }
+        }
+
+        private static String descriptorToClassName(String descriptor) {
+            if (descriptor != null && descriptor.startsWith("L") && descriptor.endsWith(";")) {
+                return descriptor.substring(1, descriptor.length() - 1).replace('/', '.');
+            }
+            return descriptor == null ? "" : descriptor.replace('/', '.');
+        }
+
+        private static String readElementValue(DataInputStream input, ConstantPool constantPool) throws IOException {
+            int tag = input.readUnsignedByte();
+            return switch (tag) {
+                case 's' -> constantPool.utf8(input.readUnsignedShort());
+                case 'B', 'C', 'D', 'F', 'I', 'J', 'S', 'Z' -> {
+                    input.readUnsignedShort();
+                    yield "";
+                }
+                case 'e' -> {
+                    input.readUnsignedShort();
+                    yield constantPool.utf8(input.readUnsignedShort());
+                }
+                case 'c' -> descriptorToClassName(constantPool.utf8(input.readUnsignedShort()));
+                case '@' -> {
+                    skipAnnotation(input);
+                    yield "";
+                }
+                case '[' -> {
+                    int values = input.readUnsignedShort();
+                    List<String> items = new ArrayList<>();
+                    for (int i = 0; i < values; i++) {
+                        String item = readElementValue(input, constantPool);
+                        if (!item.isBlank()) {
+                            items.add(item);
+                        }
+                    }
+                    yield String.join(",", items);
+                }
+                default -> throw new IOException("Unsupported annotation element tag: " + tag);
+            };
+        }
+
+        private static void skipAnnotation(DataInputStream input) throws IOException {
+            input.readUnsignedShort();
+            int pairs = input.readUnsignedShort();
+            for (int i = 0; i < pairs; i++) {
+                input.readUnsignedShort();
+                skipElementValue(input);
+            }
+        }
+
+        private static void skipElementValue(DataInputStream input) throws IOException {
+            int tag = input.readUnsignedByte();
+            switch (tag) {
+                case 'B', 'C', 'D', 'F', 'I', 'J', 'S', 'Z', 's', 'c' -> input.readUnsignedShort();
+                case 'e' -> {
+                    input.readUnsignedShort();
+                    input.readUnsignedShort();
+                }
+                case '@' -> skipAnnotation(input);
+                case '[' -> {
+                    int values = input.readUnsignedShort();
+                    for (int i = 0; i < values; i++) {
+                        skipElementValue(input);
+                    }
+                }
+                default -> throw new IOException("Unsupported annotation element tag: " + tag);
+            }
+        }
+
+        private static MethodAttributeInfo readMethodAttributes(DataInputStream input, ConstantPool constantPool) throws IOException {
             int attributes = input.readUnsignedShort();
             List<MethodCall> calls = new ArrayList<>();
+            List<ClassFileAnnotation> annotations = new ArrayList<>();
             for (int i = 0; i < attributes; i++) {
                 String name = constantPool.utf8(input.readUnsignedShort());
                 int length = input.readInt();
                 if ("Code".equals(name)) {
                     byte[] attribute = input.readNBytes(length);
                     calls.addAll(readCodeAttribute(attribute, constantPool));
+                } else if ("RuntimeVisibleAnnotations".equals(name) || "RuntimeInvisibleAnnotations".equals(name)) {
+                    byte[] attribute = input.readNBytes(length);
+                    annotations.addAll(readAnnotationAttribute(attribute, constantPool));
                 } else {
                     input.skipNBytes(length);
                 }
             }
-            return calls;
+            return new MethodAttributeInfo(annotations, calls);
         }
 
         private static List<MethodCall> readCodeAttribute(byte[] attribute, ConstantPool constantPool) throws IOException {
@@ -254,19 +659,19 @@ public final class ClassFileAnalyzer {
             }
         }
 
-        private static void skipMember(DataInputStream input, ConstantPool constantPool) throws IOException {
-            input.readUnsignedShort();
-            input.readUnsignedShort();
-            input.readUnsignedShort();
-            skipAttributes(input);
-        }
-
         private static void skipAttributes(DataInputStream input) throws IOException {
             int attributes = input.readUnsignedShort();
             for (int i = 0; i < attributes; i++) {
                 input.readUnsignedShort();
                 int length = input.readInt();
                 input.skipNBytes(length);
+            }
+        }
+
+        private record MethodAttributeInfo(List<ClassFileAnnotation> annotations, List<MethodCall> calls) {
+            private MethodAttributeInfo {
+                annotations = List.copyOf(annotations);
+                calls = List.copyOf(calls);
             }
         }
     }
@@ -367,6 +772,7 @@ public final class ClassFileAnalyzer {
 
         private record DynamicRef(int bootstrapMethodAttrIndex, int nameAndTypeIndex) {
         }
+
     }
 
     private static final class BytecodeInvocationScanner {
@@ -490,6 +896,11 @@ public final class ClassFileAnalyzer {
         static String toSourceDescriptor(String descriptor) {
             DescriptorParser parser = new DescriptorParser(descriptor);
             return parser.methodDescriptor();
+        }
+
+        static String toSourceTypeName(String descriptor) {
+            DescriptorParser parser = new DescriptorParser(descriptor);
+            return parser.typeName();
         }
 
         private String methodDescriptor() {

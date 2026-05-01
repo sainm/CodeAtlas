@@ -8,12 +8,16 @@ import org.sainm.codeatlas.analyzers.jsp.JspFormAnalyzer;
 import org.sainm.codeatlas.analyzers.seasar.SeasarDiconAnalyzer;
 import org.sainm.codeatlas.analyzers.spring.SpringBeanAnalyzer;
 import org.sainm.codeatlas.analyzers.spring.SpringMvcAnalyzer;
+import org.sainm.codeatlas.analyzers.sql.JpaEntityAnalyzer;
 import org.sainm.codeatlas.analyzers.sql.JdbcSqlAnalyzer;
 import org.sainm.codeatlas.analyzers.sql.MyBatisMapperInterfaceAnalyzer;
 import org.sainm.codeatlas.analyzers.sql.MyBatisXmlAnalyzer;
 import org.sainm.codeatlas.analyzers.struts.StrutsActionFormAnalyzer;
+import org.sainm.codeatlas.analyzers.struts.StrutsActionForwardAnalyzer;
 import org.sainm.codeatlas.analyzers.struts.StrutsConfigAnalysisResult;
 import org.sainm.codeatlas.analyzers.struts.StrutsConfigAnalyzer;
+import org.sainm.codeatlas.analyzers.struts.StrutsLookupDispatchAnalyzer;
+import org.sainm.codeatlas.analyzers.struts.StrutsLookupDispatchMethodMapping;
 import org.sainm.codeatlas.analyzers.struts.StrutsPluginInitXmlAnalyzer;
 import org.sainm.codeatlas.analyzers.struts.StrutsWebXmlAnalyzer;
 import org.sainm.codeatlas.analyzers.struts.StrutsTilesAnalyzer;
@@ -23,6 +27,7 @@ import org.sainm.codeatlas.graph.model.EvidenceKey;
 import org.sainm.codeatlas.graph.model.FactKey;
 import org.sainm.codeatlas.graph.model.GraphFact;
 import org.sainm.codeatlas.graph.model.GraphNode;
+import org.sainm.codeatlas.graph.model.GraphNodeFactory;
 import org.sainm.codeatlas.graph.model.RelationType;
 import org.sainm.codeatlas.graph.model.SourceType;
 import org.sainm.codeatlas.graph.model.SymbolId;
@@ -36,14 +41,8 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 public final class CodeAtlasProjectAnalyzer {
-    private static final Pattern PACKAGE_DECLARATION = Pattern.compile("(?m)^\\s*package\\s+([\\w.]+)\\s*;");
-    private static final Pattern CLASS_DECLARATION = Pattern.compile("\\bclass\\s+(\\w+)\\b");
-    private static final Pattern LOOKUP_PUT = Pattern.compile("\\.put\\s*\\(\\s*\"([^\"]+)\"\\s*,\\s*\"([^\"]+)\"\\s*\\)");
-
     private final SpoonJavaAnalyzer javaAnalyzer = new SpoonJavaAnalyzer();
     private final ClassFileAnalyzer classFileAnalyzer = new ClassFileAnalyzer();
     private final SpoonVariableTraceAnalyzer variableTraceAnalyzer = new SpoonVariableTraceAnalyzer();
@@ -52,8 +51,11 @@ public final class CodeAtlasProjectAnalyzer {
     private final SpringBeanAnalyzer springBeanAnalyzer = new SpringBeanAnalyzer();
     private final MyBatisMapperInterfaceAnalyzer myBatisMapperInterfaceAnalyzer = new MyBatisMapperInterfaceAnalyzer();
     private final JdbcSqlAnalyzer jdbcSqlAnalyzer = new JdbcSqlAnalyzer();
+    private final JpaEntityAnalyzer jpaEntityAnalyzer = new JpaEntityAnalyzer();
     private final StrutsActionFormAnalyzer strutsActionFormAnalyzer = new StrutsActionFormAnalyzer();
+    private final StrutsActionForwardAnalyzer strutsActionForwardAnalyzer = new StrutsActionForwardAnalyzer();
     private final StrutsConfigAnalyzer strutsConfigAnalyzer = new StrutsConfigAnalyzer();
+    private final StrutsLookupDispatchAnalyzer strutsLookupDispatchAnalyzer = new StrutsLookupDispatchAnalyzer();
     private final StrutsWebXmlAnalyzer strutsWebXmlAnalyzer = new StrutsWebXmlAnalyzer();
     private final StrutsTilesAnalyzer strutsTilesAnalyzer = new StrutsTilesAnalyzer();
     private final StrutsValidatorAnalyzer strutsValidatorAnalyzer = new StrutsValidatorAnalyzer();
@@ -75,7 +77,7 @@ public final class CodeAtlasProjectAnalyzer {
         List<GraphFact> facts = new ArrayList<>();
         List<GraphNode> javaMethodNodes = new ArrayList<>();
         Map<String, String> superClassByType = new LinkedHashMap<>();
-        Map<String, List<LookupDispatchMethodMapping>> lookupDispatchMappings = lookupDispatchMappings(javaFiles);
+        Map<String, List<StrutsLookupDispatchMethodMapping>> lookupDispatchMappings = lookupDispatchMappings(javaFiles);
 
         if (!javaFiles.isEmpty()) {
             var javaResult = javaAnalyzer.analyze(scope, projectKey, "src/main/java", javaFiles);
@@ -102,9 +104,17 @@ public final class CodeAtlasProjectAnalyzer {
             nodes.addAll(jdbcSqlResult.nodes());
             facts.addAll(jdbcSqlResult.facts());
 
+            var jpaEntityResult = jpaEntityAnalyzer.analyze(scope, projectKey, "src/main/java", javaFiles);
+            nodes.addAll(jpaEntityResult.nodes());
+            facts.addAll(jpaEntityResult.facts());
+
             var strutsActionFormResult = strutsActionFormAnalyzer.analyze(scope, projectKey, "src/main/java", javaFiles);
             nodes.addAll(strutsActionFormResult.nodes());
             facts.addAll(strutsActionFormResult.facts());
+
+            var strutsActionForwardResult = strutsActionForwardAnalyzer.analyze(scope, projectKey, "src/main/java", "src/main/webapp", javaFiles);
+            nodes.addAll(strutsActionForwardResult.nodes());
+            facts.addAll(strutsActionForwardResult.facts());
 
             var requestParameterResult = requestParameterGraphBuilder.build(
                 scope,
@@ -119,6 +129,11 @@ public final class CodeAtlasProjectAnalyzer {
             var classFileResult = classFileAnalyzer.analyze(scope, projectKey, "src/main/java", binaryFiles);
             nodes.addAll(classFileResult.nodes());
             facts.addAll(classFileResult.facts());
+            superClassByType.putAll(superClassByType(classFileResult.facts()));
+            addBinaryActionFormBindings(scope, projectKey, classFileResult.nodes(), classFileResult.facts(), superClassByType, nodes, facts);
+            javaMethodNodes.addAll(classFileResult.nodes().stream()
+                .filter(node -> node.symbolId().kind() == SymbolKind.METHOD)
+                .toList());
         }
 
         Map<Path, List<String>> strutsConfigs = strutsConfigFiles(files);
@@ -169,6 +184,66 @@ public final class CodeAtlasProjectAnalyzer {
         }
 
         return new ProjectAnalysisResult(nodes, facts);
+    }
+
+    private void addBinaryActionFormBindings(
+        AnalyzerScope scope,
+        String projectKey,
+        List<GraphNode> binaryNodes,
+        List<GraphFact> binaryFacts,
+        Map<String, String> superClassByType,
+        List<GraphNode> nodes,
+        List<GraphFact> facts
+    ) {
+        Map<SymbolId, GraphNode> nodeBySymbol = new LinkedHashMap<>();
+        for (GraphNode node : binaryNodes) {
+            nodeBySymbol.put(node.symbolId(), node);
+        }
+        for (GraphFact fact : binaryFacts) {
+            FactKey factKey = fact.factKey();
+            if (factKey.relationType() != RelationType.DECLARES || factKey.target().kind() != SymbolKind.FIELD) {
+                continue;
+            }
+            SymbolId formClass = factKey.source();
+            SymbolId field = factKey.target();
+            if (!isBinaryActionFormType(formClass.ownerQualifiedName(), superClassByType)) {
+                continue;
+            }
+            GraphNode fieldNode = nodeBySymbol.get(field);
+            if (fieldNode != null && Boolean.parseBoolean(fieldNode.properties().getOrDefault("static", "false"))) {
+                continue;
+            }
+            SymbolId parameter = SymbolId.logicalPath(
+                SymbolKind.REQUEST_PARAMETER,
+                projectKey,
+                field.moduleKey(),
+                "_request",
+                field.memberName(),
+                null
+            );
+            nodes.add(GraphNodeFactory.requestParameterNode(parameter));
+            facts.add(GraphFact.active(
+                new FactKey(parameter, RelationType.BINDS_TO, field, field.memberName()),
+                binaryActionFormEvidence(fact.evidenceKey(), field.memberName()),
+                scope.projectId(),
+                scope.snapshotId(),
+                scope.analysisRunId(),
+                scope.scopeKey(),
+                Confidence.LIKELY,
+                SourceType.ASM
+            ));
+        }
+    }
+
+    private EvidenceKey binaryActionFormEvidence(EvidenceKey evidenceKey, String fieldName) {
+        return new EvidenceKey(
+            SourceType.ASM,
+            "classfile-action-form",
+            evidenceKey.path(),
+            evidenceKey.lineStart(),
+            evidenceKey.lineEnd(),
+            evidenceKey.localPath() + ":action-form-field:" + fieldName
+        );
     }
 
     private boolean isTilesDefinitionFile(Path file) {
@@ -226,7 +301,7 @@ public final class CodeAtlasProjectAnalyzer {
         StrutsConfigAnalysisResult strutsResult,
         List<GraphNode> javaMethodNodes,
         Map<String, String> superClassByType,
-        Map<String, List<LookupDispatchMethodMapping>> lookupDispatchMappings,
+        Map<String, List<StrutsLookupDispatchMethodMapping>> lookupDispatchMappings,
         List<GraphFact> facts
     ) {
         for (var mapping : strutsResult.actionMappings()) {
@@ -257,7 +332,7 @@ public final class CodeAtlasProjectAnalyzer {
                     Confidence.LIKELY,
                     SourceType.STRUTS_CONFIG
                 )));
-            for (LookupDispatchMethodMapping lookupMapping : lookupMappingsFor(actionTypeHierarchy, lookupDispatchMappings)) {
+            for (StrutsLookupDispatchMethodMapping lookupMapping : lookupMappingsFor(actionTypeHierarchy, lookupDispatchMappings)) {
                 javaMethodNodes.stream()
                     .map(GraphNode::symbolId)
                     .filter(method -> actionTypeHierarchy.contains(method.ownerQualifiedName()))
@@ -332,73 +407,47 @@ public final class CodeAtlasProjectAnalyzer {
         return hierarchy;
     }
 
-    private List<LookupDispatchMethodMapping> lookupMappingsFor(
+    private boolean isBinaryActionFormType(String typeName, Map<String, String> superClassByType) {
+        if (typeName == null || isActionFormBaseType(typeName)) {
+            return false;
+        }
+        String current = superClassByType.get(typeName);
+        LinkedHashSet<String> visited = new LinkedHashSet<>();
+        while (current != null && !current.isBlank() && visited.add(current)) {
+            if (isActionFormBaseType(current)) {
+                return true;
+            }
+            current = superClassByType.get(current);
+        }
+        return false;
+    }
+
+    private boolean isActionFormBaseType(String typeName) {
+        return Set.of(
+            "org.apache.struts.action.ActionForm",
+            "org.apache.struts.validator.ValidatorForm",
+            "ActionForm",
+            "ValidatorForm"
+        ).contains(typeName);
+    }
+
+    private List<StrutsLookupDispatchMethodMapping> lookupMappingsFor(
         Set<String> actionTypeHierarchy,
-        Map<String, List<LookupDispatchMethodMapping>> lookupDispatchMappings
+        Map<String, List<StrutsLookupDispatchMethodMapping>> lookupDispatchMappings
     ) {
-        List<LookupDispatchMethodMapping> result = new ArrayList<>();
+        List<StrutsLookupDispatchMethodMapping> result = new ArrayList<>();
         for (String type : actionTypeHierarchy) {
             result.addAll(lookupDispatchMappings.getOrDefault(type, List.of()));
         }
         return result;
     }
 
-    private Map<String, List<LookupDispatchMethodMapping>> lookupDispatchMappings(List<Path> javaFiles) {
-        Map<String, List<LookupDispatchMethodMapping>> mappings = new LinkedHashMap<>();
-        for (Path javaFile : javaFiles) {
-            String source = readSource(javaFile);
-            String packageName = firstGroup(PACKAGE_DECLARATION.matcher(source));
-            Matcher classMatcher = CLASS_DECLARATION.matcher(source);
-            while (classMatcher.find()) {
-                String className = packageName == null ? classMatcher.group(1) : packageName + "." + classMatcher.group(1);
-                String methodBody = methodBody(source, "getKeyMethodMap", classMatcher.end());
-                if (methodBody == null) {
-                    continue;
-                }
-                Matcher putMatcher = LOOKUP_PUT.matcher(methodBody);
-                while (putMatcher.find()) {
-                    mappings.computeIfAbsent(className, ignored -> new ArrayList<>())
-                        .add(new LookupDispatchMethodMapping(putMatcher.group(1), putMatcher.group(2)));
-                }
-            }
+    private Map<String, List<StrutsLookupDispatchMethodMapping>> lookupDispatchMappings(List<Path> javaFiles) {
+        Map<String, List<StrutsLookupDispatchMethodMapping>> mappings = new LinkedHashMap<>();
+        for (StrutsLookupDispatchMethodMapping mapping : strutsLookupDispatchAnalyzer.analyze(javaFiles)) {
+            mappings.computeIfAbsent(mapping.actionType(), ignored -> new ArrayList<>()).add(mapping);
         }
         return mappings;
-    }
-
-    private String readSource(Path javaFile) {
-        try {
-            return Files.readString(javaFile);
-        } catch (IOException exception) {
-            throw new IllegalStateException("Failed to read Java source: " + javaFile, exception);
-        }
-    }
-
-    private String firstGroup(Matcher matcher) {
-        return matcher.find() ? matcher.group(1) : null;
-    }
-
-    private String methodBody(String source, String methodName, int fromIndex) {
-        int nameIndex = source.indexOf(methodName, fromIndex);
-        if (nameIndex < 0) {
-            return null;
-        }
-        int openBrace = source.indexOf('{', nameIndex);
-        if (openBrace < 0) {
-            return null;
-        }
-        int depth = 0;
-        for (int i = openBrace; i < source.length(); i++) {
-            char current = source.charAt(i);
-            if (current == '{') {
-                depth++;
-            } else if (current == '}') {
-                depth--;
-                if (depth == 0) {
-                    return source.substring(openBrace + 1, i);
-                }
-            }
-        }
-        return null;
     }
 
     private boolean isStrutsDispatchMethod(SymbolId method) {
@@ -419,8 +468,5 @@ public final class CodeAtlasProjectAnalyzer {
         } catch (IOException exception) {
             throw new IllegalStateException("Failed to scan project root: " + root, exception);
         }
-    }
-
-    private record LookupDispatchMethodMapping(String resourceKey, String methodName) {
     }
 }

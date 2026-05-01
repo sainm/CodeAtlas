@@ -73,6 +73,11 @@ class SpoonJavaAnalyzerTest {
         assertTrue(result.facts().stream().anyMatch(fact -> fact.factKey().relationType() == RelationType.CALLS
             && fact.factKey().source().memberName().equals("save")
             && fact.factKey().target().memberName().equals("save")));
+        assertTrue(result.nodes().stream().anyMatch(node -> node.symbolId().kind() == SymbolKind.METHOD
+            && node.symbolId().ownerQualifiedName().equals("com.acme.UserService")
+            && node.symbolId().memberName().equals("save")
+            && node.properties().get("codeOrigin").equals("source")
+            && node.properties().get("sourceOnly").equals("true")));
     }
 
     @Test

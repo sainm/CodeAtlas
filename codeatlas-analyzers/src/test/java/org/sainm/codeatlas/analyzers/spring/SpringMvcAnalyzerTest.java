@@ -50,6 +50,35 @@ class SpringMvcAnalyzerTest {
     }
 
     @Test
+    void extractsSpringRequestMappingPathAttributeWithoutSourceTextParsing() throws Exception {
+        Path source = tempDir.resolve("src/main/java/com/acme/AdminController.java");
+        Files.createDirectories(source.getParent());
+        Files.writeString(source, """
+            package com.acme;
+
+            import org.springframework.web.bind.annotation.PostMapping;
+            import org.springframework.web.bind.annotation.RequestMapping;
+            import org.springframework.web.bind.annotation.RestController;
+
+            @RestController
+            @RequestMapping(path = "/admin")
+            class AdminController {
+                @PostMapping(path = "/users")
+                String create() {
+                    return "ok";
+                }
+            }
+            """);
+
+        AnalyzerScope scope = new AnalyzerScope("shop", "_root", "snapshot-1", "run-1", "src/main/java", tempDir);
+        SpringMvcAnalysisResult result = new SpringMvcAnalyzer().analyze(scope, "shop", "src/main/java", List.of(source));
+
+        assertEquals(1, result.endpoints().size());
+        assertEquals("POST", result.endpoints().getFirst().httpMethod());
+        assertEquals("/admin/users", result.endpoints().getFirst().path());
+    }
+
+    @Test
     void extractsScheduledAndAsyncEntrypoints() throws Exception {
         Path source = tempDir.resolve("src/main/java/com/acme/UserJobs.java");
         Files.createDirectories(source.getParent());

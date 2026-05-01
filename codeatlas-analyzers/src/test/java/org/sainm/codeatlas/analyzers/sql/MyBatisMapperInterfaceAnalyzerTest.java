@@ -79,6 +79,34 @@ class MyBatisMapperInterfaceAnalyzerTest {
             && fact.factKey().target().localId().equals("id")));
     }
 
+    @Test
+    void extractsAnnotatedSqlArrayWithoutSourceTextParsing() throws Exception {
+        Path source = tempDir.resolve("src/main/java/com/acme/UserMapper.java");
+        Files.createDirectories(source.getParent());
+        Files.writeString(source, """
+            package com.acme;
+
+            import org.apache.ibatis.annotations.Update;
+
+            interface UserMapper {
+                @Update({
+                    "update users",
+                    "set name = #{name}",
+                    "where id = #{id}"
+                })
+                int rename(String id, String name);
+            }
+            """);
+
+        MyBatisMapperInterfaceAnalysisResult result = analyze(source);
+
+        assertEquals(1, result.methods().size());
+        assertTrue(result.methods().getFirst().annotationSql());
+        assertTrue(result.facts().stream().anyMatch(fact -> fact.factKey().relationType() == RelationType.WRITES_TABLE
+            && fact.factKey().target().kind() == SymbolKind.DB_TABLE
+            && fact.factKey().target().ownerQualifiedName().equals("users")));
+    }
+
     private MyBatisMapperInterfaceAnalysisResult analyze(Path source) {
         AnalyzerScope scope = new AnalyzerScope("shop", "_root", "snapshot-1", "run-1", "src/main/java", tempDir);
         return new MyBatisMapperInterfaceAnalyzer().analyze(scope, "shop", "src/main/java", List.of(source));

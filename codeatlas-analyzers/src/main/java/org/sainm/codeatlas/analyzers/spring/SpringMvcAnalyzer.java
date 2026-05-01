@@ -1,6 +1,7 @@
 package org.sainm.codeatlas.analyzers.spring;
 
 import org.sainm.codeatlas.analyzers.AnalyzerScope;
+import org.sainm.codeatlas.analyzers.java.SpoonAnnotationValues;
 import org.sainm.codeatlas.analyzers.java.SpoonSymbolMapper;
 import org.sainm.codeatlas.graph.model.Confidence;
 import org.sainm.codeatlas.graph.model.EvidenceKey;
@@ -18,8 +19,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import spoon.Launcher;
 import spoon.reflect.CtModel;
 import spoon.reflect.cu.SourcePosition;
@@ -28,8 +27,6 @@ import spoon.reflect.declaration.CtMethod;
 import spoon.reflect.declaration.CtType;
 
 public final class SpringMvcAnalyzer {
-    private static final Pattern STRING_LITERAL = Pattern.compile("\"([^\"]*)\"");
-
     public SpringMvcAnalysisResult analyze(AnalyzerScope scope, String projectKey, String sourceRootKey, List<Path> sourceFiles) {
         Launcher launcher = new Launcher();
         launcher.getEnvironment().setComplianceLevel(25);
@@ -132,8 +129,7 @@ public final class SpringMvcAnalyzer {
     }
 
     private String pathFromAnnotation(CtAnnotation<?> annotation) {
-        Matcher matcher = STRING_LITERAL.matcher(annotation.toString());
-        return matcher.find() ? matcher.group(1) : "/";
+        return SpoonAnnotationValues.firstString(annotation, "path", "value").orElse("/");
     }
 
     private String methodFromRequestMapping(String annotationText) {

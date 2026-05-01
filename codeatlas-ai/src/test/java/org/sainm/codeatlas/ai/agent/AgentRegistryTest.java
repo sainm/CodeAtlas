@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 class AgentRegistryTest {
@@ -46,6 +47,45 @@ class AgentRegistryTest {
         assertTrue(guard.validate(variable, tools, AgentToolName.VARIABLE_TRACE, 0).allowed());
         assertFalse(guard.validate(variable, tools, AgentToolName.IMPACT_ANALYZE_DIFF, 0).allowed());
         assertFalse(guard.validate(variable, tools, AgentToolName.VARIABLE_TRACE_SOURCE, variable.maxToolCalls()).allowed());
+    }
+
+    @Test
+    void callGuardRequiresExplicitConfirmationForWriteTools() {
+        AgentToolCallGuard guard = new AgentToolCallGuard();
+        AgentToolRegistry tools = new AgentToolRegistry(List.of(new AgentToolDescriptor(
+            AgentToolName.REPORT_GET_IMPACT_REPORT,
+            "hypothetical write-capable tool",
+            false,
+            30
+        )));
+        AgentProfile profile = new AgentProfile(
+            AgentType.IMPACT_ANALYSIS,
+            List.of(AgentToolName.REPORT_GET_IMPACT_REPORT),
+            3,
+            30,
+            true
+        );
+
+        AgentToolCallDecision missingConfirmation = guard.validate(profile, tools, AgentToolName.REPORT_GET_IMPACT_REPORT, 0, Map.of());
+        AgentToolCallDecision wrongIntent = guard.validate(
+            profile,
+            tools,
+            AgentToolName.REPORT_GET_IMPACT_REPORT,
+            0,
+            Map.of("confirmWrite", true, "confirmationIntent", "READ_ONLY")
+        );
+        AgentToolCallDecision confirmed = guard.validate(
+            profile,
+            tools,
+            AgentToolName.REPORT_GET_IMPACT_REPORT,
+            0,
+            Map.of("confirmWrite", true, "confirmationIntent", "ALLOW_WRITE")
+        );
+
+        assertFalse(missingConfirmation.allowed());
+        assertEquals("write tool requires explicit confirmation", missingConfirmation.reason());
+        assertFalse(wrongIntent.allowed());
+        assertTrue(confirmed.allowed());
     }
 
     @Test

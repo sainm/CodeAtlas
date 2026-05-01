@@ -34,19 +34,42 @@ class CodeAtlasProjectAnalyzerTest {
             class UserAction {
               private final UserService service = new UserService();
               void execute(javax.servlet.http.HttpServletRequest request) {
-                String name = request.getParameter("name");
-                service.save(name);
+                String rawName = request.getParameter("name");
+                String name = rawName;
+                String finalName = name;
+                service.save(finalName);
               }
             }
             class UserService {
               private final UserDao dao = new UserDao();
               void save(String name) {
-                dao.insert(name);
+                String outgoing = name;
+                dao.insert(outgoing);
               }
             }
             class UserDao {
-              void insert(String name) {
+              void insert(String name) throws Exception {
+                java.sql.Connection connection = null;
+                java.sql.PreparedStatement statement = connection.prepareStatement("update users set name = ? where id = 1");
+                statement.setString(1, name);
+                statement.executeUpdate();
               }
+            }
+            """);
+        write("src/main/java/com/acme/UserEntity.java", """
+            package com.acme;
+            import jakarta.persistence.Column;
+            import jakarta.persistence.Entity;
+            import jakarta.persistence.Id;
+            import jakarta.persistence.Table;
+            @Entity
+            @Table(name = "users")
+            class UserEntity {
+              @Id
+              @Column(name = "id")
+              private long id;
+              @Column(name = "name")
+              private String name;
             }
             """);
         write("src/main/webapp/WEB-INF/struts-config.xml", """
@@ -135,12 +158,34 @@ class CodeAtlasProjectAnalyzerTest {
         assertTrue(result.facts().stream().anyMatch(fact -> fact.factKey().relationType() == RelationType.PASSES_PARAM
             && fact.factKey().source().ownerQualifiedName().equals("com.acme.UserAction")
             && fact.factKey().target().ownerQualifiedName().equals("com.acme.UserService")
-            && fact.factKey().qualifier().contains("request-parameter-local:name")));
+            && fact.factKey().qualifier().contains("request-parameter-local:name argument:finalName")));
         assertTrue(result.facts().stream().anyMatch(fact -> fact.factKey().relationType() == RelationType.PASSES_PARAM
             && fact.factKey().source().ownerQualifiedName().equals("com.acme.UserService")
             && fact.factKey().target().ownerQualifiedName().equals("com.acme.UserDao")
-            && fact.factKey().qualifier().contains("method-parameter:name")));
+            && fact.factKey().qualifier().contains("method-parameter:outgoing")));
         assertTrue(result.facts().stream().anyMatch(fact -> fact.factKey().relationType() == RelationType.READS_TABLE));
+        assertTrue(result.facts().stream().anyMatch(fact -> fact.factKey().relationType() == RelationType.PASSES_PARAM
+            && fact.factKey().source().ownerQualifiedName().equals("com.acme.UserDao")
+            && fact.factKey().source().memberName().equals("insert")
+            && fact.factKey().target().kind() == SymbolKind.SQL_STATEMENT
+            && fact.factKey().qualifier().equals("jdbc-parameter:1:name")));
+        assertTrue(result.facts().stream().anyMatch(fact -> fact.factKey().relationType() == RelationType.WRITES_TABLE
+            && fact.factKey().source().kind() == SymbolKind.SQL_STATEMENT
+            && fact.factKey().target().kind() == SymbolKind.DB_TABLE
+            && fact.factKey().target().ownerQualifiedName().equals("users")
+            && fact.factKey().qualifier().equals("jdbc-table:users")));
+        assertTrue(result.facts().stream().anyMatch(fact -> fact.factKey().relationType() == RelationType.BINDS_TO
+            && fact.factKey().source().kind() == SymbolKind.CLASS
+            && fact.factKey().source().ownerQualifiedName().equals("com.acme.UserEntity")
+            && fact.factKey().target().kind() == SymbolKind.DB_TABLE
+            && fact.factKey().target().ownerQualifiedName().equals("users")
+            && fact.factKey().qualifier().equals("jpa-entity-table:users")));
+        assertTrue(result.facts().stream().anyMatch(fact -> fact.factKey().relationType() == RelationType.BINDS_TO
+            && fact.factKey().source().kind() == SymbolKind.FIELD
+            && fact.factKey().source().memberName().equals("name")
+            && fact.factKey().target().kind() == SymbolKind.DB_COLUMN
+            && fact.factKey().target().localId().equals("name")
+            && fact.factKey().qualifier().equals("jpa-field-column:users.name")));
         assertTrue(result.facts().stream().anyMatch(fact -> fact.factKey().relationType() == RelationType.USES_CONFIG
             && fact.factKey().qualifier().equals("message-resources:com.acme.ApplicationResources")));
         assertTrue(result.facts().stream().anyMatch(fact -> fact.factKey().relationType() == RelationType.FORWARDS_TO
@@ -321,6 +366,356 @@ class CodeAtlasProjectAnalyzerTest {
             && fact.factKey().target().kind() == SymbolKind.METHOD
             && fact.factKey().target().ownerQualifiedName().equals("com.acme.web.PricingAction")
             && fact.factKey().target().memberName().equals("execute")));
+    }
+
+    @Test
+    void routesStrutsActionConfiguredToBusinessJarActionExecuteMethod() throws Exception {
+        write("src/main/webapp/WEB-INF/struts-config.xml", """
+            <struts-config>
+              <action-mappings>
+                <action path="/jar/save" type="com.vendor.web.JarSaveAction"/>
+              </action-mappings>
+            </struts-config>
+            """);
+        writeStrutsActionJar("src/main/webapp/WEB-INF/lib/jar-action.jar");
+
+        AnalyzerScope scope = new AnalyzerScope("shop", "_root", "snapshot-1", "run-1", "project", tempDir);
+        ProjectAnalysisResult result = new CodeAtlasProjectAnalyzer().analyze(scope, "shop");
+
+        assertTrue(result.nodes().stream().anyMatch(node -> node.symbolId().kind() == SymbolKind.METHOD
+            && node.symbolId().ownerQualifiedName().equals("com.vendor.web.JarSaveAction")
+            && node.symbolId().memberName().equals("execute")
+            && node.symbolId().descriptor().contains("ActionMapping")));
+        assertTrue(result.facts().stream().anyMatch(fact -> fact.factKey().relationType() == RelationType.ROUTES_TO
+            && fact.factKey().source().kind() == SymbolKind.ACTION_PATH
+            && fact.factKey().source().ownerQualifiedName().equals("jar/save")
+            && fact.factKey().target().kind() == SymbolKind.METHOD
+            && fact.factKey().target().ownerQualifiedName().equals("com.vendor.web.JarSaveAction")
+            && fact.factKey().target().memberName().equals("execute")
+            && fact.factKey().qualifier().equals("struts-action-execute")));
+    }
+
+    @Test
+    void routesStrutsDispatchActionConfiguredToBusinessJarMethods() throws Exception {
+        write("src/main/webapp/WEB-INF/struts-config.xml", """
+            <struts-config>
+              <action-mappings>
+                <action path="/jar/dispatch" type="com.vendor.web.JarDispatchAction" parameter="method"/>
+              </action-mappings>
+            </struts-config>
+            """);
+        writeStrutsDispatchActionJar("src/main/webapp/WEB-INF/lib/jar-dispatch-action.jar");
+
+        AnalyzerScope scope = new AnalyzerScope("shop", "_root", "snapshot-1", "run-1", "project", tempDir);
+        ProjectAnalysisResult result = new CodeAtlasProjectAnalyzer().analyze(scope, "shop");
+
+        assertTrue(result.facts().stream().anyMatch(fact -> fact.factKey().relationType() == RelationType.ROUTES_TO
+            && fact.factKey().source().kind() == SymbolKind.ACTION_PATH
+            && fact.factKey().source().ownerQualifiedName().equals("jar/dispatch")
+            && fact.factKey().target().kind() == SymbolKind.METHOD
+            && fact.factKey().target().ownerQualifiedName().equals("com.vendor.web.JarDispatchAction")
+            && fact.factKey().target().memberName().equals("save")
+            && fact.factKey().qualifier().equals("dispatch-method-candidate:method:save")));
+        assertTrue(result.facts().stream().anyMatch(fact -> fact.factKey().relationType() == RelationType.ROUTES_TO
+            && fact.factKey().source().ownerQualifiedName().equals("jar/dispatch")
+            && fact.factKey().target().kind() == SymbolKind.METHOD
+            && fact.factKey().target().ownerQualifiedName().equals("com.vendor.web.JarDispatchAction")
+            && fact.factKey().target().memberName().equals("delete")
+            && fact.factKey().qualifier().equals("dispatch-method-candidate:method:delete")));
+        assertTrue(result.facts().stream().noneMatch(fact -> fact.factKey().relationType() == RelationType.ROUTES_TO
+            && fact.factKey().source().ownerQualifiedName().equals("jar/dispatch")
+            && fact.factKey().target().kind() == SymbolKind.METHOD
+            && fact.factKey().target().ownerQualifiedName().equals("com.vendor.web.JarDispatchAction")
+            && fact.factKey().target().memberName().equals("helper")));
+    }
+
+    @Test
+    void bindsBusinessJarActionFormFieldsToRequestParameters() throws Exception {
+        write("src/main/webapp/WEB-INF/struts-config.xml", """
+            <struts-config>
+              <form-beans>
+                <form-bean name="jarUserForm" type="com.vendor.web.JarUserForm"/>
+              </form-beans>
+              <action-mappings>
+                <action path="/jar/form" type="com.vendor.web.JarSaveAction" name="jarUserForm"/>
+              </action-mappings>
+            </struts-config>
+            """);
+        writeStrutsActionFormJar("src/main/webapp/WEB-INF/lib/jar-form.jar");
+
+        AnalyzerScope scope = new AnalyzerScope("shop", "_root", "snapshot-1", "run-1", "project", tempDir);
+        ProjectAnalysisResult result = new CodeAtlasProjectAnalyzer().analyze(scope, "shop");
+
+        assertTrue(result.facts().stream().anyMatch(fact -> fact.factKey().relationType() == RelationType.BINDS_TO
+            && fact.factKey().source().kind() == SymbolKind.ACTION_PATH
+            && fact.factKey().source().ownerQualifiedName().equals("jar/form")
+            && fact.factKey().target().kind() == SymbolKind.CLASS
+            && fact.factKey().target().ownerQualifiedName().equals("com.vendor.web.JarUserForm")
+            && fact.factKey().qualifier().equals("action-form:jarUserForm")));
+        assertTrue(result.facts().stream().anyMatch(fact -> fact.factKey().relationType() == RelationType.BINDS_TO
+            && fact.factKey().source().kind() == SymbolKind.REQUEST_PARAMETER
+            && fact.factKey().source().ownerQualifiedName().equals("userId")
+            && fact.factKey().target().kind() == SymbolKind.FIELD
+            && fact.factKey().target().ownerQualifiedName().equals("com.vendor.web.JarUserForm")
+            && fact.factKey().target().memberName().equals("userId")
+            && fact.factKey().qualifier().equals("userId")
+            && fact.sourceType().name().equals("ASM")));
+        assertTrue(result.facts().stream().noneMatch(fact -> fact.factKey().relationType() == RelationType.BINDS_TO
+            && fact.factKey().source().kind() == SymbolKind.REQUEST_PARAMETER
+            && fact.factKey().target().kind() == SymbolKind.FIELD
+            && fact.factKey().target().ownerQualifiedName().equals("com.vendor.web.JarUserForm")
+            && fact.factKey().target().memberName().equals("ignored")));
+    }
+
+    @Test
+    void tracksStrutsActionFormGetterValueToBusinessMethodArgument() throws Exception {
+        write("src/main/java/com/acme/UserAction.java", """
+            package com.acme;
+            class UserAction extends org.apache.struts.action.Action {
+              private final UserService service = new UserService();
+              public org.apache.struts.action.ActionForward execute(
+                  org.apache.struts.action.ActionMapping mapping,
+                  org.apache.struts.action.ActionForm form,
+                  javax.servlet.http.HttpServletRequest request,
+                  javax.servlet.http.HttpServletResponse response) {
+                UserForm userForm = (UserForm) form;
+                String userId = userForm.getUserId();
+                service.save(userId);
+                return null;
+              }
+            }
+            class UserForm extends org.apache.struts.action.ActionForm {
+              private String userId;
+              String getUserId() {
+                return userId;
+              }
+            }
+            class UserService {
+              void save(String value) {
+              }
+            }
+            """);
+        write("src/main/webapp/WEB-INF/struts-config.xml", """
+            <struts-config>
+              <form-beans>
+                <form-bean name="userForm" type="com.acme.UserForm"/>
+              </form-beans>
+              <action-mappings>
+                <action path="/user/save" type="com.acme.UserAction" name="userForm"/>
+              </action-mappings>
+            </struts-config>
+            """);
+
+        AnalyzerScope scope = new AnalyzerScope("shop", "_root", "snapshot-1", "run-1", "project", tempDir);
+        ProjectAnalysisResult result = new CodeAtlasProjectAnalyzer().analyze(scope, "shop");
+
+        assertTrue(result.facts().stream().anyMatch(fact -> fact.factKey().relationType() == RelationType.READS_PARAM
+            && fact.factKey().source().ownerQualifiedName().equals("com.acme.UserAction")
+            && fact.factKey().source().memberName().equals("execute")
+            && fact.factKey().target().kind() == SymbolKind.REQUEST_PARAMETER
+            && fact.factKey().target().ownerQualifiedName().equals("userId")
+            && fact.factKey().qualifier().equals("action-form-getter:userId")));
+        assertTrue(result.facts().stream().anyMatch(fact -> fact.factKey().relationType() == RelationType.PASSES_PARAM
+            && fact.factKey().source().ownerQualifiedName().equals("com.acme.UserAction")
+            && fact.factKey().source().memberName().equals("execute")
+            && fact.factKey().target().ownerQualifiedName().equals("com.acme.UserService")
+            && fact.factKey().target().memberName().equals("save")
+            && fact.factKey().qualifier().equals("action-form-getter:userId argument:userId")));
+    }
+
+    @Test
+    void tracksStrutsDynaActionFormGetValueToBusinessMethodArgument() throws Exception {
+        write("src/main/java/com/acme/UserAction.java", """
+            package com.acme;
+            class UserAction extends org.apache.struts.action.Action {
+              private final UserService service = new UserService();
+              public org.apache.struts.action.ActionForward execute(
+                  org.apache.struts.action.ActionMapping mapping,
+                  org.apache.struts.action.ActionForm form,
+                  javax.servlet.http.HttpServletRequest request,
+                  javax.servlet.http.HttpServletResponse response) {
+                org.apache.struts.action.DynaActionForm userForm = (org.apache.struts.action.DynaActionForm) form;
+                String userId = (String) userForm.get("userId");
+                service.save(userId);
+                return null;
+              }
+            }
+            class UserService {
+              void save(String value) {
+              }
+            }
+            """);
+        write("src/main/webapp/WEB-INF/struts-config.xml", """
+            <struts-config>
+              <form-beans>
+                <form-bean name="userForm" type="org.apache.struts.action.DynaActionForm">
+                  <form-property name="userId" type="java.lang.String"/>
+                </form-bean>
+              </form-beans>
+              <action-mappings>
+                <action path="/user/save" type="com.acme.UserAction" name="userForm"/>
+              </action-mappings>
+            </struts-config>
+            """);
+
+        AnalyzerScope scope = new AnalyzerScope("shop", "_root", "snapshot-1", "run-1", "project", tempDir);
+        ProjectAnalysisResult result = new CodeAtlasProjectAnalyzer().analyze(scope, "shop");
+
+        assertTrue(result.facts().stream().anyMatch(fact -> fact.factKey().relationType() == RelationType.BINDS_TO
+            && fact.factKey().source().kind() == SymbolKind.REQUEST_PARAMETER
+            && fact.factKey().source().ownerQualifiedName().equals("userId")
+            && fact.factKey().target().kind() == SymbolKind.CONFIG_KEY
+            && fact.factKey().target().localId().contains("form-bean:userForm:property:userId")));
+        assertTrue(result.facts().stream().anyMatch(fact -> fact.factKey().relationType() == RelationType.READS_PARAM
+            && fact.factKey().source().ownerQualifiedName().equals("com.acme.UserAction")
+            && fact.factKey().source().memberName().equals("execute")
+            && fact.factKey().target().kind() == SymbolKind.REQUEST_PARAMETER
+            && fact.factKey().target().ownerQualifiedName().equals("userId")
+            && fact.factKey().qualifier().equals("action-form-get:userId")));
+        assertTrue(result.facts().stream().anyMatch(fact -> fact.factKey().relationType() == RelationType.PASSES_PARAM
+            && fact.factKey().source().ownerQualifiedName().equals("com.acme.UserAction")
+            && fact.factKey().source().memberName().equals("execute")
+            && fact.factKey().target().ownerQualifiedName().equals("com.acme.UserService")
+            && fact.factKey().target().memberName().equals("save")
+            && fact.factKey().qualifier().equals("action-form-get:userId argument:userId")));
+    }
+
+    @Test
+    void linksStrutsActionMethodFindForwardToConfiguredForwardTarget() throws Exception {
+        write("src/main/java/com/acme/UserAction.java", """
+            package com.acme;
+            class UserAction extends org.apache.struts.action.Action {
+              public org.apache.struts.action.ActionForward execute(
+                  org.apache.struts.action.ActionMapping mapping,
+                  org.apache.struts.action.ActionForm form,
+                  javax.servlet.http.HttpServletRequest request,
+                  javax.servlet.http.HttpServletResponse response) {
+                return mapping.findForward("success");
+              }
+            }
+            """);
+        write("src/main/webapp/WEB-INF/struts-config.xml", """
+            <struts-config>
+              <action-mappings>
+                <action path="/user/save" type="com.acme.UserAction">
+                  <forward name="success" path="/user/detail.jsp"/>
+                </action>
+              </action-mappings>
+            </struts-config>
+            """);
+
+        AnalyzerScope scope = new AnalyzerScope("shop", "_root", "snapshot-1", "run-1", "project", tempDir);
+        ProjectAnalysisResult result = new CodeAtlasProjectAnalyzer().analyze(scope, "shop");
+
+        assertTrue(result.facts().stream().anyMatch(fact -> fact.factKey().relationType() == RelationType.FORWARDS_TO
+            && fact.factKey().source().kind() == SymbolKind.METHOD
+            && fact.factKey().source().ownerQualifiedName().equals("com.acme.UserAction")
+            && fact.factKey().source().memberName().equals("execute")
+            && fact.factKey().target().kind() == SymbolKind.CONFIG_KEY
+            && fact.factKey().target().ownerQualifiedName().equals("struts-forward")
+            && fact.factKey().target().localId().equals("success")
+            && fact.factKey().qualifier().equals("mapping.findForward:success")));
+        assertTrue(result.facts().stream().anyMatch(fact -> fact.factKey().relationType() == RelationType.FORWARDS_TO
+            && fact.factKey().source().kind() == SymbolKind.CONFIG_KEY
+            && fact.factKey().source().ownerQualifiedName().equals("struts-forward")
+            && fact.factKey().source().localId().equals("success")
+            && fact.factKey().target().kind() == SymbolKind.JSP_PAGE
+            && fact.factKey().target().ownerQualifiedName().equals("user/detail.jsp")));
+    }
+
+    @Test
+    void linksStrutsActionMethodDirectActionForwardTargets() throws Exception {
+        write("src/main/java/com/acme/UserAction.java", """
+            package com.acme;
+            class UserAction extends org.apache.struts.action.Action {
+              org.apache.struts.action.ActionForward detail() {
+                return new org.apache.struts.action.ActionForward("/user/detail.jsp");
+              }
+              org.apache.struts.action.ActionForward next() {
+                return new org.apache.struts.action.ActionForward("/user/next.do");
+              }
+            }
+            """);
+
+        AnalyzerScope scope = new AnalyzerScope("shop", "_root", "snapshot-1", "run-1", "project", tempDir);
+        ProjectAnalysisResult result = new CodeAtlasProjectAnalyzer().analyze(scope, "shop");
+
+        assertTrue(result.facts().stream().anyMatch(fact -> fact.factKey().relationType() == RelationType.FORWARDS_TO
+            && fact.factKey().source().kind() == SymbolKind.METHOD
+            && fact.factKey().source().ownerQualifiedName().equals("com.acme.UserAction")
+            && fact.factKey().source().memberName().equals("detail")
+            && fact.factKey().target().kind() == SymbolKind.JSP_PAGE
+            && fact.factKey().target().ownerQualifiedName().equals("user/detail.jsp")));
+        assertTrue(result.facts().stream().anyMatch(fact -> fact.factKey().relationType() == RelationType.FORWARDS_TO
+            && fact.factKey().source().kind() == SymbolKind.METHOD
+            && fact.factKey().source().ownerQualifiedName().equals("com.acme.UserAction")
+            && fact.factKey().source().memberName().equals("next")
+            && fact.factKey().target().kind() == SymbolKind.ACTION_PATH
+            && fact.factKey().target().ownerQualifiedName().equals("user/next")));
+    }
+
+    @Test
+    void linksStrutsNamedActionForwardConstructorUsingPathArgument() throws Exception {
+        write("src/main/java/com/acme/UserAction.java", """
+            package com.acme;
+            class UserAction extends org.apache.struts.action.Action {
+              org.apache.struts.action.ActionForward detail() {
+                return new org.apache.struts.action.ActionForward("success", "/user/detail.jsp", true);
+              }
+            }
+            """);
+
+        AnalyzerScope scope = new AnalyzerScope("shop", "_root", "snapshot-1", "run-1", "project", tempDir);
+        ProjectAnalysisResult result = new CodeAtlasProjectAnalyzer().analyze(scope, "shop");
+
+        assertTrue(result.facts().stream().anyMatch(fact -> fact.factKey().relationType() == RelationType.FORWARDS_TO
+            && fact.factKey().source().kind() == SymbolKind.METHOD
+            && fact.factKey().source().ownerQualifiedName().equals("com.acme.UserAction")
+            && fact.factKey().source().memberName().equals("detail")
+            && fact.factKey().target().kind() == SymbolKind.JSP_PAGE
+            && fact.factKey().target().ownerQualifiedName().equals("user/detail.jsp")
+            && fact.factKey().qualifier().equals("new ActionForward:/user/detail.jsp")));
+        assertTrue(result.facts().stream().noneMatch(fact -> fact.factKey().relationType() == RelationType.FORWARDS_TO
+            && fact.factKey().source().kind() == SymbolKind.METHOD
+            && fact.factKey().source().ownerQualifiedName().equals("com.acme.UserAction")
+            && fact.factKey().source().memberName().equals("detail")
+            && fact.factKey().target().kind() == SymbolKind.ACTION_PATH
+            && fact.factKey().target().ownerQualifiedName().equals("success")));
+    }
+
+    @Test
+    void linksStrutsActionMethodRedirectTargets() throws Exception {
+        write("src/main/java/com/acme/UserAction.java", """
+            package com.acme;
+            class UserAction extends org.apache.struts.action.Action {
+              public org.apache.struts.action.ActionForward execute(
+                  org.apache.struts.action.ActionMapping mapping,
+                  org.apache.struts.action.ActionForm form,
+                  javax.servlet.http.HttpServletRequest request,
+                  javax.servlet.http.HttpServletResponse response) throws Exception {
+                response.sendRedirect("/login.do");
+                return new org.apache.struts.action.ActionRedirect("/user/detail.jsp");
+              }
+            }
+            """);
+
+        AnalyzerScope scope = new AnalyzerScope("shop", "_root", "snapshot-1", "run-1", "project", tempDir);
+        ProjectAnalysisResult result = new CodeAtlasProjectAnalyzer().analyze(scope, "shop");
+
+        assertTrue(result.facts().stream().anyMatch(fact -> fact.factKey().relationType() == RelationType.FORWARDS_TO
+            && fact.factKey().source().kind() == SymbolKind.METHOD
+            && fact.factKey().source().ownerQualifiedName().equals("com.acme.UserAction")
+            && fact.factKey().source().memberName().equals("execute")
+            && fact.factKey().target().kind() == SymbolKind.ACTION_PATH
+            && fact.factKey().target().ownerQualifiedName().equals("login")
+            && fact.factKey().qualifier().equals("sendRedirect:/login.do")));
+        assertTrue(result.facts().stream().anyMatch(fact -> fact.factKey().relationType() == RelationType.FORWARDS_TO
+            && fact.factKey().source().kind() == SymbolKind.METHOD
+            && fact.factKey().source().ownerQualifiedName().equals("com.acme.UserAction")
+            && fact.factKey().source().memberName().equals("execute")
+            && fact.factKey().target().kind() == SymbolKind.JSP_PAGE
+            && fact.factKey().target().ownerQualifiedName().equals("user/detail.jsp")
+            && fact.factKey().qualifier().equals("new ActionRedirect:/user/detail.jsp")));
     }
 
     @Test
@@ -670,5 +1065,234 @@ class CodeAtlasProjectAnalyzerTest {
             Files.copy(auditClassFile, output);
             output.closeEntry();
         }
+    }
+
+    private void writeStrutsActionJar(String relativePath) throws Exception {
+        Path actionSource = tempDir.resolve("struts-action-jar-src/com/vendor/web/JarSaveAction.java");
+        Files.createDirectories(actionSource.getParent());
+        Files.writeString(actionSource, """
+            package com.vendor.web;
+            public class JarSaveAction extends org.apache.struts.action.Action {
+              public org.apache.struts.action.ActionForward execute(
+                  org.apache.struts.action.ActionMapping mapping,
+                  org.apache.struts.action.ActionForm form,
+                  javax.servlet.http.HttpServletRequest request,
+                  javax.servlet.http.HttpServletResponse response) {
+                return null;
+              }
+            }
+            """);
+        writeStubSource("struts-action-jar-src/org/apache/struts/action/Action.java", """
+            package org.apache.struts.action;
+            public class Action {
+            }
+            """);
+        writeStubSource("struts-action-jar-src/org/apache/struts/action/ActionForward.java", """
+            package org.apache.struts.action;
+            public class ActionForward {
+            }
+            """);
+        writeStubSource("struts-action-jar-src/org/apache/struts/action/ActionForm.java", """
+            package org.apache.struts.action;
+            public class ActionForm {
+            }
+            """);
+        writeStubSource("struts-action-jar-src/org/apache/struts/action/ActionMapping.java", """
+            package org.apache.struts.action;
+            public class ActionMapping {
+            }
+            """);
+        writeStubSource("struts-action-jar-src/javax/servlet/http/HttpServletRequest.java", """
+            package javax.servlet.http;
+            public interface HttpServletRequest {
+            }
+            """);
+        writeStubSource("struts-action-jar-src/javax/servlet/http/HttpServletResponse.java", """
+            package javax.servlet.http;
+            public interface HttpServletResponse {
+            }
+            """);
+
+        Path classes = tempDir.resolve("struts-action-jar-classes");
+        Files.createDirectories(classes);
+        var compiler = ToolProvider.getSystemJavaCompiler();
+        assertTrue(compiler != null, "JDK compiler is required for classfile fixture");
+        int exitCode = compiler.run(
+            null,
+            null,
+            null,
+            "-d",
+            classes.toString(),
+            actionSource.toString(),
+            tempDir.resolve("struts-action-jar-src/org/apache/struts/action/Action.java").toString(),
+            tempDir.resolve("struts-action-jar-src/org/apache/struts/action/ActionForward.java").toString(),
+            tempDir.resolve("struts-action-jar-src/org/apache/struts/action/ActionForm.java").toString(),
+            tempDir.resolve("struts-action-jar-src/org/apache/struts/action/ActionMapping.java").toString(),
+            tempDir.resolve("struts-action-jar-src/javax/servlet/http/HttpServletRequest.java").toString(),
+            tempDir.resolve("struts-action-jar-src/javax/servlet/http/HttpServletResponse.java").toString()
+        );
+        assertTrue(exitCode == 0, "struts action jar fixture compilation failed");
+
+        Path jar = tempDir.resolve(relativePath);
+        Files.createDirectories(jar.getParent());
+        try (JarOutputStream output = new JarOutputStream(Files.newOutputStream(jar))) {
+            addClass(output, classes, "com/vendor/web/JarSaveAction.class");
+            addClass(output, classes, "org/apache/struts/action/Action.class");
+            addClass(output, classes, "org/apache/struts/action/ActionForward.class");
+            addClass(output, classes, "org/apache/struts/action/ActionForm.class");
+            addClass(output, classes, "org/apache/struts/action/ActionMapping.class");
+            addClass(output, classes, "javax/servlet/http/HttpServletRequest.class");
+            addClass(output, classes, "javax/servlet/http/HttpServletResponse.class");
+        }
+    }
+
+    private void writeStrutsDispatchActionJar(String relativePath) throws Exception {
+        Path actionSource = tempDir.resolve("struts-dispatch-action-jar-src/com/vendor/web/JarDispatchAction.java");
+        Files.createDirectories(actionSource.getParent());
+        Files.writeString(actionSource, """
+            package com.vendor.web;
+            public class JarDispatchAction extends org.apache.struts.actions.DispatchAction {
+              public org.apache.struts.action.ActionForward save(
+                  org.apache.struts.action.ActionMapping mapping,
+                  org.apache.struts.action.ActionForm form,
+                  javax.servlet.http.HttpServletRequest request,
+                  javax.servlet.http.HttpServletResponse response) {
+                return null;
+              }
+              public org.apache.struts.action.ActionForward delete(
+                  org.apache.struts.action.ActionMapping mapping,
+                  org.apache.struts.action.ActionForm form,
+                  javax.servlet.http.HttpServletRequest request,
+                  javax.servlet.http.HttpServletResponse response) {
+                return null;
+              }
+              void helper() {
+              }
+            }
+            """);
+        writeDispatchStubSources("struts-dispatch-action-jar-src");
+
+        Path classes = tempDir.resolve("struts-dispatch-action-jar-classes");
+        Files.createDirectories(classes);
+        var compiler = ToolProvider.getSystemJavaCompiler();
+        assertTrue(compiler != null, "JDK compiler is required for classfile fixture");
+        int exitCode = compiler.run(
+            null,
+            null,
+            null,
+            "-d",
+            classes.toString(),
+            actionSource.toString(),
+            tempDir.resolve("struts-dispatch-action-jar-src/org/apache/struts/action/Action.java").toString(),
+            tempDir.resolve("struts-dispatch-action-jar-src/org/apache/struts/actions/DispatchAction.java").toString(),
+            tempDir.resolve("struts-dispatch-action-jar-src/org/apache/struts/action/ActionForward.java").toString(),
+            tempDir.resolve("struts-dispatch-action-jar-src/org/apache/struts/action/ActionForm.java").toString(),
+            tempDir.resolve("struts-dispatch-action-jar-src/org/apache/struts/action/ActionMapping.java").toString(),
+            tempDir.resolve("struts-dispatch-action-jar-src/javax/servlet/http/HttpServletRequest.java").toString(),
+            tempDir.resolve("struts-dispatch-action-jar-src/javax/servlet/http/HttpServletResponse.java").toString()
+        );
+        assertTrue(exitCode == 0, "struts dispatch action jar fixture compilation failed");
+
+        Path jar = tempDir.resolve(relativePath);
+        Files.createDirectories(jar.getParent());
+        try (JarOutputStream output = new JarOutputStream(Files.newOutputStream(jar))) {
+            addClass(output, classes, "com/vendor/web/JarDispatchAction.class");
+            addClass(output, classes, "org/apache/struts/action/Action.class");
+            addClass(output, classes, "org/apache/struts/actions/DispatchAction.class");
+            addClass(output, classes, "org/apache/struts/action/ActionForward.class");
+            addClass(output, classes, "org/apache/struts/action/ActionForm.class");
+            addClass(output, classes, "org/apache/struts/action/ActionMapping.class");
+            addClass(output, classes, "javax/servlet/http/HttpServletRequest.class");
+            addClass(output, classes, "javax/servlet/http/HttpServletResponse.class");
+        }
+    }
+
+    private void writeStrutsActionFormJar(String relativePath) throws Exception {
+        Path formSource = tempDir.resolve("struts-form-jar-src/com/vendor/web/JarUserForm.java");
+        Files.createDirectories(formSource.getParent());
+        Files.writeString(formSource, """
+            package com.vendor.web;
+            public class JarUserForm extends org.apache.struts.action.ActionForm {
+              private String userId;
+              private static String ignored;
+            }
+            """);
+        writeStubSource("struts-form-jar-src/org/apache/struts/action/ActionForm.java", """
+            package org.apache.struts.action;
+            public class ActionForm {
+            }
+            """);
+
+        Path classes = tempDir.resolve("struts-form-jar-classes");
+        Files.createDirectories(classes);
+        var compiler = ToolProvider.getSystemJavaCompiler();
+        assertTrue(compiler != null, "JDK compiler is required for classfile fixture");
+        int exitCode = compiler.run(
+            null,
+            null,
+            null,
+            "-d",
+            classes.toString(),
+            formSource.toString(),
+            tempDir.resolve("struts-form-jar-src/org/apache/struts/action/ActionForm.java").toString()
+        );
+        assertTrue(exitCode == 0, "struts action form jar fixture compilation failed");
+
+        Path jar = tempDir.resolve(relativePath);
+        Files.createDirectories(jar.getParent());
+        try (JarOutputStream output = new JarOutputStream(Files.newOutputStream(jar))) {
+            addClass(output, classes, "com/vendor/web/JarUserForm.class");
+            addClass(output, classes, "org/apache/struts/action/ActionForm.class");
+        }
+    }
+
+    private void writeDispatchStubSources(String sourceRoot) throws Exception {
+        writeStubSource(sourceRoot + "/org/apache/struts/action/Action.java", """
+            package org.apache.struts.action;
+            public class Action {
+            }
+            """);
+        writeStubSource(sourceRoot + "/org/apache/struts/actions/DispatchAction.java", """
+            package org.apache.struts.actions;
+            public class DispatchAction extends org.apache.struts.action.Action {
+            }
+            """);
+        writeStubSource(sourceRoot + "/org/apache/struts/action/ActionForward.java", """
+            package org.apache.struts.action;
+            public class ActionForward {
+            }
+            """);
+        writeStubSource(sourceRoot + "/org/apache/struts/action/ActionForm.java", """
+            package org.apache.struts.action;
+            public class ActionForm {
+            }
+            """);
+        writeStubSource(sourceRoot + "/org/apache/struts/action/ActionMapping.java", """
+            package org.apache.struts.action;
+            public class ActionMapping {
+            }
+            """);
+        writeStubSource(sourceRoot + "/javax/servlet/http/HttpServletRequest.java", """
+            package javax.servlet.http;
+            public interface HttpServletRequest {
+            }
+            """);
+        writeStubSource(sourceRoot + "/javax/servlet/http/HttpServletResponse.java", """
+            package javax.servlet.http;
+            public interface HttpServletResponse {
+            }
+            """);
+    }
+
+    private void writeStubSource(String relativePath, String content) throws Exception {
+        Path file = tempDir.resolve(relativePath);
+        Files.createDirectories(file.getParent());
+        Files.writeString(file, content);
+    }
+
+    private static void addClass(JarOutputStream output, Path classes, String entryName) throws Exception {
+        output.putNextEntry(new JarEntry(entryName));
+        Files.copy(classes.resolve(entryName), output);
+        output.closeEntry();
     }
 }

@@ -1,6 +1,7 @@
 package org.sainm.codeatlas.analyzers.spring;
 
 import org.sainm.codeatlas.analyzers.AnalyzerScope;
+import org.sainm.codeatlas.analyzers.java.SpoonAnnotationValues;
 import org.sainm.codeatlas.analyzers.java.SpoonSymbolMapper;
 import org.sainm.codeatlas.graph.model.Confidence;
 import org.sainm.codeatlas.graph.model.EvidenceKey;
@@ -19,8 +20,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import spoon.Launcher;
 import spoon.reflect.CtModel;
 import spoon.reflect.cu.SourcePosition;
@@ -33,7 +32,6 @@ import spoon.reflect.reference.CtTypeReference;
 import spoon.reflect.visitor.filter.TypeFilter;
 
 public final class SpringBeanAnalyzer {
-    private static final Pattern STRING_LITERAL = Pattern.compile("\"([^\"]*)\"");
     private static final Set<String> STEREOTYPES = Set.of(
         "Controller",
         "RestController",
@@ -186,10 +184,7 @@ public final class SpringBeanAnalyzer {
         for (CtAnnotation<?> annotation : annotations) {
             String name = annotationName(annotation);
             if (name.equals("Qualifier") || name.equals("Resource") || name.equals("Named")) {
-                Matcher matcher = STRING_LITERAL.matcher(annotation.toString());
-                if (matcher.find()) {
-                    return Optional.of(matcher.group(1));
-                }
+                return SpoonAnnotationValues.firstString(annotation, "name", "value");
             }
         }
         return Optional.empty();

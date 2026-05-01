@@ -95,7 +95,7 @@ public final class SpoonJavaAnalyzer {
                 continue;
             }
             SymbolId initializerSymbol = context.symbols().initializer(initializer);
-            context.nodes().add(GraphNodeFactory.methodNode(initializerSymbol, NodeRole.CODE_MEMBER));
+            context.nodes().add(GraphNodeFactory.methodNode(initializerSymbol, NodeRole.CODE_MEMBER, GraphNodeFactory.sourceMethodProperties()));
             addFact(context, typeSymbol, RelationType.DECLARES, initializerSymbol, initializer.getPosition(), initializer.isStatic() ? "static-initializer" : "instance-initializer", Confidence.CERTAIN);
             addInvocations(context, initializerSymbol, initializer.getElements(new TypeFilter<>(CtInvocation.class)));
         }
@@ -104,13 +104,13 @@ public final class SpoonJavaAnalyzer {
                 continue;
             }
             SymbolId constructorSymbol = context.symbols().constructor(constructor);
-            context.nodes().add(GraphNodeFactory.methodNode(constructorSymbol, NodeRole.CODE_MEMBER));
+            context.nodes().add(GraphNodeFactory.methodNode(constructorSymbol, NodeRole.CODE_MEMBER, GraphNodeFactory.sourceMethodProperties()));
             addFact(context, typeSymbol, RelationType.DECLARES, constructorSymbol, constructor.getPosition(), "constructor", Confidence.CERTAIN);
             addInvocations(context, constructorSymbol, constructor.getElements(new TypeFilter<>(CtInvocation.class)));
         }
         for (CtMethod<?> method : type.getMethods()) {
             SymbolId methodSymbol = context.symbols().method(method);
-            context.nodes().add(GraphNodeFactory.methodNode(methodSymbol, NodeRole.CODE_MEMBER));
+            context.nodes().add(GraphNodeFactory.methodNode(methodSymbol, NodeRole.CODE_MEMBER, GraphNodeFactory.sourceMethodProperties()));
             addFact(context, typeSymbol, RelationType.DECLARES, methodSymbol, method.getPosition(), "method", Confidence.CERTAIN);
             addInvocations(context, methodSymbol, method.getElements(new TypeFilter<>(CtInvocation.class)));
             addLambdas(context, typeSymbol, methodSymbol, method.getElements(new TypeFilter<>(CtLambda.class)));
@@ -204,7 +204,7 @@ public final class SpoonJavaAnalyzer {
         for (int i = 0; i < lambdas.size(); i++) {
             CtLambda<?> lambda = lambdas.get(i);
             SymbolId lambdaSymbol = context.symbols().lambda(lambda, i);
-            context.nodes().add(GraphNodeFactory.methodNode(lambdaSymbol, NodeRole.CODE_MEMBER));
+            context.nodes().add(GraphNodeFactory.methodNode(lambdaSymbol, NodeRole.CODE_MEMBER, GraphNodeFactory.sourceMethodProperties()));
             addFact(context, typeSymbol, RelationType.DECLARES, lambdaSymbol, lambda.getPosition(), "lambda", Confidence.CERTAIN);
             addFact(context, enclosingExecutable, RelationType.CALLS, lambdaSymbol, lambda.getPosition(), "lambda-expression", Confidence.LIKELY);
             addInvocations(context, lambdaSymbol, lambda.getElements(new TypeFilter<>(CtInvocation.class)));

@@ -9,8 +9,21 @@ public record MethodArgumentFlowEvent(
     String argumentName,
     String flowKind,
     String expression,
-    int line
+    int line,
+    String sourcePath
 ) {
+    public MethodArgumentFlowEvent(
+        SymbolId callerMethodSymbol,
+        SymbolId calleeMethodSymbol,
+        String requestParameterName,
+        String argumentName,
+        String flowKind,
+        String expression,
+        int line
+    ) {
+        this(callerMethodSymbol, calleeMethodSymbol, requestParameterName, argumentName, flowKind, expression, line, "_unknown");
+    }
+
     public MethodArgumentFlowEvent {
         if (callerMethodSymbol == null) {
             throw new IllegalArgumentException("callerMethodSymbol is required");
@@ -23,5 +36,6 @@ public record MethodArgumentFlowEvent(
         flowKind = flowKind == null || flowKind.isBlank() ? "method-argument" : flowKind.trim();
         expression = expression == null ? "" : expression.trim();
         line = Math.max(0, line);
+        sourcePath = sourcePath == null || sourcePath.isBlank() ? "_unknown" : sourcePath.trim();
     }
 }

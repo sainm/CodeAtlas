@@ -90,6 +90,36 @@ class SpringBeanAnalyzerTest {
             && fact.evidenceKey().localPath().equals("constructor:repository:mainRepo")));
     }
 
+    @Test
+    void extractsResourceNameQualifierWithoutSourceTextParsing() throws Exception {
+        Path source = tempDir.resolve("src/main/java/com/acme/UserFacade.java");
+        Files.createDirectories(source.getParent());
+        Files.writeString(source, """
+            package com.acme;
+
+            import jakarta.annotation.Resource;
+            import org.springframework.stereotype.Repository;
+            import org.springframework.stereotype.Service;
+
+            @Service
+            class UserFacade {
+                @Resource(name = "archiveRepo")
+                UserRepository repository;
+            }
+
+            @Repository
+            class UserRepository {
+            }
+            """);
+
+        SpringBeanAnalysisResult result = analyze(source);
+
+        assertEquals(1, result.dependencies().size());
+        assertEquals("archiveRepo", result.dependencies().getFirst().qualifier());
+        assertTrue(result.facts().stream().anyMatch(fact -> fact.factKey().relationType() == RelationType.INJECTS
+            && fact.factKey().qualifier().equals("field:repository|archiveRepo")));
+    }
+
     private SpringBeanAnalysisResult analyze(Path source) {
         AnalyzerScope scope = new AnalyzerScope("shop", "_root", "snapshot-1", "run-1", "src/main/java", tempDir);
         return new SpringBeanAnalyzer().analyze(scope, "shop", "src/main/java", List.of(source));

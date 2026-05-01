@@ -22,6 +22,7 @@ class VariableTraceQueryEngineTest {
     private final SymbolId input = SymbolId.logicalPath(SymbolKind.JSP_INPUT, "shop", "_root", "src/main/webapp", "user/edit.jsp", "input:userId");
     private final SymbolId action = SymbolId.method("shop", "_root", "src/main/java", "com.acme.UserAction", "execute", "()V");
     private final SymbolId service = SymbolId.method("shop", "_root", "src/main/java", "com.acme.UserService", "save", "(Ljava/lang/String;)V");
+    private final SymbolId sql = SymbolId.logicalPath(SymbolKind.SQL_STATEMENT, "shop", "_root", "src/main/java", "method://shop/_root/src/main/java/com.acme.UserService#save(java.lang.String):void", "jdbc:31:0");
     private final SymbolId formClass = SymbolId.classSymbol("shop", "_root", "src/main/java", "com.acme.UserForm");
     private final SymbolId validator = SymbolId.logicalPath(SymbolKind.CONFIG_KEY, "shop", "_root", "src/main/webapp", "WEB-INF/validation.xml", "form:userForm.userId");
     private final SymbolId table = SymbolId.logicalPath(SymbolKind.DB_TABLE, "shop", "_root", "db", "users", null);
@@ -76,17 +77,20 @@ class VariableTraceQueryEngineTest {
         InMemoryGraphRepository repository = new InMemoryGraphRepository();
         repository.upsertFact(active(new FactKey(action, RelationType.READS_PARAM, parameter, "request.getParameter:userId"), "UserAction.java", 20, Confidence.LIKELY));
         repository.upsertFact(active(new FactKey(action, RelationType.PASSES_PARAM, service, "request-parameter:userId argument:userId"), "UserAction.java", 21, Confidence.LIKELY));
-        repository.upsertFact(active(new FactKey(service, RelationType.WRITES_TABLE, table, "insert users"), "UserService.java", 31, Confidence.LIKELY));
+        repository.upsertFact(active(new FactKey(service, RelationType.PASSES_PARAM, sql, "jdbc-parameter:1:userId"), "UserService.java", 30, Confidence.LIKELY));
+        repository.upsertFact(active(new FactKey(sql, RelationType.WRITES_TABLE, table, "jdbc-table:users"), "UserService.java", 31, Confidence.LIKELY));
 
         List<VariableTracePath> paths = new VariableTraceQueryEngine().findSinkPaths(
             repository.activeFacts("shop", "snapshot-1"),
             parameter,
-            3,
+            4,
             10
         );
 
         assertTrue(paths.stream().anyMatch(path -> path.endpoint().equals(service)
             && path.steps().stream().anyMatch(step -> step.incomingRelation() == RelationType.PASSES_PARAM)));
+        assertTrue(paths.stream().anyMatch(path -> path.endpoint().equals(sql)
+            && path.steps().stream().anyMatch(step -> step.qualifier().equals("jdbc-parameter:1:userId"))));
         assertTrue(paths.stream().anyMatch(path -> path.endpoint().equals(table)
             && path.steps().stream().anyMatch(step -> step.incomingRelation() == RelationType.WRITES_TABLE)));
     }

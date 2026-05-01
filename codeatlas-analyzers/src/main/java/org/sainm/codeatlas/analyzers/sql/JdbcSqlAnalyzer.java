@@ -2,11 +2,14 @@ package org.sainm.codeatlas.analyzers.sql;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import org.sainm.codeatlas.analyzers.AnalyzerScope;
 import org.sainm.codeatlas.analyzers.java.SpoonSymbolMapper;
 import org.sainm.codeatlas.graph.model.Confidence;
@@ -73,16 +76,36 @@ public final class JdbcSqlAnalyzer {
         List<GraphFact> facts
     ) {
         Map<String, SqlText> stringConstants = stringConstants(method);
+        Map<String, SymbolId> sqlStatementByPreparedStatement = new HashMap<>();
+        Set<CtInvocation<?>> handledSqlInvocations = Collections.newSetFromMap(new IdentityHashMap<>());
         SymbolId methodSymbol = symbols.method(method);
         int index = 0;
+        for (CtLocalVariable<?> localVariable : method.getElements(new TypeFilter<>(CtLocalVariable.class))) {
+            if (localVariable.getDefaultExpression() instanceof CtInvocation<?> invocation
+                && invocation.getExecutable() != null
+                && List.of("prepareStatement", "prepareCall").contains(invocation.getExecutable().getSimpleName())) {
+                Optional<SqlText> sqlText = sqlTextFromJdbcInvocation(invocation, stringConstants);
+                if (sqlText.isEmpty()) {
+                    continue;
+                }
+                String command = commandType(sqlText.get().text());
+                if (command == null) {
+                    continue;
+                }
+                SymbolId sqlStatement = addSqlFacts(scope, projectKey, sourceRootKey, methodSymbol, invocation, sqlText.get(), command, index++, nodes, facts);
+                sqlStatementByPreparedStatement.put(localVariable.getSimpleName(), sqlStatement);
+                handledSqlInvocations.add(invocation);
+            }
+        }
         for (CtInvocation<?> invocation : method.getElements(new TypeFilter<>(CtInvocation.class))) {
+            addPreparedStatementParameterFact(scope, methodSymbol, sqlStatementByPreparedStatement, invocation, nodes, facts);
+            if (handledSqlInvocations.contains(invocation)) {
+                continue;
+            }
             if (invocation.getExecutable() == null || !JDBC_METHODS.contains(invocation.getExecutable().getSimpleName())) {
                 continue;
             }
-            if (invocation.getArguments().isEmpty()) {
-                continue;
-            }
-            Optional<SqlText> sqlText = sqlText(invocation.getArguments().getFirst(), stringConstants);
+            Optional<SqlText> sqlText = sqlTextFromJdbcInvocation(invocation, stringConstants);
             if (sqlText.isEmpty()) {
                 continue;
             }
@@ -92,6 +115,13 @@ public final class JdbcSqlAnalyzer {
             }
             addSqlFacts(scope, projectKey, sourceRootKey, methodSymbol, invocation, sqlText.get(), command, index++, nodes, facts);
         }
+    }
+
+    private Optional<SqlText> sqlTextFromJdbcInvocation(CtInvocation<?> invocation, Map<String, SqlText> stringConstants) {
+        if (invocation.getArguments().isEmpty()) {
+            return Optional.empty();
+        }
+        return sqlText(invocation.getArguments().getFirst(), stringConstants);
     }
 
     private Map<String, SqlText> stringConstants(CtMethod<?> method) {
@@ -129,7 +159,7 @@ public final class JdbcSqlAnalyzer {
         return Optional.empty();
     }
 
-    private void addSqlFacts(
+    private SymbolId addSqlFacts(
         AnalyzerScope scope,
         String projectKey,
         String sourceRootKey,
@@ -166,6 +196,51 @@ public final class JdbcSqlAnalyzer {
                 facts.add(fact(scope, sqlStatement, relationType, column, position, "jdbc-column:" + access.tableName() + "." + columnName, confidence));
             }
         }
+        return sqlStatement;
+    }
+
+    private void addPreparedStatementParameterFact(
+        AnalyzerScope scope,
+        SymbolId methodSymbol,
+        Map<String, SymbolId> sqlStatementByPreparedStatement,
+        CtInvocation<?> invocation,
+        List<GraphNode> nodes,
+        List<GraphFact> facts
+    ) {
+        if (invocation.getExecutable() == null || !invocation.getExecutable().getSimpleName().startsWith("set")) {
+            return;
+        }
+        if (invocation.getTarget() == null || invocation.getArguments().size() < 2) {
+            return;
+        }
+        String statementVariable = variableName(invocation.getTarget());
+        SymbolId sqlStatement = sqlStatementByPreparedStatement.get(statementVariable);
+        if (sqlStatement == null) {
+            return;
+        }
+        String parameterIndex = invocation.getArguments().getFirst().toString();
+        String valueVariable = variableName(invocation.getArguments().get(1));
+        if (valueVariable.isBlank()) {
+            valueVariable = invocation.getArguments().get(1).toString();
+        }
+        nodes.add(GraphNodeFactory.methodNode(methodSymbol, NodeRole.CODE_MEMBER));
+        nodes.add(GraphNodeFactory.sqlNode(sqlStatement));
+        facts.add(fact(
+            scope,
+            methodSymbol,
+            RelationType.PASSES_PARAM,
+            sqlStatement,
+            invocation.getPosition(),
+            "jdbc-parameter:" + parameterIndex + ":" + valueVariable,
+            Confidence.LIKELY
+        ));
+    }
+
+    private String variableName(CtExpression<?> expression) {
+        if (expression instanceof CtVariableRead<?> variableRead && variableRead.getVariable() != null) {
+            return variableRead.getVariable().getSimpleName();
+        }
+        return expression == null ? "" : expression.toString();
     }
 
     private String commandType(String sql) {

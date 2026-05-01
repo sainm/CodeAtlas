@@ -66,15 +66,40 @@
 - [x] Variable trace: JSON reports now include displayName, symbolKindLabel, directionLabel, parameterDisplayName, and endpointDisplayName for low-threshold UI/MCP/Agent rendering.
 - [x] Variable trace: sink paths now continue through downstream `PASSES_PARAM` and SQL table effects after a Java method reads the request parameter.
 - [x] Variable trace backend: Spoon emits `PASSES_PARAM` facts when a request-derived local variable or method parameter is passed as a method argument, reducing reliance on generic `CALLS` expansion.
+- [x] Variable trace backend: method-local alias chains now propagate through local definitions and assignments, covering `request.getParameter -> a -> b -> c -> service.save(c)` and `methodParam -> alias -> dao.insert(alias)`.
+- [x] Variable trace backend: alias propagation is evaluated in source order, so assignments after a call do not retroactively taint earlier arguments.
+- [x] Variable trace backend: expression reads now propagate known sources through simple transformations such as `raw.trim()`, `String.valueOf(raw)`, concatenation, and direct expression arguments.
+- [x] Variable trace backend: Struts ActionForm getter reads through ActionForm aliases now propagate as request parameter sources into downstream business method arguments.
+- [x] Variable trace backend: Struts DynaActionForm `get("property")` / `getString("property")` reads through ActionForm aliases now propagate into downstream business method arguments.
+- [x] Variable trace graph: request-derived argument flows also create caller `READS_PARAM` facts, so sink queries can start from the request parameter and reach Action -> Service paths.
+- [x] Variable trace evidence now carries Java source file paths for request parameter reads/writes and method argument flows instead of `_unknown`.
 - [x] MCP/Agent: added combined `variable.trace` read-only tool so AI workflows can fetch source and sink evidence in one step.
 - [x] JSP flow: added active-facts backend-flow path reports from JSP_PAGE through Struts route, Java call, SQL/table, config, and evidence-carrying relations.
 - [x] Sample: added Spring MVC fixture and project-level regression for Controller -> Service -> Repository -> Mapper -> SQL/table chain.
 - [x] Security: MCP read-only tool planning now rejects raw Cypher/SQL/statement-style arguments even when the tool itself is allowed.
 - [x] Java/Binary: added class/jar indexing so ordinary Java source calls can connect to business code packaged in WEB-INF/lib jars.
 - [x] Java/Binary: class/jar analysis now extracts bytecode method invocation edges from `invokevirtual`, `invokespecial`, `invokestatic`, and `invokeinterface`, so business jar internals can join the call graph.
+- [x] Java/Binary: method nodes now carry code-origin metadata (`source`, `jvm`, `source+jvm`) plus `sourceOnly`, `jvmOnly`, `synthetic`, and `bridge` flags for cross-engine symbol merging.
+- [x] Java/Binary: classfile access flags now distinguish CLASS, INTERFACE, ENUM, and ANNOTATION nodes for business jars.
+- [x] Java/Binary: classfile analysis now records class-level annotation names from runtime-visible and runtime-invisible annotation attributes for business jars.
+- [x] Java/Binary: classfile analysis now emits field nodes and class -> field `DECLARES` facts for business jars.
+- [x] Java/Binary/JPA: jar-contained entity classes can emit default `Entity -> table` and `field -> column` `BINDS_TO` facts from classfile annotations, skipping static and transient fields.
+- [x] Java/Binary/JPA: classfile annotation string values are read for jar-contained `@Table(name/value)` and `@Column(name/value)` / `@JoinColumn(name)` mapping names.
+- [x] Java/Binary/Spring: jar-contained Controller/RestController method annotations now emit API endpoint `ROUTES_TO` facts for common Spring mapping annotations.
+- [x] Struts1/Java Binary: Struts action routing now uses jar-contained method nodes and binary inheritance facts, so config actions can route to Action#execute inside business jars.
+- [x] Struts1/Java Binary: DispatchAction configured with `parameter="method"` can route to matching Struts-signature methods inside business jars.
+- [x] Struts1/Java Binary: jar-contained ActionForm subclasses now bind non-static classfile fields to request parameters for variable trace entrypoints.
 - [x] Struts1: standard action mappings now link action path to Action#execute, allowing JSP -> Action method -> business layer paths.
 - [x] Struts1: action routing now follows indirect Action/DispatchAction/LookupDispatchAction inheritance chains, including inherited `execute` and inherited `getKeyMethodMap` mappings.
+- [x] Struts1: LookupDispatchAction `getKeyMethodMap()` extraction now uses Spoon AST invocation/literal analysis instead of source regex.
+- [x] Struts1: custom ActionMapping configuration is modeled from `<action-mappings type="...">` and per-action `className`, producing `USES_CONFIG` evidence to the custom mapping classes.
+- [x] Struts1: Action `mapping.findForward("name")` calls now create method-to-forward config facts, and struts-config forward names link to configured JSP/action/tiles targets.
+- [x] Struts1: direct `new ActionForward("/path.jsp")` and `new ActionForward("/path.do")` constructors now create method-to-JSP/action forward facts.
+- [x] Struts1: named `new ActionForward("name", "/path.jsp", redirect)` constructors use the path argument, not the forward name, when creating navigation facts.
+- [x] Struts1: `response.sendRedirect("/path.do")` and `new ActionRedirect("/path.jsp")` now create method-to-action/JSP navigation facts.
 - [x] SQL: added JDBC SQL literal analysis for prepareStatement/executeQuery/executeUpdate/execute/addBatch, producing method -> SQL -> table facts.
+- [x] SQL/JDBC: PreparedStatement setter calls such as `ps.setString(1, name)` now create `Method -PASSES_PARAM-> SqlStatement` facts with parameter index and variable name.
+- [x] SQL/JPA: `@Entity/@Table/@Column` analysis now creates entity class -> table and field -> column `BINDS_TO` facts, skipping static and transient fields.
 - [x] Struts1/plugin: plugin XML properties are resolved as initialization/import configuration sources with XML entries and possible table effects.
 - [x] Java/common: stateless static support classes are classified as utility nodes by structure, and static utility calls are marked in the call graph.
 - [x] UI: added business-friendly Chinese labels for relation types, symbols, evidence, confidence, risk, and default path display for non-system users.
@@ -83,6 +108,8 @@
 - [x] Query UX: added `/api/query/resolve` to turn business words such as request parameters, JSP paths, action paths, and table names into suggested executable symbols.
 - [x] Rules: scattered Java naming heuristics were reduced by centralizing legacy layer conventions and removing name-based entrypoint/report classification.
 - [x] Code quality: reduced long analyzer method signatures by introducing context records for Spoon Java and Spring bean analysis.
+- [x] Code quality: Java annotation values for Spring MVC, Spring injection qualifiers, and MyBatis annotation SQL now use Spoon annotation value APIs instead of regex over annotation source text.
+- [x] Security: Agent/MCP write-capable tool calls require explicit `confirmWrite=true` and `confirmationIntent=ALLOW_WRITE`; unconfirmed writes are denied before execution.
 
 ## 1. 基础工程
 
@@ -128,6 +155,7 @@
 - [x] 评估 Gradle Tooling API，用于复杂 Gradle 项目增强。
 - [ ] 使用 ASM/ClassGraph 快速扫描 class、annotation、继承、实现、资源文件。
 - [x] 使用轻量 class/jar 索引建立业务 jar class/method 节点，后续再以 ASM/ClassGraph 增强 annotation 和字节码调用边。
+- [x] 轻量 class/jar 索引识别 interface、enum、annotation 类型节点。
 - [x] 建立文件到符号的快速索引。
 - [x] 建立 changed file -> candidate symbol 映射。
 - [x] 从 unified diff 文本定位 changed files。
@@ -144,7 +172,7 @@
 - [x] 提取 line number、file path、method signature。
 - [x] 将 Spoon `CtMethod` 映射到统一 `symbolId`。
 - [x] 提取构造器、静态初始化块、内部类、匿名类和 lambda 的稳定标识。
-- [ ] 标记 synthetic/bridge/source-only/jvm-only 方法。
+- [x] 标记 synthetic/bridge/source-only/jvm-only 方法。
 - [ ] 保留 JavaParser 作为可选快速扫描器，不作为主事实源。
 - [ ] 使用 JDT 或 Spoon 内部 JDT 能力作为绑定解析兜底。
 
@@ -200,6 +228,7 @@
 - [x] Struts1：解析 plug-in、set-property、TilesPlugin、ValidatorPlugIn 等插件配置。
 - [x] Struts1：解析自定义 plug-in 读取的 XML 初始化配置，并将 XML 条目建模为 CONFIG_KEY。
 - [x] Struts1：解析 controller、processorClass、multipartClass、inputForward、maxFileSize 等控制器配置。
+- [x] Struts1：解析自定义 ActionMapping：`action-mappings type` 和单个 `action className`。
 - [x] Struts1：解析 global-forwards、message-resources、global/action exception。
 - [x] Struts1：解析 DynaActionForm、form-property，并建立 request parameter 绑定。
 - [x] Struts1：解析 Tiles definitions、definition extends、put value JSP。
@@ -224,10 +253,11 @@
 - [x] 建立 SqlStatement -> DbTable/DbColumn 关系。
 - [x] 建立 SqlStatement -> DbTable 关系。
 - [x] 建立 JDBC method -> SqlStatement -> DbTable 关系。
+- [x] 建立 JDBC PreparedStatement 参数绑定关系：method -> SqlStatement，qualifier 包含参数位置和变量名。
 - [x] 确保 MVP 最小链路包含 Mapper 方法 `Method -[:BINDS_TO]-> SqlStatement`。
 - [x] 支持动态 SQL 的保守解析和 `POSSIBLE` 标注。
 - [x] 支持 JDBC 部分动态拼接 SQL 的保守解析和 `POSSIBLE` 标注。
-- [ ] 后续支持 JPA Entity -> table 映射。
+- [x] 后续支持 JPA Entity -> table 映射。
 
 ## 8. 调用关系与变量追踪
 
@@ -240,12 +270,14 @@
 - [x] 支持接口方法到实现方法候选关系。
 - [x] 实现方法内 def-use 链。
 - [x] 追踪局部变量赋值、参数传递、return 来源。
+- [x] 追踪方法内局部变量别名链，例如 `a = request.getParameter("x"); b = a; c = b; service.save(c)`。
 - [x] 识别 `request.getParameter`、`getAttribute`、`setAttribute`。
 - [x] 识别 ActionForm 字段绑定。
 - [x] 识别 getter/setter 简单传播。
 - [x] 实现 Controller/Action -> Service -> DAO 参数传播。
 - [x] 实现 JSP input -> request parameter -> Java parameter 链路。
 - [x] 输出变量来源和流向证据路径。
+- [x] 变量追踪证据包含 Java 文件路径和行号，便于定位变量在各文件中的位置。
 
 ## 9. 影响分析
 
@@ -417,7 +449,7 @@
 - [ ] AI 请求日志脱敏。
 - [x] MCP 工具白名单。
 - [x] 禁止任意数据库查询暴露。
-- [ ] 禁止无确认写操作。
+- [x] 禁止无确认写操作。
 - [ ] 项目级访问控制。
 - [x] 审计 Agent 和 MCP 调用。
 - [x] 标记 AI_ASSISTED 结果，禁止混淆为确定事实。

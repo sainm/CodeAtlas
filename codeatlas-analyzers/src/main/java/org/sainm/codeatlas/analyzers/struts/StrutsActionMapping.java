@@ -7,10 +7,15 @@ public record StrutsActionMapping(
     String scope,
     String input,
     String parameter,
-    String forward
+    String forward,
+    String className
 ) {
+    public StrutsActionMapping(String path, String type, String name, String scope, String input, String parameter, String forward) {
+        this(path, type, name, scope, input, parameter, forward, null);
+    }
+
     public StrutsActionMapping(String path, String type, String name, String scope, String input, String parameter) {
-        this(path, type, name, scope, input, parameter, null);
+        this(path, type, name, scope, input, parameter, null, null);
     }
 
     public StrutsActionMapping {
@@ -21,6 +26,7 @@ public record StrutsActionMapping(
         input = blankToNull(input);
         parameter = blankToNull(parameter);
         forward = blankToNull(forward);
+        className = blankToNull(className);
     }
 
     private static String require(String value, String name) {

@@ -46,6 +46,7 @@ public final class StrutsConfigAnalyzer {
             List<GraphNode> nodes = new ArrayList<>();
             List<GraphFact> facts = new ArrayList<>();
             addControllers(scope, projectKey, sourceRootKey, configXml, document, controllers, nodes, facts);
+            addActionMappingsConfig(scope, projectKey, sourceRootKey, configXml, document, nodes, facts);
             addGlobalForwards(scope, projectKey, sourceRootKey, configXml, modulePrefix, document, forwards, nodes, facts);
             addMessageResources(scope, projectKey, sourceRootKey, configXml, document, messageResources, nodes, facts);
             addGlobalExceptions(scope, projectKey, sourceRootKey, configXml, modulePrefix, document, exceptions, nodes, facts);
@@ -59,7 +60,8 @@ public final class StrutsConfigAnalyzer {
                     action.getAttribute("scope"),
                     action.getAttribute("input"),
                     action.getAttribute("parameter"),
-                    action.getAttribute("forward")
+                    action.getAttribute("forward"),
+                    action.getAttribute("className")
                 );
                 actions.add(mapping);
                 String actionPath = moduleActionPath(modulePrefix, mapping.path());
@@ -148,6 +150,11 @@ public final class StrutsConfigAnalyzer {
             addTargetNode(nodes, target);
             facts.add(fact(scope, actionPath, RelationType.FORWARDS_TO, target, configXml, "action-forward", Confidence.CERTAIN));
         }
+        if (mapping.className() != null) {
+            SymbolId mappingClass = SymbolId.classSymbol(projectKey, scope.moduleKey(), sourceRootKey, mapping.className());
+            nodes.add(GraphNodeFactory.classNode(mappingClass, NodeRole.CODE_TYPE));
+            facts.add(fact(scope, actionPath, RelationType.USES_CONFIG, mappingClass, configXml, "action-mapping-className", Confidence.CERTAIN));
+        }
     }
 
     private void addFormPropertyFacts(
@@ -202,7 +209,11 @@ public final class StrutsConfigAnalyzer {
             StrutsForward strutsForward = new StrutsForward(actionPathValue, forward.getAttribute("name"), forward.getAttribute("path"));
             forwards.add(strutsForward);
             SymbolId target = jspOrActionTarget(projectKey, scope.moduleKey(), sourceRootKey, configXml, modulePrefix, strutsForward.path());
+            SymbolId forwardConfig = forwardConfigSymbol(projectKey, scope.moduleKey(), sourceRootKey, strutsForward.name());
+            nodes.add(GraphNodeFactory.configNode(forwardConfig));
             addTargetNode(nodes, target);
+            facts.add(fact(scope, actionPath, RelationType.USES_CONFIG, forwardConfig, configXml, "forward-config:" + strutsForward.name(), Confidence.CERTAIN));
+            facts.add(fact(scope, forwardConfig, RelationType.FORWARDS_TO, target, configXml, "forward:" + strutsForward.name(), Confidence.CERTAIN));
             facts.add(fact(scope, actionPath, RelationType.FORWARDS_TO, target, configXml, "forward:" + strutsForward.name(), Confidence.CERTAIN));
         }
     }
@@ -229,7 +240,11 @@ public final class StrutsConfigAnalyzer {
                 StrutsForward strutsForward = new StrutsForward("_global", forward.getAttribute("name"), forward.getAttribute("path"));
                 forwards.add(strutsForward);
                 SymbolId target = jspOrActionTarget(projectKey, scope.moduleKey(), sourceRootKey, configXml, modulePrefix, strutsForward.path());
+                SymbolId forwardConfig = forwardConfigSymbol(projectKey, scope.moduleKey(), sourceRootKey, strutsForward.name());
+                nodes.add(GraphNodeFactory.configNode(forwardConfig));
                 addTargetNode(nodes, target);
+                facts.add(fact(scope, globalConfig, RelationType.USES_CONFIG, forwardConfig, configXml, "global-forward-config:" + strutsForward.name(), Confidence.CERTAIN));
+                facts.add(fact(scope, forwardConfig, RelationType.FORWARDS_TO, target, configXml, "global-forward:" + strutsForward.name(), Confidence.CERTAIN));
                 facts.add(fact(scope, globalConfig, RelationType.FORWARDS_TO, target, configXml, "global-forward:" + strutsForward.name(), Confidence.CERTAIN));
             }
         }
@@ -462,6 +477,30 @@ public final class StrutsConfigAnalyzer {
         }
     }
 
+    private void addActionMappingsConfig(
+        AnalyzerScope scope,
+        String projectKey,
+        String sourceRootKey,
+        Path configXml,
+        Document document,
+        List<GraphNode> nodes,
+        List<GraphFact> facts
+    ) {
+        NodeList actionMappingsNodes = document.getElementsByTagName("action-mappings");
+        for (int i = 0; i < actionMappingsNodes.getLength(); i++) {
+            Element actionMappings = (Element) actionMappingsNodes.item(i);
+            String type = actionMappings.getAttribute("type");
+            if (type == null || type.isBlank()) {
+                continue;
+            }
+            SymbolId actionMappingsConfig = configSymbol(projectKey, scope.moduleKey(), sourceRootKey, configXml, "struts-action-mappings:" + i);
+            SymbolId mappingClass = SymbolId.classSymbol(projectKey, scope.moduleKey(), sourceRootKey, type);
+            nodes.add(GraphNodeFactory.configNode(actionMappingsConfig));
+            nodes.add(GraphNodeFactory.classNode(mappingClass, NodeRole.CODE_TYPE));
+            facts.add(fact(scope, actionMappingsConfig, RelationType.USES_CONFIG, mappingClass, configXml, "action-mappings-type", Confidence.CERTAIN));
+        }
+    }
+
     private void addControllerClassFact(
         AnalyzerScope scope,
         String projectKey,
@@ -496,6 +535,10 @@ public final class StrutsConfigAnalyzer {
 
     private SymbolId configSymbol(String projectKey, String moduleKey, String sourceRootKey, Path configXml, String localId) {
         return SymbolId.logicalPath(SymbolKind.CONFIG_KEY, projectKey, moduleKey, sourceRootKey, configXml.toString(), localId);
+    }
+
+    public static SymbolId forwardConfigSymbol(String projectKey, String moduleKey, String sourceRootKey, String forwardName) {
+        return SymbolId.logicalPath(SymbolKind.CONFIG_KEY, projectKey, moduleKey, sourceRootKey, "struts-forward", forwardName);
     }
 
     private SymbolId jspOrActionTarget(String projectKey, String moduleKey, String sourceRootKey, Path configXml, String modulePrefix, String path) {

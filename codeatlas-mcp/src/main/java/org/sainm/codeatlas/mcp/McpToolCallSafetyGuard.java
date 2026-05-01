@@ -20,11 +20,14 @@ public final class McpToolCallSafetyGuard {
         if (descriptor == null) {
             throw new IllegalArgumentException("Tool descriptor is required");
         }
-        if (!descriptor.readOnly()) {
-            throw new IllegalArgumentException("MCP tool must be read-only: " + descriptor.name().value());
-        }
         if (arguments == null || arguments.isEmpty()) {
+            if (!descriptor.readOnly()) {
+                throw new IllegalArgumentException("Write MCP tool requires explicit confirmation: " + descriptor.name().value());
+            }
             return;
+        }
+        if (!descriptor.readOnly() && !hasWriteConfirmation(arguments)) {
+            throw new IllegalArgumentException("Write MCP tool requires explicit confirmation: " + descriptor.name().value());
         }
         for (String key : arguments.keySet()) {
             String normalized = normalize(key);
@@ -43,5 +46,10 @@ public final class McpToolCallSafetyGuard {
             .trim()
             .toLowerCase(Locale.ROOT);
     }
-}
 
+    private boolean hasWriteConfirmation(Map<String, Object> arguments) {
+        Object confirmWrite = arguments.get("confirmWrite");
+        Object confirmationIntent = arguments.get("confirmationIntent");
+        return Boolean.TRUE.equals(confirmWrite) && "ALLOW_WRITE".equals(confirmationIntent);
+    }
+}
