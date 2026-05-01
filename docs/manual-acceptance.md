@@ -41,6 +41,13 @@ Acceptance:
 ## 3. Graph Contract
 
 - [ ] `SymbolId` represents project, module, source root, file, class, method, field, JSP, SQL, table, column, action path, config key, and request parameter identities.
+- [ ] `SymbolId` parser can round-trip every canonical id without losing kind, project, module, source root, owner/path, member, descriptor, or local fragment.
+- [ ] Java method `SymbolId` uses erased JVM descriptor and distinguishes overloads, constructors, static initializers, bridge methods, and synthetic methods.
+- [ ] JSP/XML/SQL/report `SymbolId` uses repository-relative source root and path, never local absolute paths.
+- [ ] Windows path comparisons use an auxiliary normalized lowercase key without changing canonical path casing.
+- [ ] Unresolved source-only Java symbols are marked provisional and can be replaced by a resolved canonical id through alias mapping.
+- [ ] Alias lookup can resolve Spoon source signatures, Tai-e/Soot signatures, JVM internal names, and legacy ids to the canonical `SymbolId`.
+- [ ] Conflicting normalized symbols create a conflict record instead of silently overwriting graph facts.
 - [ ] `FactKey` and `EvidenceKey` are stable value objects.
 - [ ] `GraphFact` includes `confidence`, `sourceType`, `snapshotId`, `analysisRunId`, and `scopeKey`.
 - [ ] AI-assisted facts are not marked `CERTAIN`.
@@ -271,7 +278,24 @@ Expected relation keywords:
 - [ ] Full interactive graph visualization with Cytoscape.js or React Flow.
 - [ ] Enterprise-grade auth, rate limiting, audit, and encrypted API key storage.
 
-## 12. Result
+## 12. Review Hardening Manual Checks
+
+- [ ] JSP evidence distinguishes original JSP location from generated servlet location.
+- [ ] SMAP missing/ambiguous cases are visible in evidence instead of silently producing certain line numbers.
+- [ ] Struts1 ActionForm to ActionPath/Method binding can be inspected as an explicit graph fact.
+- [ ] Seasar2 dicon `autoBinding` and include/component/property/aspect facts are visible as candidate configuration facts.
+- [ ] Seasar2 candidate facts are not presented as deterministic MVP impact paths.
+- [ ] Fast impact report can run from committed snapshot and changed-scope refresh without full-project Spoon rebuild.
+- [ ] Failed incremental run keeps the previous committed active facts visible and does not expose staged facts.
+- [ ] Field-level impact can use `MAPS_TO_COLUMN` / `READS_COLUMN` / `WRITES_COLUMN` once implemented.
+- [ ] Report Adapter can show affected report definitions for a changed DB table/column once implemented.
+- [ ] Native/JNI boundary paths show `analysisBoundary=NATIVE` and manual review requirements once implemented.
+- [ ] Neo4j batch upsert benchmark covers hotspot node write contention and deadlock retry once implemented.
+- [ ] Neo4j batch upsert uses stable write order and idempotent retry once implemented.
+- [ ] MCP audit logs include structured request metadata but not full source snippets or API keys.
+- [ ] Benchmark results include small fixtures, a medium Spring/MyBatis project, and a Struts1/JSP legacy fixture.
+
+## 13. Result
 
 - [ ] Pass: current baseline is acceptable for continued MVP development.
 - [ ] Conditional pass: build passes but listed follow-up issues remain.

@@ -718,10 +718,30 @@ public final class CodeAtlasHttpServer {
 
     private String projectOverviewJson(String projectId, String snapshotId) {
         List<Map<String, String>> capabilities = List.of(
-            Map.of("label", "Coverage", "title", "Java / JSP / Struts1 / Spring / SQL / Jar", "status", "ready"),
-            Map.of("label", "Graph", "title", "Neo4j active facts with evidence and confidence", "status", "ready"),
-            Map.of("label", "Query", "title", "Natural-language entrypoints with exact symbol fallback", "status", "ready"),
-            Map.of("label", "Speed", "title", "Fast static result first, deep supplement on demand", "status", "ready")
+            Map.of(
+                "label", "Coverage",
+                "title", "Java / JSP / Struts1 / Spring / SQL / Jar",
+                "status", "ready",
+                "text", "Static analysis facts connect pages, actions, business code, configuration, and data access."
+            ),
+            Map.of(
+                "label", "Graph",
+                "title", "Neo4j active facts with evidence and confidence",
+                "status", "ready",
+                "text", "Every visible relation is backed by source type, confidence, and evidence keys for review."
+            ),
+            Map.of(
+                "label", "Query",
+                "title", "Natural-language entrypoints with exact symbol fallback",
+                "status", "ready",
+                "text", "Business questions resolve to exact symbols before graph, variable, JSP, SQL, or impact queries run."
+            ),
+            Map.of(
+                "label", "Speed",
+                "title", "Fast static result first, deep supplement on demand",
+                "status", "ready",
+                "text", "Fast graph answers return first; Tai-e, AI/RAG, and FFM remain optional supplements."
+            )
         );
         List<Map<String, String>> analysisStatus = List.of(
             Map.of("id", "fast-static", "label", "Fast static analysis", "state", "ready", "detail", "Spoon/Jasper/JDBC/MyBatis/Jar facts feed the graph"),
@@ -895,36 +915,15 @@ public final class CodeAtlasHttpServer {
     }
 
     private String mapJson(Map<String, ?> map) {
-        return map.entrySet().stream()
-            .map(entry -> "\"" + escape(entry.getKey()) + "\":" + valueJson(entry.getValue()))
-            .collect(Collectors.joining(",", "{", "}"));
+        return JsonSupport.map(map);
     }
 
     private String valueJson(Object value) {
-        if (value instanceof Number || value instanceof Boolean) {
-            return value.toString();
-        }
-        if (value instanceof Map<?, ?> rawMap) {
-            Map<String, Object> converted = new LinkedHashMap<>();
-            rawMap.forEach((key, mapValue) -> converted.put(String.valueOf(key), mapValue));
-            return mapJson(converted);
-        }
-        if (value instanceof Iterable<?> iterable) {
-            String joined = java.util.stream.StreamSupport.stream(iterable.spliterator(), false)
-                .map(this::valueJson)
-                .collect(Collectors.joining(","));
-            return "[" + joined + "]";
-        }
-        return "\"" + escape(value == null ? "" : value.toString()) + "\"";
+        return JsonSupport.value(value);
     }
 
     private String escape(String value) {
-        return value
-            .replace("\\", "\\\\")
-            .replace("\"", "\\\"")
-            .replace("\n", "\\n")
-            .replace("\r", "\\r")
-            .replace("\t", "\\t");
+        return JsonSupport.escape(value);
     }
 
     private void sendUnchecked(HttpExchange exchange, int status, String body) {

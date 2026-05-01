@@ -143,6 +143,8 @@ class CodeAtlasHttpServerTest {
             assertTrue(response.body().contains("\"entrypoints\""));
             assertTrue(response.body().contains("Struts1"));
             assertTrue(response.body().contains("JSP"));
+            assertTrue(response.body().contains("\"text\""));
+            assertTrue(response.body().contains("Static analysis facts"));
         } finally {
             server.stop();
         }

@@ -24,7 +24,7 @@
   - 结果：未发现空白错误或冲突标记。
   - 整理：已补充 `.gitattributes`，默认文本文件按 LF 归一化，Windows 脚本按 CRLF 保留。
 - [x] `Select-String -Path docs/task.md -Pattern "^- \[ \]"`
-  - 结果：无未完成 checkbox。
+  - 结果：Review Hardening backlog 存在未完成增强任务；这些任务不属于当前 MVP 完成门槛。
 
 ## 功能验收清单
 
@@ -58,3 +58,8 @@
 - `/api/project/overview` 当前是轻量状态接口，后续可接入真实扫描任务、图谱统计、最近报告和索引状态。
 - FFM 与 Tai-e 均已按增强路径接入契约，默认仍应由 benchmark/可选 worker 控制，不作为 MVP 强依赖。
 - Windows 工作区已加入 `.gitattributes` 换行策略；后续提交前仍建议保留 `git diff --check`。
+- Jasper generated servlet 到 JSP 原文件的精确 SMAP 回映射仍是增强任务；当前不能把所有 generated line 都视作 1:1 JSP line。
+- 报表资源、字段级 `MAPS_TO_COLUMN`、JNI/native 边界识别、Neo4j 并发 batch upsert 是企业落地硬化任务，已记录在 `docs/design.md` 和 `docs/task.md`。
+- Seasar2 当前 MVP 范围只接受 discovery/candidate 事实，不接受“确定性影响链路已闭环”的验收表述。
+- 10 到 30 秒初版报告依赖 committed snapshot、symbol index、Neo4j/JVM cache 和 changed-scope 增量刷新，不以全项目 Spoon 重建作为前置条件。
+- 增量写入必须满足 staging/commit/rollback 原子性；失败时继续暴露上一 committed active facts。

@@ -1,5 +1,12 @@
 # CodeAtlas Task List
 
+状态标记：
+
+- `[x]`：已有代码或测试覆盖，作为当前实现事实记录。
+- `[proto]`：原型可用或样例可跑，尚未达到生产验收。
+- `[design]`：设计已确定，等待实现。
+- `[ ]`：未完成。
+
 ## 0. Recent Progress Memory
 
 - [x] JSP: semantic analysis now records parserSource/parserName/fallbackReason so Jasper, Jasper+tokenizer merge, and tokenizer fallback are distinguishable.
@@ -176,6 +183,18 @@
 - [x] 实现 `symbolId` 生成器，覆盖重载、构造器、静态初始化块、内部类、泛型擦除、bridge/synthetic 方法。
 - [x] 规范 source signature 与 JVM descriptor 的映射。
 - [x] 规范 module/sourceRoot/path 大小写和分隔符归一化。
+- [ ] 实现 `SymbolIdParser`，支持 canonical id round-trip 解析。
+- [ ] 实现 `SymbolIdNormalizer` 纯函数接口：ProjectContext + ModuleContext + SourceContext + SymbolRawInput -> canonical id + metadata。
+- [ ] 实现 path normalizer：仓库相对路径、`/` 分隔符、`.`/`..` 处理、percent encoding、case-insensitive 辅助 key。
+- [ ] 实现 Java descriptor normalizer：source signature/Tai-e signature/JVM descriptor -> erased JVM descriptor。
+- [ ] 实现 unresolved/provisional descriptor marker 和 resolved canonical replacement。
+- [ ] 实现 alias registry：source signature、Soot/Tai-e signature、JVM internal name、legacy id -> canonical id。
+- [ ] 实现 conflict record：canonical id 相同但 owner/source range/type 冲突时不覆盖事实。
+- [ ] 实现 JSP form/input/tag stable key 生成：action/method/name/property/path/line/ordinal。
+- [ ] 实现 XML/config key stable path 生成。
+- [ ] 实现 SQL statement hash fallback 和 MyBatis namespace#statementId 归一化。
+- [ ] 实现 report/native/synthetic symbol kind 归一化。
+- [ ] upsert 前强制执行 `parse -> normalize -> assemble` round-trip 校验。
 - [x] 实现 `factKey` 和 `evidenceKey` 生成器。
 - [x] 实现 Project、Module、File、Class、Method、Field 基础节点写入。
 - [x] 实现 JspPage、JspForm、JspInput、SqlStatement、DbTable、DbColumn 节点写入。
@@ -499,28 +518,116 @@
 
 ## 19. MVP 验收清单
 
-- [x] 能扫描一个混合 Java Web 项目。
-- [x] 能识别 Spring Controller 和 Struts1 Action。
-- [x] 能解析 JSP form/input/action。
-- [x] 能解析 Struts1 module prefix、plug-in、controller、Tiles、Validator、DynaActionForm 和 JSP tag 语义。
-- [x] 能解析 Java class/method/call。
-- [x] 能解析 MyBatis XML 和 SQL table。
-- [x] 能写入 Neo4j 图谱。
-- [x] 能稳定生成 symbolId、factKey、evidenceKey。
-- [x] 能处理 snapshot/tombstone，避免旧关系残留。
-- [x] 能打通 Spring RequestMapping、Struts action、JSP form/action、method direct call、MyBatis statement 五类最小边。
-- [x] Seasar2 只要求 dicon/component discovery，不要求确定性影响链路。
-- [x] 能从 Git diff 输出影响报告。
-- [x] 能通过 REST API 查询 symbol、impact report、path query、variable trace、jsp flow。
-- [x] 能通过问答式搜索触发符号检索、变量追踪、影响分析、JSP 链路、SQL/table 影响。
-- [x] 查询结果能按答案摘要、证据路径、证据列表、图谱与明细展示。
-- [x] 查询结果默认以业务友好文案展示，原始 symbolId/JSON 作为下钻细节保留。
-- [x] 能展示 JSP -> Action/Controller -> Service -> DAO/SQL/table 路径。
-- [x] 能追踪 request parameter 的来源和流向。
-- [x] 能给每条影响路径标注 evidence 和 confidence。
-- [x] 能在 10 到 30 秒输出初版报告。
-- [x] 能用 AI 生成风险摘要和测试建议。
-- [x] 能通过 MCP 只读查询核心分析能力。
-- [x] 项目使用 Java 25 + Gradle 构建。
-- [x] 能通过可视化前端查看项目概览、影响报告、调用路径、变量流和 JSP 链路。
-- [x] Tai-e 和 FFM 不作为 MVP 验收前置条件。
+本节只记录主线能力的当前验收状态；精确 SMAP、字段级列影响、生产级 Neo4j 增量写入、confidence 聚合实现、MCP 安全加固和 benchmark 靶机见第 20 节，不因本节通过而视为完成。
+
+| 状态 | 验收项 | 说明 |
+| --- | --- | --- |
+| `[proto]` | 能扫描一个混合 Java Web 项目 | 已有样例/fixture 覆盖，仍需中型真实项目 benchmark。 |
+| `[x]` | 能识别 Spring Controller 和 Struts1 Action | 主线实现已覆盖。 |
+| `[x]` | 能解析 JSP form/input/action | Jasper + tolerant parser 主线可用。 |
+| `[x]` | 能解析 Struts1 module prefix、plug-in、controller、Tiles、Validator、DynaActionForm 和 JSP tag 语义 | 主线实现已覆盖。 |
+| `[x]` | 能解析 Java class/method/call | 源码和部分字节码链路已覆盖。 |
+| `[x]` | 能解析 MyBatis XML、JDBC SQL 和 SQL table | 字段级 hardening 仍在第 20 节。 |
+| `[proto]` | 能写入 Neo4j 图谱 | 基础写入/查询可用，生产级 batch/staging/deadlock 策略未完成。 |
+| `[proto]` | 能稳定生成 symbolId、factKey、evidenceKey | 基础可用；SymbolId parser/alias/round-trip 仍按最新规范收紧。 |
+| `[proto]` | 能处理 snapshot/tombstone，避免旧关系残留 | 已有回归覆盖；完整 analysisRun 原子状态机未完成。 |
+| `[x]` | 能打通 Spring RequestMapping、Struts action、JSP form/action、method direct call、MyBatis statement 五类最小边 | MVP 主线闭环。 |
+| `[x]` | Seasar2 只要求 dicon/component discovery，不要求确定性影响链路 | 不作为确定性影响报告阻塞项。 |
+| `[proto]` | 能从 Git diff 输出影响报告 | 快速报告可用，需真实项目性能验收。 |
+| `[x]` | 能通过 REST API 查询 symbol、impact report、path query、variable trace、jsp flow | 主线接口可用。 |
+| `[x]` | 能通过问答式搜索触发符号检索、变量追踪、影响分析、JSP 链路、SQL/table 影响 | 查询规划主线可用。 |
+| `[x]` | 查询结果能按答案摘要、证据路径、证据列表、图谱与明细展示 | UI 主线可用。 |
+| `[x]` | 查询结果默认以业务友好文案展示，原始 symbolId/JSON 作为下钻细节保留 | 面向非系统开发人员的低门槛展示已纳入主线。 |
+| `[x]` | 能展示 JSP -> Action/Controller -> Service -> DAO/SQL/table 路径 | 主线可用。 |
+| `[x]` | 能追踪 request parameter 的来源和流向 | 包含 JSP input/source 和 Java sink 主线。 |
+| `[proto]` | 能给每条影响路径标注 evidence 和 confidence | 展示可用；聚合算法和冲突保留见第 20 节。 |
+| `[proto]` | 能在 10 到 30 秒输出初版报告 | 有合成回归 guard，仍需中型项目 benchmark。 |
+| `[proto]` | 能用 AI 生成风险摘要和测试建议 | AI/静态 fallback 可用，生产级 prompt/脱敏/审计继续加固。 |
+| `[proto]` | 能通过 MCP 只读查询核心分析能力 | 工具契约可用，安全实现细节见第 20 节。 |
+| `[x]` | 项目使用 Java 25 + Gradle 构建 | 工程基线已确定。 |
+| `[x]` | 能通过可视化前端查看项目概览、影响报告、调用路径、变量流和 JSP 链路 | 前端主线可用。 |
+| `[x]` | Tai-e 和 FFM 不作为 MVP 验收前置条件 | 增强能力不能阻塞 MVP。 |
+
+## 20. Review Hardening 待办
+
+### JSP/SMAP
+
+- [ ] 实现 Jasper generated servlet SMAP parser。
+- [ ] evidence 增加 `jspPath`、`jspLineStart`、`jspLineEnd`、`generatedServletPath`、`generatedLineStart`、`generatedLineEnd`。
+- [ ] 对 include/tagfile/custom tag 多来源映射保留候选列表。
+- [ ] SMAP 缺失或歧义时输出 `mappingStatus` 和降级 confidence。
+- [ ] UI evidence panel 默认展示 JSP 原文件位置，并可展开 generated servlet 位置。
+
+### Graph Model
+
+- [ ] 增加 `MAPS_TO_COLUMN` 关系类型。
+- [ ] 增加 `READS_COLUMN`、`WRITES_COLUMN` 字段级 SQL 关系类型。
+- [ ] 建模 `ActionPath -[:BINDS_TO]-> FormBean/Class`。
+- [ ] 建模 `FormBeanField -[:BINDS_TO]-> RequestParameter`。
+- [ ] 建模 Seasar2 `autoBinding`、`namespace`、`include`、`component`、`property`、`aspect`、`interType` 配置事实。
+- [ ] 明确 Seasar2 MVP 输出只作为 `POSSIBLE` discovery/candidate，不进入确定性影响路径验收。
+- [ ] 区分 `BINDS_TO` 与 `MAPS_TO_COLUMN`，避免字段映射和方法/SQL 绑定混用。
+
+### Spoon Fast Path
+
+- [ ] 建立 Spoon 增量缓存：file hash -> symbol summary/source range/direct call/annotation/field/method facts。
+- [ ] 快速影响报告只对 changed Java file 和 cache miss scope 运行 Spoon。
+- [ ] 明确全项目 Spoon 重建只能作为后台深度任务，不阻塞 10 到 30 秒初版报告。
+- [ ] 缓存不持久化完整 Spoon `CtElement` 或 AST。
+
+### Report Adapter
+
+- [ ] 设计 `ReportDefinition`、`ReportField`、`ReportParameter` 节点。
+- [ ] 设计报表资源 evidence key：file path、XML path、field name、parser name、confidence。
+- [ ] 增加 Interstage List Creator 资源解析接口。
+- [ ] 增加 WingArc1st SVF 资源解析接口。
+- [ ] 支持 PSF、PMD、BIP、SVF XML、布局 XML、字段定义 XML 的可插拔解析。
+- [ ] 从报表定义中提取 SQL/table/column/parameter。
+- [ ] 实现“DB column -> affected report”查询。
+
+### JNI/native
+
+- [ ] 识别 Java `native` method 并标记 `native=true`。
+- [ ] 识别 `System.load` 和 `System.loadLibrary`。
+- [ ] 建模 `NativeLibrary` 或 native `ConfigKey`。
+- [ ] 建模 `CALLS_NATIVE` 或 `HAS_NATIVE_BOUNDARY`。
+- [ ] 影响报告遇到 native 边界时输出 `analysisBoundary=NATIVE` 和 `requiresManualReview=true`。
+- [ ] native 边界只终止当前路径分支，其他非 native 分支继续搜索。
+- [ ] native 边界不复用 `truncated=true`，除非同时发生深度/数量/时间截断。
+
+### Neo4j Incremental Write
+
+- [ ] 明确源码/JSP/XML/SQL scope 以文件为最小 unit。
+- [ ] 明确 jar/classpath scope 以 JAR 或 module 为最小 cache unit。
+- [ ] 实现 analysisRun 状态机：`PLANNED/RUNNING/STAGED/COMMITTED/FAILED/ROLLED_BACK`。
+- [ ] staging facts 不参与当前查询，只有 committed run 进入 active view。
+- [ ] 实现 fact batch upsert 接口。
+- [ ] batch 按 `projectId + snapshotId + analyzerId + scopeKey` 分组提交。
+- [ ] 同一 `projectId + snapshotId` 默认单写入协调器提交。
+- [ ] batch 内稳定排序：Project/Module/SourceFile -> Symbol nodes -> Facts -> Evidence -> Tombstone。
+- [ ] Neo4j 写入支持热点节点幂等死锁重试和 backoff。
+- [ ] tombstone 限定当前 analyzer + 当前 scope。
+- [ ] 评估单写入协调器或轻量消息队列，避免多 worker 高频写同一热点节点。
+
+### Confidence Aggregation
+
+- [ ] 实现 confidence 聚合：`CERTAIN > LIKELY > POSSIBLE > UNKNOWN`。
+- [ ] analyzer priority 只影响同等级排序，不提升 confidence。
+- [ ] evidence count 只用于展示排序，不提升 confidence。
+- [ ] 冲突事实保留为多条候选，不自动合并成单一确定事实。
+
+### MCP Security
+
+- [ ] MCP tool 参数只允许结构化参数，禁止原始 Cypher/SQL/文件通配符/shell 命令。
+- [ ] tool dispatch 前执行 project allow-list 权限检查。
+- [ ] evidence pack 构建阶段执行源码脱敏和 snippet 字符预算限制。
+- [ ] 审计日志记录 requestId、principal、projectId、toolName、参数摘要、结果数量、脱敏状态、耗时和拒绝原因。
+- [ ] 审计日志不得记录完整源码片段、API key 或大段 prompt。
+
+### Benchmark
+
+- [ ] 建立 Spring/MyBatis 中型开源项目 benchmark 靶机。
+- [ ] 建立中型 Struts1/JSP 遗留 benchmark fixture。
+- [ ] benchmark 指标覆盖扫描耗时、图谱写入耗时、Neo4j 查询 P95、JVM cache heap、路径报告耗时。
+- [ ] benchmark 增加误报/漏报样例集。
+- [ ] FFM/Tai-e/缓存策略启用必须引用 benchmark 数据。

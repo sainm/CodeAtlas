@@ -22,6 +22,9 @@ public record SymbolId(
         memberName = trimToNull(memberName);
         descriptor = trimToNull(descriptor);
         localId = normalizeLocalId(localId);
+        if (kind == SymbolKind.METHOD && descriptor == null) {
+            throw new IllegalArgumentException("method descriptor is required");
+        }
     }
 
     public static SymbolId method(
@@ -95,16 +98,19 @@ public record SymbolId(
             .append(sourceRootKey);
 
         if (ownerQualifiedName != null) {
-            builder.append('/').append(ownerQualifiedName);
+            builder.append('/').append(encodedOwnerOrPath());
         }
         if (memberName != null) {
-            builder.append('#').append(memberName);
+            builder.append('#').append(percentEncode(memberName));
         }
         if (descriptor != null) {
+            if (kind == SymbolKind.FIELD) {
+                builder.append(':');
+            }
             builder.append(descriptor);
         }
         if (localId != null) {
-            builder.append('#').append(localId);
+            builder.append('#').append(percentEncode(localId));
         }
         return builder.toString();
     }
@@ -142,17 +148,21 @@ public record SymbolId(
         if (trimmed == null) {
             return null;
         }
-        String normalized = trimmed.replace('\\', '/');
-        while (normalized.contains("//")) {
-            normalized = normalized.replace("//", "/");
+        String[] parts = trimmed.replace('\\', '/').split("/");
+        java.util.ArrayDeque<String> normalized = new java.util.ArrayDeque<>();
+        for (String part : parts) {
+            if (part.isBlank() || ".".equals(part)) {
+                continue;
+            }
+            if ("..".equals(part)) {
+                if (!normalized.isEmpty() && !"..".equals(normalized.peekLast())) {
+                    normalized.removeLast();
+                    continue;
+                }
+            }
+            normalized.addLast(part);
         }
-        if (normalized.startsWith("/")) {
-            normalized = normalized.substring(1);
-        }
-        if (normalized.endsWith("/") && normalized.length() > 1) {
-            normalized = normalized.substring(0, normalized.length() - 1);
-        }
-        return normalized;
+        return String.join("/", normalized);
     }
 
     private static String normalizeSegment(String value) {
@@ -171,5 +181,92 @@ public record SymbolId(
         }
         String trimmed = value.trim();
         return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    private String encodedOwnerOrPath() {
+        return switch (kind) {
+            case CLASS, INTERFACE, ENUM, ANNOTATION, METHOD, FIELD -> percentEncode(ownerQualifiedName);
+            default -> percentEncodePath(ownerQualifiedName);
+        };
+    }
+
+    static String percentEncodePath(String value) {
+        if (value == null) {
+            return null;
+        }
+        return java.util.Arrays.stream(value.split("/", -1))
+            .map(SymbolId::percentEncode)
+            .collect(java.util.stream.Collectors.joining("/"));
+    }
+
+    static String percentEncode(String value) {
+        if (value == null) {
+            return null;
+        }
+        StringBuilder builder = new StringBuilder();
+        for (int offset = 0; offset < value.length();) {
+            int codePoint = value.codePointAt(offset);
+            if (isSafeCodePoint(codePoint)) {
+                builder.appendCodePoint(codePoint);
+            } else {
+                byte[] bytes = new String(Character.toChars(codePoint)).getBytes(java.nio.charset.StandardCharsets.UTF_8);
+                for (byte b : bytes) {
+                    builder.append('%');
+                    String hex = Integer.toHexString(b & 0xff).toUpperCase(Locale.ROOT);
+                    if (hex.length() == 1) {
+                        builder.append('0');
+                    }
+                    builder.append(hex);
+                }
+            }
+            offset += Character.charCount(codePoint);
+        }
+        return builder.toString();
+    }
+
+    static String percentDecode(String value) {
+        if (value == null || !value.contains("%")) {
+            return value;
+        }
+        java.io.ByteArrayOutputStream bytes = new java.io.ByteArrayOutputStream();
+        StringBuilder builder = new StringBuilder();
+        for (int index = 0; index < value.length();) {
+            char current = value.charAt(index);
+            if (current == '%' && index + 2 < value.length()) {
+                bytes.reset();
+                while (index + 2 < value.length() && value.charAt(index) == '%') {
+                    int decoded = Integer.parseInt(value.substring(index + 1, index + 3), 16);
+                    bytes.write(decoded);
+                    index += 3;
+                }
+                builder.append(bytes.toString(java.nio.charset.StandardCharsets.UTF_8));
+                continue;
+            }
+            builder.append(current);
+            index++;
+        }
+        return builder.toString();
+    }
+
+    private static boolean isSafeCodePoint(int codePoint) {
+        return (codePoint >= 'a' && codePoint <= 'z')
+            || (codePoint >= 'A' && codePoint <= 'Z')
+            || (codePoint >= '0' && codePoint <= '9')
+            || codePoint == '-'
+            || codePoint == '_'
+            || codePoint == '.'
+            || codePoint == '~'
+            || codePoint == '/'
+            || codePoint == ':'
+            || codePoint == '['
+            || codePoint == ']'
+            || codePoint == '='
+            || codePoint == '!'
+            || codePoint == '$'
+            || codePoint == ';'
+            || codePoint == '('
+            || codePoint == ')'
+            || codePoint == '<'
+            || codePoint == '>';
     }
 }
