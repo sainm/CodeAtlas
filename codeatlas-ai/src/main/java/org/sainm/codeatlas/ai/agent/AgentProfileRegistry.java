@@ -52,6 +52,8 @@ public final class AgentProfileRegistry {
                     AgentToolName.GRAPH_FIND_CALLEES,
                     AgentToolName.JSP_FIND_BACKEND_FLOW,
                     AgentToolName.RAG_SEMANTIC_SEARCH,
+                    AgentToolName.RAG_ANSWER_DRAFT,
+                    AgentToolName.PROJECT_OVERVIEW,
                     AgentToolName.REPORT_GET_IMPACT_REPORT
                 ),
                 8,

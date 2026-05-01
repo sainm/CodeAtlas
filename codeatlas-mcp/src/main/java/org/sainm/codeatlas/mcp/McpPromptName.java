@@ -4,6 +4,7 @@ public enum McpPromptName {
     IMPACT_REVIEW("impact-review"),
     VARIABLE_TRACE("variable-trace"),
     JSP_FLOW_ANALYSIS("jsp-flow-analysis"),
+    CODE_QUESTION("code-question"),
     TEST_RECOMMENDATION("test-recommendation");
 
     private final String value;

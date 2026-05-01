@@ -15,6 +15,8 @@ public enum AgentToolName {
     JSP_FIND_BACKEND_FLOW("jsp.findBackendFlow"),
     IMPACT_ANALYZE_DIFF("impact.analyzeDiff"),
     RAG_SEMANTIC_SEARCH("rag.semanticSearch"),
+    RAG_ANSWER_DRAFT("rag.answerDraft"),
+    PROJECT_OVERVIEW("project.overview"),
     REPORT_GET_IMPACT_REPORT("report.getImpactReport");
 
     private final String value;

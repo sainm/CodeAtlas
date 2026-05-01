@@ -6,6 +6,13 @@ import java.util.Optional;
 public final class QueryResultViewRegistry {
     private final List<QueryResultViewDescriptor> views = List.of(
         new QueryResultViewDescriptor(
+            "PROJECT_OVERVIEW_VIEW",
+            "Project Overview",
+            "Project-level status, supported artifact types, guided analysis entrypoints, and backend analysis state.",
+            List.of("projectId", "snapshotId", "capabilities", "analysisStatus", "entrypoints"),
+            List.of("sourceType", "confidence", "evidenceKeys", "path", "lineStart", "lineEnd")
+        ),
+        new QueryResultViewDescriptor(
             "IMPACT_REPORT_VIEW",
             "Impact Report",
             "Changed symbol, affected entrypoint, ordered path, confidence, risk, evidence, and truncation state.",
@@ -39,6 +46,13 @@ public final class QueryResultViewRegistry {
             "SQL statement, table, column, mapper, and upstream web entrypoint impact paths.",
             List.of("sqlSymbolId", "tableSymbolId", "columnSymbolId", "entrypoint", "relationType"),
             List.of("sourceType", "confidence", "evidenceKey", "file", "line")
+        ),
+        new QueryResultViewDescriptor(
+            "RAG_SEARCH_VIEW",
+            "Semantic Code Search",
+            "Exact symbol matches, vector summary recall, and nearby graph facts for natural-language code questions.",
+            List.of("symbolId", "kind", "displayName", "summary", "score", "matchKinds"),
+            List.of("matchKinds", "evidenceKeys", "sourceType", "confidence", "file", "line")
         ),
         new QueryResultViewDescriptor(
             "SYMBOL_PICKER_VIEW",

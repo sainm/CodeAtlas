@@ -17,9 +17,14 @@ public final class McpToolCallSafetyGuard {
     );
 
     public void validate(McpToolDescriptor descriptor, Map<String, Object> arguments) {
+        validate(descriptor, arguments, McpRequestContext.anonymousAllowAll());
+    }
+
+    public void validate(McpToolDescriptor descriptor, Map<String, Object> arguments, McpRequestContext context) {
         if (descriptor == null) {
             throw new IllegalArgumentException("Tool descriptor is required");
         }
+        McpRequestContext safeContext = context == null ? McpRequestContext.anonymousAllowAll() : context;
         if (arguments == null || arguments.isEmpty()) {
             if (!descriptor.readOnly()) {
                 throw new IllegalArgumentException("Write MCP tool requires explicit confirmation: " + descriptor.name().value());
@@ -34,6 +39,10 @@ public final class McpToolCallSafetyGuard {
             if (FORBIDDEN_DATABASE_ARGUMENTS.contains(normalized)) {
                 throw new IllegalArgumentException("Arbitrary database query arguments are not allowed: " + key);
             }
+        }
+        Object projectId = arguments.get("projectId");
+        if (projectId instanceof String value && !safeContext.allowsProject(value)) {
+            throw new IllegalArgumentException("Project is not allowed for MCP principal: " + value);
         }
     }
 

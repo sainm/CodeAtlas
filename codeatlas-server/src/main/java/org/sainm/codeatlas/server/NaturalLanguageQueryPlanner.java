@@ -11,6 +11,10 @@ public final class NaturalLanguageQueryPlanner {
             throw new IllegalArgumentException("q is required");
         }
         String normalized = query.toLowerCase(Locale.ROOT);
+        if (containsAny(normalized, "overview", "dashboard", "project status", "analysis status",
+            "\u603b\u89c8", "\u6982\u89c8", "\u9879\u76ee\u72b6\u6001", "\u5206\u6790\u72b6\u6001", "\u5de5\u4f5c\u53f0")) {
+            return overviewPlan();
+        }
         if (containsAny(normalized, "variable", "trace", "parameter", "param", "source", "sink", "from where", "where from",
             "\u53d8\u91cf", "\u53c2\u6570", "\u8f93\u5165\u503c", "\u6765\u6e90", "\u6d41\u5411", "\u6d41\u5230",
             "\u4ece\u54ea\u91cc", "\u5230\u54ea\u91cc", "\u53bb\u54ea\u91cc", "\u53bb\u54ea", "\u53bb\u4e86\u54ea\u91cc", "\u54ea\u91cc\u6765")) {
@@ -35,7 +39,24 @@ public final class NaturalLanguageQueryPlanner {
             "\u9875\u9762", "\u8868\u5355", "\u94fe\u8def", "\u63d0\u4ea4", "\u8df3\u8f6c")) {
             return jspPlan();
         }
+        if (containsAny(normalized, "explain", "related code", "similar code", "semantic", "meaning", "what is", "what does",
+            "\u89e3\u91ca", "\u76f8\u5173\u4ee3\u7801", "\u7c7b\u4f3c\u4ee3\u7801", "\u4ee3\u7801\u95ee\u7b54", "\u662f\u4ec0\u4e48", "\u505a\u4ec0\u4e48")) {
+            return ragSearchPlan();
+        }
         return symbolSearchPlan();
+    }
+
+    private QueryPlan overviewPlan() {
+        return new QueryPlan(
+            "PROJECT_OVERVIEW",
+            "/api/project/overview",
+            "GET",
+            "Show project-level capabilities, supported artifact types, guided entrypoints, and backend analysis status.",
+            List.of(),
+            Map.of(),
+            List.of("CALLS", "ROUTES_TO", "SUBMITS_TO", "READS_PARAM", "WRITES_TABLE"),
+            "PROJECT_OVERVIEW_VIEW"
+        );
     }
 
     private QueryPlan variablePlan() {
@@ -113,6 +134,19 @@ public final class NaturalLanguageQueryPlanner {
             Map.of("maxDepth", "6", "limit", "50", "changeSetId", "diff"),
             List.of("CALLS", "ROUTES_TO", "SUBMITS_TO", "INCLUDES", "BINDS_TO", "FORWARDS_TO", "READS_TABLE", "WRITES_TABLE"),
             "IMPACT_REPORT_VIEW"
+        );
+    }
+
+    private QueryPlan ragSearchPlan() {
+        return new QueryPlan(
+            "RAG_SEMANTIC_SEARCH",
+            "/api/rag/answer-draft",
+            "GET",
+            "Build a static evidence-backed answer draft from exact symbols, semantic summaries, historical reports, and nearby graph facts.",
+            List.of("projectId", "snapshotId", "q"),
+            Map.of("limit", "20"),
+            List.of("EXACT_SYMBOL", "VECTOR", "GRAPH_NEIGHBOR"),
+            "RAG_SEARCH_VIEW"
         );
     }
 

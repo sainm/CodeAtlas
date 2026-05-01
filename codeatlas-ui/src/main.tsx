@@ -1,5 +1,8 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
+import { Button } from 'antd';
+import cytoscape from 'cytoscape';
+import { Background, Controls, ReactFlow } from '@xyflow/react';
 import {
   AlertTriangle,
   Braces,
@@ -12,10 +15,14 @@ import {
   Sparkles,
   Workflow
 } from 'lucide-react';
+import 'antd/dist/reset.css';
+import '@xyflow/react/dist/style.css';
 import './styles.css';
 
-type Mode = 'impact' | 'variable' | 'jsp' | 'graph' | 'sql';
+type Mode = 'overview' | 'impact' | 'variable' | 'jsp' | 'graph' | 'sql' | 'qa';
 type RunStatus = 'idle' | 'planning' | 'executing' | 'fallback' | 'error';
+type VariableTraceDirection = 'both' | 'source' | 'sink';
+type GraphQueryMode = 'both' | 'callers' | 'callees' | 'entrySql';
 
 type QueryPlan = {
   intent: string;
@@ -49,6 +56,7 @@ type ResultStep = {
   incomingRelation?: string;
   qualifier?: string;
   sourceType?: string;
+  analysisLayer?: string;
   confidence?: 'CERTAIN' | 'LIKELY' | 'POSSIBLE';
   evidenceKeys?: EvidenceKey[];
 };
@@ -73,14 +81,35 @@ type ResultPath = {
   path?: ResultStep[];
 };
 
+type VariableTraceSection = {
+  direction: 'SOURCE' | 'SINK';
+  title: string;
+  paths: ResultPath[];
+};
+
 type QueryResultPayload = {
   pathCount?: number;
   reportId?: string;
+  answer?: string;
+  query?: string;
+  depth?: string;
+  analysisLayer?: string;
+  backgroundStatus?: AnalysisStageStatus[];
+  analysisStatus?: AnalysisStageStatus[];
+  capabilities?: Array<Record<string, string>>;
+  entrypoints?: Array<Record<string, string>>;
   paths?: ResultPath[];
   evidenceList?: Array<Record<string, unknown>>;
   affectedSymbols?: AffectedSymbol[];
   results?: SymbolCandidate[];
   truncated?: boolean;
+};
+
+type AnalysisStageStatus = {
+  id: string;
+  label: string;
+  state: 'ready' | 'running' | 'waiting' | 'disabled' | 'error';
+  detail: string;
 };
 
 type AffectedSymbol = {
@@ -103,16 +132,22 @@ type SymbolCandidate = {
   kind: string;
   displayName: string;
   score: number;
+  summary?: string;
+  matchKinds?: string[];
+  evidenceKeys?: string[];
   suggestedParameter?: string;
   reason?: string;
 };
 
 const modes: Array<{ id: Mode; label: string; icon: React.ComponentType<{ size?: number }> }> = [
+  { id: 'overview', label: '项目总览', icon: Braces },
   { id: 'impact', label: '变更影响', icon: AlertTriangle },
   { id: 'variable', label: '变量去向', icon: Workflow },
   { id: 'jsp', label: '页面链路', icon: FileCode2 },
   { id: 'graph', label: '调用关系', icon: Network },
   { id: 'sql', label: '数据表影响', icon: Database }
+  ,
+  { id: 'qa', label: 'AI 问答', icon: Sparkles }
 ];
 
 type QuickTemplate = {
@@ -159,6 +194,44 @@ const quickTemplates: QuickTemplate[] = [
     query: '查看 UserAction.execute 的上下游调用关系',
     parameterOverrides: { symbolId: 'method://shop/_root/src/main/java/com.acme.UserAction#execute()V' }
   }
+  ,
+  {
+    title: '代码问答',
+    example: 'UserService.save 是什么，旁边给我证据',
+    mode: 'qa',
+    query: 'UserService.save 是什么，旁边给我证据',
+    parameterOverrides: { q: 'UserService.save 是什么，旁边给我证据' }
+  }
+];
+
+const graphModes: Array<{ id: GraphQueryMode; label: string; description: string }> = [
+  { id: 'both', label: '上下游', description: '同时查询调用方和被调用方' },
+  { id: 'callers', label: '谁调用它', description: '只看上游 caller' },
+  { id: 'callees', label: '它调用谁', description: '只看下游 callee' },
+  { id: 'entrySql', label: '入口到 SQL', description: '沿影响路径查看入口、业务代码和 SQL/table' }
+];
+
+const overviewCapabilities = [
+  {
+    label: '覆盖范围',
+    title: 'Java / JSP / Struts1 / Spring / SQL / Jar',
+    text: '把页面、Action、业务代码、配置和数据访问放到一张证据图里。'
+  },
+  {
+    label: '查询方式',
+    title: '问答式入口 + 精确参数',
+    text: '先用业务问题找对象，再保留 symbolId 和 JSON 供开发人员核对。'
+  },
+  {
+    label: '结果表达',
+    title: '路径、证据、置信度一起展示',
+    text: '每条结论都能看到从哪个文件、哪类分析器、哪条关系推出来。'
+  },
+  {
+    label: '性能策略',
+    title: '先快后深，后台补强',
+    text: '快速静态事实先返回，Tai-e、AI/RAG、FFM 按需增强，不阻塞首屏。'
+  }
 ];
 
 const evidence: Evidence[] = [
@@ -170,6 +243,12 @@ const evidence: Evidence[] = [
 ];
 
 const pathsByMode: Record<Mode, Array<[string, string]>> = {
+  overview: [
+    ['PROJECT', 'Java Web legacy project'],
+    ['SCANS', 'Java / JSP / XML / SQL / Jar'],
+    ['BUILDS_GRAPH', 'Neo4j active facts'],
+    ['ANSWERS', 'Impact / variable / JSP / graph / SQL questions']
+  ],
   impact: [
     ['JSP_PAGE', 'common/footer.jsp'],
     ['INCLUDES', 'user/edit.jsp'],
@@ -205,10 +284,26 @@ const pathsByMode: Record<Mode, Array<[string, string]>> = {
     ['READS_TABLE', 'users'],
     ['IMPACTS', 'UserService.list'],
     ['ROUTES_TO', '/users']
+  ],
+  qa: [
+    ['QUESTION', 'UserService.save 是什么'],
+    ['EXACT_SYMBOL', 'UserService.save'],
+    ['GRAPH_NEIGHBOR', 'UserAction.execute -> UserService.save'],
+    ['EVIDENCE', '静态分析证据']
   ]
 };
 
 const fallbackPlans: Record<Mode, QueryPlan> = {
+  overview: {
+    intent: 'PROJECT_OVERVIEW',
+    endpoint: '/api/project/overview',
+    method: 'GET',
+    summary: 'Show project-level capabilities, analysis coverage, and safe entry points for non-developer users.',
+    requiredParameters: [],
+    defaultParameters: {},
+    relationTypes: ['CALLS', 'ROUTES_TO', 'SUBMITS_TO', 'READS_PARAM', 'WRITES_TABLE'],
+    resultView: 'PROJECT_OVERVIEW_VIEW'
+  },
   impact: {
     intent: 'IMPACT_ANALYSIS',
     endpoint: '/api/impact/analyze',
@@ -258,10 +353,27 @@ const fallbackPlans: Record<Mode, QueryPlan> = {
     defaultParameters: { maxDepth: '6', limit: '50' },
     relationTypes: ['BINDS_TO', 'READS_TABLE', 'WRITES_TABLE', 'CALLS', 'ROUTES_TO'],
     resultView: 'SQL_TABLE_VIEW'
+  },
+  qa: {
+    intent: 'RAG_SEMANTIC_SEARCH',
+    endpoint: '/api/rag/answer-draft',
+    method: 'GET',
+    summary: 'Build an evidence-backed answer from exact symbols, summaries, historical reports, and graph neighbors.',
+    requiredParameters: ['projectId', 'snapshotId', 'q'],
+    defaultParameters: { limit: '20' },
+    relationTypes: ['EXACT_SYMBOL', 'VECTOR', 'GRAPH_NEIGHBOR'],
+    resultView: 'RAG_SEARCH_VIEW'
   }
 };
 
 const fallbackViews: QueryResultView[] = [
+  {
+    name: 'PROJECT_OVERVIEW_VIEW',
+    title: 'Project Overview',
+    summary: 'Project-level status, supported artifact types, and guided entry points for analysis.',
+    primaryFields: ['projectId', 'snapshotId', 'capabilities', 'analysisStatus'],
+    evidenceFields: ['sourceType', 'confidence', 'evidenceKeys', 'path', 'lineStart', 'lineEnd']
+  },
   {
     name: 'IMPACT_REPORT_VIEW',
     title: 'Impact Report',
@@ -298,6 +410,13 @@ const fallbackViews: QueryResultView[] = [
     evidenceFields: ['sourceType', 'confidence', 'evidenceKey', 'file', 'line']
   },
   {
+    name: 'RAG_SEARCH_VIEW',
+    title: 'AI Q&A Evidence',
+    summary: 'Evidence-backed answer draft with matched symbols, summaries, graph-neighbor evidence, and source keys.',
+    primaryFields: ['answer', 'query', 'symbolId', 'displayName', 'score', 'matchKinds'],
+    evidenceFields: ['evidenceKeys', 'sourceType', 'analyzer', 'path', 'lineStart', 'lineEnd']
+  },
+  {
     name: 'SYMBOL_PICKER_VIEW',
     title: 'Symbol Picker',
     summary: 'Candidate symbols before running exact graph, variable, JSP, SQL, or impact queries.',
@@ -307,6 +426,10 @@ const fallbackViews: QueryResultView[] = [
 ];
 
 const defaultParamsByMode: Record<Mode, Record<string, string>> = {
+  overview: {
+    projectId: 'shop',
+    snapshotId: 's1'
+  },
   impact: {
     projectId: 'shop',
     snapshotId: 's1',
@@ -333,6 +456,7 @@ const defaultParamsByMode: Record<Mode, Record<string, string>> = {
     projectId: 'shop',
     snapshotId: 's1',
     symbolId: 'method://shop/_root/src/main/java/com.acme.UserService#save()V',
+    maxDepth: '2',
     limit: '50'
   },
   sql: {
@@ -341,6 +465,12 @@ const defaultParamsByMode: Record<Mode, Record<string, string>> = {
     symbolId: 'db-table://shop/_root/db/users',
     maxDepth: '6',
     limit: '50'
+  },
+  qa: {
+    projectId: 'shop',
+    snapshotId: 's1',
+    q: 'UserService.save 是什么，影响哪些代码',
+    limit: '20'
   }
 };
 
@@ -357,6 +487,8 @@ function App() {
   const [message, setMessage] = useState('Static facts first');
   const [showRawJson, setShowRawJson] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [traceDirection, setTraceDirection] = useState<VariableTraceDirection>('both');
+  const [graphQueryMode, setGraphQueryMode] = useState<GraphQueryMode>('both');
 
   const activeMode = useMemo(() => modes.find((item) => item.id === mode)!, [mode]);
   const activeView = useMemo(
@@ -366,9 +498,14 @@ function App() {
   const ActiveIcon = activeMode.icon;
   const pathNodes = resultPathNodes(result) ?? pathsByMode[mode];
   const variableTraceSections = mode === 'variable' ? variableTraceSectionsFromResult(result) : [];
+  const visibleVariableTraceSections = filteredVariableTraceSections(variableTraceSections, traceDirection);
+  const visualPathNodes = visibleVariableTraceSections[0]?.paths[0]
+    ? pathNodesFromResultPath(visibleVariableTraceSections[0].paths[0])
+    : pathNodes;
   const resultEvidence = resultEvidenceRows(result);
   const evidenceRows = resultEvidence.length > 0 ? resultEvidence : evidence;
   const summary = resultSummary(result, evidenceRows);
+  const analysisStages = analysisStageStatuses(status, mode, plan, result, assistant);
   const rawJson = useMemo(() => JSON.stringify({
     query,
     queryPlan: plan,
@@ -376,8 +513,11 @@ function App() {
     parameters,
     result,
     pathPreview: pathNodes.map(([relationType, symbol]) => ({ relationType, symbol })),
-    evidencePreview: evidenceRows
-  }, null, 2), [activeView, evidenceRows, parameters, pathNodes, plan, query, result]);
+    evidencePreview: evidenceRows,
+    analysisStages,
+    graphQueryMode,
+    variableTraceDirection: traceDirection
+  }, null, 2), [activeView, analysisStages, evidenceRows, graphQueryMode, parameters, pathNodes, plan, query, result, traceDirection]);
 
   useEffect(() => {
     let active = true;
@@ -458,8 +598,12 @@ function App() {
     setStatus('executing');
     setMessage('Executing read-only query');
     try {
-      const payloads = await Promise.all(endpointList(plan.endpoint).map((endpoint) => {
-        const url = endpointUrl(endpoint, plan, parameters);
+      const runtimeParameters = plan.requiredParameters.includes('q') && !parameters.q
+        ? { ...parameters, q: query }
+        : parameters;
+      const endpoints = mode === 'graph' ? graphEndpointList(graphQueryMode) : endpointList(plan.endpoint);
+      const payloads = await Promise.all(endpoints.map((endpoint) => {
+        const url = endpointUrl(endpoint, plan, runtimeParameters);
         return fetch(url).then((response) => {
           if (!response.ok) {
             throw new Error(`HTTP ${response.status}`);
@@ -512,6 +656,7 @@ function App() {
     setMessage('Plan ready');
     setStatus('idle');
     setShowAdvanced(false);
+    setGraphQueryMode(template.mode === 'graph' ? 'both' : graphQueryMode);
   }
 
   return (
@@ -537,6 +682,7 @@ function App() {
                   setCandidates([]);
                   setStatus('idle');
                   setMessage('Static facts first');
+                  setGraphQueryMode(item.id === 'graph' ? 'both' : graphQueryMode);
                 }}
                 type="button"
                 title={item.label}
@@ -592,6 +738,26 @@ function App() {
           </div>
         </section>
 
+        {mode === 'overview' ? (
+          <ProjectOverviewPanel result={result} applyTemplate={applyTemplate} />
+        ) : null}
+
+        <section className="analysis-status-panel">
+          <div className="panel-title">
+            <ShieldCheck size={18} />
+            <h2>后台分析状态</h2>
+          </div>
+          <div className="analysis-status-grid">
+            {analysisStages.map((stage) => (
+              <div key={stage.id} className={`analysis-stage ${stage.state}`}>
+                <span>{stage.label}</span>
+                <strong>{stageStateLabel(stage.state)}</strong>
+                <small>{stage.detail}</small>
+              </div>
+            ))}
+          </div>
+        </section>
+
         <section className="answer-summary">
           <div>
             <p className="eyebrow">结论摘要</p>
@@ -605,6 +771,38 @@ function App() {
             </button>
           ) : null}
         </section>
+
+        {result?.answer ? (
+          <section className="rag-answer-panel">
+            <div className="rag-answer-copy">
+              <p className="eyebrow">AI 问答答案</p>
+              <h2>{result.answer}</h2>
+              <p className="evidence-note">答案基于 {result.results?.length ?? 0} 个召回节点和静态分析证据生成。</p>
+            </div>
+            <div className="rag-evidence-side">
+              <div>
+                <p className="eyebrow">证据节点</p>
+                <div className="rag-node-list">
+                  {(result.results ?? []).slice(0, 6).map((item) => (
+                    <div key={item.symbolId} className="rag-node" title={item.symbolId}>
+                      <span>{categoryLabel(item.kind)}</span>
+                      <strong>{friendlyDisplayName(item.displayName || item.symbolId)}</strong>
+                      {item.summary ? <small>{item.summary}</small> : null}
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <p className="eyebrow">证据路径</p>
+                <div className="rag-evidence-keys">
+                  {ragEvidenceKeys(result).slice(0, 10).map((key) => (
+                    <span key={key} title={key}>{shortEvidenceKey(key)}</span>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </section>
+        ) : null}
 
         {assistant ? (
           <section className="assistant-panel">
@@ -639,15 +837,29 @@ function App() {
           </section>
         ) : null}
 
+        {mode === 'graph' ? (
+          <GraphExplorerControl
+            value={graphQueryMode}
+            onChange={setGraphQueryMode}
+            parameters={parameters}
+            setParameters={setParameters}
+            result={result}
+            executeQuery={executeQuery}
+          />
+        ) : null}
+
         <section className="tool-grid">
           <article className="path-panel">
             <div className="panel-title">
               <ActiveIcon size={18} />
               <h2>业务链路</h2>
             </div>
-            {variableTraceSections.length > 0 ? (
+            {mode === 'variable' && variableTraceSections.length > 0 ? (
+              <TraceDirectionControl value={traceDirection} onChange={setTraceDirection} sections={variableTraceSections} />
+            ) : null}
+            {visibleVariableTraceSections.length > 0 ? (
               <div className="trace-groups">
-                {variableTraceSections.map((section) => (
+                {visibleVariableTraceSections.map((section) => (
                   <div className="trace-group" key={section.direction}>
                     <div className="trace-group-header">
                       <h3>{section.title}</h3>
@@ -668,6 +880,7 @@ function App() {
             ) : (
               <PathList nodes={pathNodes} />
             )}
+            <PathFlowPanel nodes={visualPathNodes} />
           </article>
 
           <article className="plan-panel">
@@ -787,10 +1000,10 @@ function App() {
               {activeView.evidenceFields.map((field) => <span key={field}>{field}</span>)}
             </div>
           </div>
-          <button type="button" title="Toggle raw JSON" onClick={() => setShowRawJson((value) => !value)}>
+          <Button type="primary" title="Toggle raw JSON" onClick={() => setShowRawJson((value) => !value)}>
             <FileCode2 size={16} />
             <span>原始 JSON</span>
-          </button>
+          </Button>
         </section>
         {showRawJson ? (
           <section className="raw-json-panel" aria-label="raw query and result contract json">
@@ -807,6 +1020,283 @@ function Metric({ label, value }: { label: string; value: string }) {
     <div className="metric">
       <span>{label}</span>
       <strong>{value}</strong>
+    </div>
+  );
+}
+
+function overviewCapabilityItems(result: QueryResultPayload | null) {
+  const items = result?.capabilities ?? [];
+  if (items.length === 0) {
+    return overviewCapabilities;
+  }
+  return items.map((item) => ({
+    label: item.label ?? item.status ?? '能力',
+    title: item.title ?? '-',
+    text: item.text ?? item.detail ?? item.status ?? '由后端项目总览接口返回'
+  }));
+}
+
+function overviewEntrypointItems(result: QueryResultPayload | null) {
+  const items = result?.entrypoints ?? [];
+  if (items.length === 0) {
+    return quickTemplates.slice(0, 5).map((template) => ({
+      mode: template.mode,
+      label: template.title,
+      endpoint: template.example,
+      template
+    }));
+  }
+  return items
+    .map((item) => {
+      const mode = modeFromEntrypoint(item.mode);
+      const template = quickTemplates.find((candidate) => candidate.mode === mode) ?? quickTemplates[0];
+      return {
+        mode,
+        label: item.label ?? template.title,
+        endpoint: item.endpoint ?? template.example,
+        template
+      };
+    })
+    .slice(0, 6);
+}
+
+function modeFromEntrypoint(value: string | undefined): Mode {
+  if (value === 'impact' || value === 'variable' || value === 'jsp' || value === 'graph' || value === 'sql' || value === 'qa') {
+    return value;
+  }
+  return 'impact';
+}
+
+function ProjectOverviewPanel({
+  result,
+  applyTemplate
+}: {
+  result: QueryResultPayload | null;
+  applyTemplate: (template: QuickTemplate) => void;
+}) {
+  const capabilities = overviewCapabilityItems(result);
+  const entrypoints = overviewEntrypointItems(result);
+  return (
+    <section className="project-overview-panel">
+      <div className="overview-capabilities">
+        {capabilities.map((item) => (
+          <article key={item.title}>
+            <span>{item.label}</span>
+            <strong>{item.title}</strong>
+            <p>{item.text}</p>
+          </article>
+        ))}
+      </div>
+      <div className="overview-entrypoints">
+        <div className="panel-title">
+          <Sparkles size={18} />
+          <h2>常用入口</h2>
+        </div>
+        <div className="overview-entry-grid">
+          {entrypoints.map((entrypoint) => (
+            <button
+              key={`${entrypoint.mode}-${entrypoint.endpoint}`}
+              type="button"
+              onClick={() => applyTemplate(entrypoint.template)}
+            >
+              <span>{entrypoint.label}</span>
+              <strong>{entrypoint.endpoint}</strong>
+            </button>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function TraceDirectionControl({
+  value,
+  onChange,
+  sections
+}: {
+  value: VariableTraceDirection;
+  onChange: (value: VariableTraceDirection) => void;
+  sections: VariableTraceSection[];
+}) {
+  const sourceCount = sections.find((section) => section.direction === 'SOURCE')?.paths.length ?? 0;
+  const sinkCount = sections.find((section) => section.direction === 'SINK')?.paths.length ?? 0;
+  const options: Array<{ value: VariableTraceDirection; label: string; count: number }> = [
+    { value: 'both', label: '全部', count: sourceCount + sinkCount },
+    { value: 'source', label: '来源', count: sourceCount },
+    { value: 'sink', label: '流向', count: sinkCount }
+  ];
+
+  return (
+    <div className="trace-direction-control" aria-label="variable trace direction">
+      {options.map((option) => (
+        <button
+          key={option.value}
+          type="button"
+          className={value === option.value ? 'active' : ''}
+          onClick={() => onChange(option.value)}
+          disabled={option.value !== 'both' && option.count === 0}
+        >
+          <span>{option.label}</span>
+          <strong>{option.count}</strong>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function GraphExplorerControl({
+  value,
+  onChange,
+  parameters,
+  setParameters,
+  result,
+  executeQuery
+}: {
+  value: GraphQueryMode;
+  onChange: React.Dispatch<React.SetStateAction<GraphQueryMode>>;
+  parameters: Record<string, string>;
+  setParameters: React.Dispatch<React.SetStateAction<Record<string, string>>>;
+  result: QueryResultPayload | null;
+  executeQuery: () => Promise<void>;
+}) {
+  const nodes = graphNodeCandidates(result);
+  return (
+    <section className="graph-explorer-panel">
+      <div className="panel-title">
+        <Network size={18} />
+        <h2>图谱探索</h2>
+      </div>
+      <div className="graph-mode-toolbar" aria-label="graph query mode">
+        {graphModes.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            className={item.id === value ? 'active' : ''}
+            onClick={() => onChange(item.id)}
+            title={item.description}
+          >
+            {item.label}
+          </button>
+        ))}
+      </div>
+      <div className="graph-query-controls">
+        <label>
+          <span>中心节点</span>
+          <input
+            value={parameters.symbolId ?? ''}
+            onChange={(event) => setParameters((current) => ({ ...current, symbolId: event.target.value }))}
+          />
+        </label>
+        <label>
+          <span>深度</span>
+          <input
+            inputMode="numeric"
+            value={parameters.maxDepth ?? '2'}
+            onChange={(event) => setParameters((current) => ({ ...current, maxDepth: event.target.value }))}
+          />
+        </label>
+        <label>
+          <span>数量</span>
+          <input
+            inputMode="numeric"
+            value={parameters.limit ?? '50'}
+            onChange={(event) => setParameters((current) => ({ ...current, limit: event.target.value }))}
+          />
+        </label>
+      </div>
+      {nodes.length > 0 ? (
+        <div className="graph-expand-list">
+          {nodes.slice(0, 12).map((node) => (
+            <button
+              key={node}
+              type="button"
+              title={node}
+              onClick={() => expandGraphNode(node, setParameters, executeQuery)}
+            >
+              <span>{symbolKindLabel(node)}</span>
+              <strong>{friendlyDisplayName(node)}</strong>
+            </button>
+          ))}
+        </div>
+      ) : null}
+      <CytoscapeGraph result={result} />
+    </section>
+  );
+}
+
+function CytoscapeGraph({ result }: { result: QueryResultPayload | null }) {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const elements = useMemo(() => cytoscapeElements(result), [result]);
+
+  useEffect(() => {
+    if (!containerRef.current || elements.length === 0) {
+      return;
+    }
+    const cy = cytoscape({
+      container: containerRef.current,
+      elements,
+      layout: { name: 'breadthfirst', directed: true, padding: 18, spacingFactor: 1.15 },
+      style: [
+        {
+          selector: 'node',
+          style: {
+            'background-color': '#2f6f73',
+            color: '#182230',
+            label: 'data(label)',
+            'font-size': '10px',
+            'text-wrap': 'wrap',
+            'text-max-width': '110px',
+            'text-valign': 'bottom',
+            'text-margin-y': 6
+          }
+        },
+        {
+          selector: 'edge',
+          style: {
+            'curve-style': 'bezier',
+            'line-color': '#8fb9b7',
+            'target-arrow-color': '#8fb9b7',
+            'target-arrow-shape': 'triangle',
+            label: 'data(label)',
+            'font-size': '9px',
+            'text-background-color': '#ffffff',
+            'text-background-opacity': 0.86
+          }
+        }
+      ]
+    });
+    cy.fit(undefined, 18);
+    return () => {
+      cy.destroy();
+    };
+  }, [elements]);
+
+  if (elements.length === 0) {
+    return null;
+  }
+  return <div ref={containerRef} className="cytoscape-graph" aria-label="Cytoscape graph explorer" />;
+}
+
+function PathFlowPanel({ nodes }: { nodes: Array<[string, string]> }) {
+  const flowNodes = nodes.map(([relationType, symbol], index) => ({
+    id: flowId(index),
+    position: { x: index * 210, y: index % 2 === 0 ? 20 : 96 },
+    data: { label: `${relationLabel(relationType)}\n${friendlyDisplayName(symbol)}` },
+    type: 'default'
+  }));
+  const flowEdges = nodes.slice(1).map(([relationType], index) => ({
+    id: `e-${index}`,
+    source: flowId(index),
+    target: flowId(index + 1),
+    label: relationLabel(relationType),
+    animated: false
+  }));
+  return (
+    <div className="path-flow-panel" aria-label="React Flow path view">
+      <ReactFlow nodes={flowNodes} edges={flowEdges} fitView nodesDraggable={false} nodesConnectable={false}>
+        <Background />
+        <Controls showInteractive={false} />
+      </ReactFlow>
     </div>
   );
 }
@@ -831,6 +1321,20 @@ function endpointList(endpoint: string) {
   return normalized.split(' and ')
     .map((value) => value.trim())
     .filter((value) => value.startsWith('/api/'));
+}
+
+function graphEndpointList(mode: GraphQueryMode) {
+  switch (mode) {
+    case 'callers':
+      return ['/api/graph/callers/report'];
+    case 'callees':
+      return ['/api/graph/callees/report'];
+    case 'entrySql':
+      return ['/api/graph/impact-paths/query'];
+    case 'both':
+    default:
+      return ['/api/graph/callers/report', '/api/graph/callees/report'];
+  }
 }
 
 function endpointUrl(endpoint: string, plan: QueryPlan, parameters: Record<string, string>) {
@@ -920,6 +1424,20 @@ function expandAndExecute(
   }, 0);
 }
 
+function expandGraphNode(
+  symbolId: string,
+  setParameters: React.Dispatch<React.SetStateAction<Record<string, string>>>,
+  executeQuery: () => Promise<void>
+) {
+  setParameters((current) => ({
+    ...current,
+    symbolId
+  }));
+  window.setTimeout(() => {
+    void executeQuery();
+  }, 0);
+}
+
 function selectCandidate(
   candidate: SymbolCandidate,
   plan: QueryPlan,
@@ -941,9 +1459,57 @@ function resultPathNodes(result: QueryResultPayload | null): Array<[string, stri
   ]);
 }
 
-function variableTraceSectionsFromResult(result: QueryResultPayload | null) {
+function graphNodeCandidates(result: QueryResultPayload | null) {
+  const nodes = (result?.paths ?? [])
+    .flatMap((path) => path.path ?? [])
+    .map((step) => step.symbolId ?? step.qualifier ?? '')
+    .filter((value) => value.length > 0);
+  return Array.from(new Set(nodes));
+}
+
+function cytoscapeElements(result: QueryResultPayload | null) {
+  const elements: Array<{ data: Record<string, string> }> = [];
+  const seenNodes = new Set<string>();
+  const seenEdges = new Set<string>();
+  for (const resultPath of result?.paths ?? []) {
+    const steps = resultPath.path ?? [];
+    for (let index = 0; index < steps.length; index += 1) {
+      const current = steps[index].symbolId ?? steps[index].qualifier;
+      if (!current) {
+        continue;
+      }
+      if (!seenNodes.has(current)) {
+        seenNodes.add(current);
+        elements.push({ data: { id: current, label: friendlyDisplayName(current) } });
+      }
+      const next = steps[index + 1]?.symbolId ?? steps[index + 1]?.qualifier;
+      if (!next) {
+        continue;
+      }
+      const edgeId = `${current}->${next}-${steps[index + 1]?.incomingRelation ?? 'CALLS'}`;
+      if (!seenEdges.has(edgeId)) {
+        seenEdges.add(edgeId);
+        elements.push({
+          data: {
+            id: edgeId,
+            source: current,
+            target: next,
+            label: relationLabel(steps[index + 1]?.incomingRelation ?? 'CALLS')
+          }
+        });
+      }
+    }
+  }
+  return elements;
+}
+
+function flowId(index: number) {
+  return `path-step-${index}`;
+}
+
+function variableTraceSectionsFromResult(result: QueryResultPayload | null): VariableTraceSection[] {
   const paths = result?.paths ?? [];
-  return [
+  const sections: VariableTraceSection[] = [
     {
       direction: 'SOURCE',
       title: '值从哪里来',
@@ -954,7 +1520,21 @@ function variableTraceSectionsFromResult(result: QueryResultPayload | null) {
       title: '值去了哪里',
       paths: paths.filter((path) => path.direction?.toUpperCase() === 'SINK' && (path.path?.length ?? 0) > 0)
     }
-  ].filter((section) => section.paths.length > 0);
+  ];
+  return sections.filter((section) => section.paths.length > 0);
+}
+
+function filteredVariableTraceSections(
+  sections: VariableTraceSection[],
+  direction: VariableTraceDirection
+): VariableTraceSection[] {
+  if (direction === 'source') {
+    return sections.filter((section) => section.direction === 'SOURCE');
+  }
+  if (direction === 'sink') {
+    return sections.filter((section) => section.direction === 'SINK');
+  }
+  return sections;
 }
 
 function pathNodesFromResultPath(resultPath: ResultPath): Array<[string, string]> {
@@ -991,6 +1571,108 @@ function resultEvidenceRows(result: QueryResultPayload | null): Evidence[] {
   return rows.slice(0, 30);
 }
 
+function ragEvidenceKeys(result: QueryResultPayload | null) {
+  return Array.from(new Set((result?.results ?? []).flatMap((item) => item.evidenceKeys ?? [])));
+}
+
+function analysisStageStatuses(
+  status: RunStatus,
+  mode: Mode,
+  plan: QueryPlan,
+  result: QueryResultPayload | null,
+  assistant: AssistantResult | null
+): AnalysisStageStatus[] {
+  if (result?.backgroundStatus?.length || result?.analysisStatus?.length) {
+    return result.backgroundStatus?.length ? result.backgroundStatus : result.analysisStatus!;
+  }
+  const executing = status === 'planning' || status === 'executing';
+  const pathCount = result?.pathCount ?? result?.paths?.length ?? 0;
+  const sourceTypes = pathStepValues(result, 'sourceType');
+  const analysisLayers = pathStepValues(result, 'analysisLayer');
+  const planText = `${plan.summary} ${plan.intent} ${plan.relationTypes.join(' ')}`.toUpperCase();
+  const hasDeep = result?.depth === 'DEEP'
+    || result?.analysisLayer === 'DEEP_SUPPLEMENT'
+    || analysisLayers.has('DEEP_SUPPLEMENT')
+    || sourceTypes.has('TAI_E');
+  const hasFfm = sourceTypes.has('FFM') || planText.includes('FFM');
+  const needsAi = mode === 'qa' || plan.intent === 'RAG_SEMANTIC_SEARCH';
+  const stages: AnalysisStageStatus[] = [
+    {
+      id: 'fast-static',
+      label: '快速静态分析',
+      state: status === 'error' ? 'error' : result ? 'ready' : executing ? 'running' : 'waiting',
+      detail: result ? `已返回 ${pathCount} 条相关路径` : '等待执行查询'
+    },
+    {
+      id: 'deep-supplement',
+      label: '深度补强',
+      state: hasDeep ? 'ready' : executing ? 'running' : 'waiting',
+      detail: hasDeep ? 'Tai-e 深度证据已并入结果' : '后台按需补强，不阻塞快速结果'
+    },
+    {
+      id: 'ai-rag',
+      label: 'AI/RAG 解释',
+      state: assistant || result?.answer ? 'ready' : needsAi ? (executing ? 'running' : 'waiting') : 'disabled',
+      detail: assistant
+        ? `基于 ${assistant.evidenceCount} 条证据生成`
+        : result?.answer
+          ? `基于 ${result.results?.length ?? 0} 个召回节点生成`
+          : 'AI 只解释证据，不生成事实'
+    },
+    {
+      id: 'ffm',
+      label: 'FFM 加速',
+      state: hasFfm ? 'ready' : 'disabled',
+      detail: hasFfm ? '已由性能决策启用' : '默认关闭，benchmark 证明收益后启用'
+    }
+  ];
+  if (status !== 'error') {
+    return stages;
+  }
+  return stages.map((stage) => (
+    stage.id === 'fast-static'
+      ? { ...stage, detail: '查询失败，保留原始错误状态' }
+      : stage
+  ));
+}
+
+function pathStepValues(result: QueryResultPayload | null, key: 'sourceType' | 'analysisLayer') {
+  return new Set(
+    (result?.paths ?? [])
+      .flatMap((path) => path.path ?? [])
+      .map((step) => step[key])
+      .filter((value): value is string => Boolean(value))
+      .map((value) => value.toUpperCase())
+  );
+}
+
+function stageStateLabel(state: AnalysisStageStatus['state']) {
+  switch (state) {
+    case 'ready':
+      return '已完成';
+    case 'running':
+      return '运行中';
+    case 'waiting':
+      return '等待';
+    case 'disabled':
+      return '关闭';
+    case 'error':
+      return '失败';
+    default:
+      return state;
+  }
+}
+
+function shortEvidenceKey(value: string) {
+  const parts = value.split('|');
+  if (parts.length >= 6) {
+    const path = shortPath(parts[2]);
+    const line = parts[3] && parts[3] !== '0' ? `:${parts[3]}` : '';
+    return `${sourceLabel(parts[0])} ${path}${line}`;
+  }
+  return shortPath(value);
+}
+
 function stringValue(value: unknown, fallback: string) {
   return typeof value === 'string' && value ? value : fallback;
 }
@@ -1005,6 +1687,8 @@ function confidenceValue(value: unknown): Evidence['confidence'] {
 
 function headline(mode: Mode) {
   switch (mode) {
+    case 'overview':
+      return '项目总览';
     case 'variable':
       return '变量从哪里来、流向哪里';
     case 'jsp':
@@ -1013,6 +1697,8 @@ function headline(mode: Mode) {
       return '调用关系查询';
     case 'sql':
       return '数据库表影响';
+    case 'qa':
+      return 'AI 问答与证据';
     default:
       return '变更影响分析';
   }
@@ -1279,6 +1965,8 @@ function friendlyEvidenceText(text: string) {
 
 function businessPlanSummary(mode: Mode, fallback: string) {
   switch (mode) {
+    case 'overview':
+      return '用非开发人员也能理解的方式查看系统覆盖范围、常用查询入口、证据状态和后续分析方向。';
     case 'impact':
       return '从变更点出发，找出可能受影响的页面、Action、业务处理和数据表。';
     case 'variable':
@@ -1289,6 +1977,8 @@ function businessPlanSummary(mode: Mode, fallback: string) {
       return '查看某段代码被谁调用，以及它继续调用了哪些业务处理。';
     case 'sql':
       return '从 SQL 或数据表出发，查看哪些页面、Action 或业务功能可能受影响。';
+    case 'qa':
+      return '用自然语言提问，但答案必须贴着静态分析证据、召回节点和调用路径展示。';
     default:
       return fallback;
   }
@@ -1296,6 +1986,8 @@ function businessPlanSummary(mode: Mode, fallback: string) {
 
 function businessViewSummary(viewName: string, fallback: string) {
   switch (viewName) {
+    case 'PROJECT_OVERVIEW_VIEW':
+      return '展示当前项目分析能力、常用入口和状态概览。';
     case 'IMPACT_REPORT_VIEW':
       return '按业务对象展示变更影响，并保留证据路径用于确认。';
     case 'VARIABLE_TRACE_VIEW':
@@ -1306,6 +1998,8 @@ function businessViewSummary(viewName: string, fallback: string) {
       return '展示代码之间的上下游调用关系。';
     case 'SQL_TABLE_VIEW':
       return '展示数据表或 SQL 变化会影响到哪些业务入口。';
+    case 'RAG_SEARCH_VIEW':
+      return '展示问答草稿、命中的代码节点、相关证据 key 和可追溯路径。';
     default:
       return fallback;
   }
@@ -1357,6 +2051,8 @@ function parameterLabel(key: string) {
 
 function intentLabel(intent: string) {
   switch (intent) {
+    case 'PROJECT_OVERVIEW':
+      return '项目总览';
     case 'IMPACT_ANALYSIS':
     case 'DIFF_IMPACT_ANALYSIS':
       return '变更影响';
@@ -1368,6 +2064,8 @@ function intentLabel(intent: string) {
       return '数据表影响';
     case 'CALL_GRAPH':
       return '调用关系';
+    case 'RAG_SEMANTIC_SEARCH':
+      return 'AI 问答';
     default:
       return intent.replaceAll('_', ' ');
   }
@@ -1407,6 +2105,9 @@ function inferMode(query: string): Mode {
   if (['sql', 'table', 'column', 'mapper', 'db'].some((token) => value.includes(token))) {
     return 'sql';
   }
+  if (['explain', 'what is', 'what does', 'semantic', 'answer', '问答', '是什么', '做什么', '解释'].some((token) => value.includes(token))) {
+    return 'qa';
+  }
   if (['jsp', 'page', 'form', 'action', 'struts', 'dispatchaction', 'lookupdispatchaction'].some((token) => value.includes(token))) {
     return 'jsp';
   }
@@ -1423,6 +2124,8 @@ function modeFromIntent(intent: string): Mode {
       return 'jsp';
     case 'SQL_TABLE_IMPACT':
       return 'sql';
+    case 'RAG_SEMANTIC_SEARCH':
+      return 'qa';
     case 'CALL_GRAPH':
       return 'graph';
     default:

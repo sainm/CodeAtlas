@@ -47,7 +47,9 @@ public final class AgentToolRegistry {
             case VARIABLE_TRACE_SINK -> "Read request-parameter sink facts through argument propagation and table effects.";
             case JSP_FIND_BACKEND_FLOW -> "Read JSP, Struts, Java, and SQL backend-flow paths.";
             case IMPACT_ANALYZE_DIFF -> "Run fast read-only impact analysis from diff or changed symbols.";
-            case RAG_SEMANTIC_SEARCH -> "Search summaries and evidence packs semantically.";
+            case RAG_SEMANTIC_SEARCH -> "Search exact symbols, semantic summaries, historical reports, and graph-neighbor evidence.";
+            case RAG_ANSWER_DRAFT -> "Build a static evidence-backed answer draft from RAG search results.";
+            case PROJECT_OVERVIEW -> "Read project capabilities, analysis status, and suggested analysis entrypoints.";
             case REPORT_GET_IMPACT_REPORT -> "Read generated impact reports.";
         };
     }

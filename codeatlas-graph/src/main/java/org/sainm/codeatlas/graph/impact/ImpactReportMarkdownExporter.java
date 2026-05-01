@@ -65,8 +65,15 @@ public final class ImpactReportMarkdownExporter {
         for (ImpactPathStep step : path.steps()) {
             String relation = step.incomingRelation() == null ? "ENTRY" : step.incomingRelation().name();
             joiner.add("- `" + relation + "` `" + step.symbolId().value() + "`"
-                + " [" + step.confidence() + ", " + step.sourceType() + ", evidence=" + step.evidenceKeys().size() + "]");
+                + " [" + step.confidence() + ", " + step.sourceType() + ", " + analysisLayer(step)
+                + ", evidence=" + step.evidenceKeys().size() + "]");
         }
         return joiner.toString();
+    }
+
+    private String analysisLayer(ImpactPathStep step) {
+        return step.sourceType() == org.sainm.codeatlas.graph.model.SourceType.TAI_E
+            ? "DEEP_SUPPLEMENT"
+            : "STATIC_FACT";
     }
 }

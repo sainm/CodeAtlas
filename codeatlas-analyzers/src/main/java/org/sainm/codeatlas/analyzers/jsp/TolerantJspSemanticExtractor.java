@@ -1,6 +1,7 @@
 package org.sainm.codeatlas.analyzers.jsp;
 
 import org.sainm.codeatlas.graph.model.Confidence;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -13,8 +14,17 @@ public final class TolerantJspSemanticExtractor {
     private static final Set<String> STANDARD_ACTIONS = Set.of("jsp:include", "jsp:forward", "jsp:param", "jsp:useBean");
     private static final Set<String> JSTL_ACTIONS = Set.of("c:if", "c:forEach", "c:choose", "c:when", "c:otherwise", "c:out", "c:set");
     private final ApacheJasperJspSemanticExtractor jasperExtractor = new ApacheJasperJspSemanticExtractor();
+    private final boolean useJerichoFallback;
     private final StrutsJspTagAdapter strutsTagAdapter = new StrutsJspTagAdapter();
     private final SpringJspTagAdapter springTagAdapter = new SpringJspTagAdapter();
+
+    public TolerantJspSemanticExtractor() {
+        this(true);
+    }
+
+    TolerantJspSemanticExtractor(boolean useJerichoFallback) {
+        this.useJerichoFallback = useJerichoFallback;
+    }
 
     public JspSemanticAnalysis extract(String jspText, WebAppContext context) {
         return extract(jspText, context, null);
@@ -24,9 +34,16 @@ public final class TolerantJspSemanticExtractor {
         JspSemanticAnalysis scannerAnalysis = scannerAnalysis(jspText, context);
         JspSemanticAnalysis jasperAnalysis = jasperExtractor.extract(jspFile, context);
         if (jasperAnalysis == null) {
-            return withFallbackReason(scannerAnalysis, fallbackReason(jspFile, context));
+            JspSemanticAnalysis fallbackAnalysis = useJerichoFallback
+                ? new JerichoJspSemanticExtractor().extract(jspText, context)
+                : scannerAnalysis;
+            return withFallbackReason(fallbackAnalysis, fallbackReason(jspFile, context), missingContext(jspFile, context, scannerAnalysis));
         }
         return merge(jasperAnalysis, scannerAnalysis);
+    }
+
+    JspSemanticAnalysis scannerOnly(String jspText, WebAppContext context) {
+        return scannerAnalysis(jspText, context);
     }
 
     static JspTaglibReference taglib(JspDirective directive, WebAppContext context) {
@@ -71,7 +88,8 @@ public final class TolerantJspSemanticExtractor {
             encoding,
             JspSemanticParserSource.TOKENIZER_FALLBACK,
             "tolerant-jsp-tokenizer",
-            null
+            null,
+            List.of()
         );
     }
 
@@ -135,11 +153,12 @@ public final class TolerantJspSemanticExtractor {
             encoding,
             JspSemanticParserSource.JASPER_WITH_TOKENIZER_MERGE,
             "apache-jasper+tolerant-jsp-tokenizer",
-            null
+            null,
+            List.of()
         );
     }
 
-    private JspSemanticAnalysis withFallbackReason(JspSemanticAnalysis analysis, String fallbackReason) {
+    private JspSemanticAnalysis withFallbackReason(JspSemanticAnalysis analysis, String fallbackReason, List<String> missingContext) {
         return new JspSemanticAnalysis(
             analysis.directives(),
             analysis.actions(),
@@ -148,10 +167,34 @@ public final class TolerantJspSemanticExtractor {
             analysis.clientNavigations(),
             analysis.includes(),
             analysis.encoding(),
-            JspSemanticParserSource.TOKENIZER_FALLBACK,
-            "tolerant-jsp-tokenizer",
-            fallbackReason
+            analysis.parserSource(),
+            analysis.parserName(),
+            fallbackReason,
+            missingContext
         );
+    }
+
+    private List<String> missingContext(Path jspFile, WebAppContext context, JspSemanticAnalysis scannerAnalysis) {
+        Set<String> missing = new LinkedHashSet<>();
+        if (jspFile == null) {
+            missing.add("jspFile");
+        }
+        if (context == null) {
+            missing.add("webAppContext");
+            return List.copyOf(missing);
+        }
+        if (context.webXml() == null || !Files.exists(context.webXml())) {
+            missing.add("web.xml");
+        }
+        if (context.classpathEntries().isEmpty()) {
+            missing.add("classpathEntries");
+        }
+        if (scannerAnalysis != null
+            && context.taglibs().isEmpty()
+            && scannerAnalysis.taglibs().stream().anyMatch(taglib -> taglib.uri() != null)) {
+            missing.add("taglibRegistry");
+        }
+        return List.copyOf(missing);
     }
 
     private String fallbackReason(Path jspFile, WebAppContext context) {

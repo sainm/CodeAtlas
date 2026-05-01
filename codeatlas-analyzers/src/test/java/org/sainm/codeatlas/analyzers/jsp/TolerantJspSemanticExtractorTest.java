@@ -49,8 +49,8 @@ class TolerantJspSemanticExtractorTest {
 
         JspSemanticAnalysis analysis = new TolerantJspSemanticExtractor().extract(jsp, context);
 
-        assertEquals(JspSemanticParserSource.TOKENIZER_FALLBACK, analysis.parserSource());
-        assertEquals("tolerant-jsp-tokenizer", analysis.parserName());
+        assertEquals(JspSemanticParserSource.JERICHO_WITH_TOKENIZER_MERGE, analysis.parserSource());
+        assertEquals("jericho-html+tolerant-jsp-tokenizer", analysis.parserName());
         assertTrue(analysis.fallbackReason().contains("jsp file path unavailable"));
         assertEquals("Shift_JIS", analysis.encoding());
         assertEquals(List.of("/common/header.jsp"), analysis.includes());
@@ -190,8 +190,11 @@ class TolerantJspSemanticExtractorTest {
             <html:form action="/user/save.do"><html:text property="name"/></html:form>
             """, context);
 
-        assertEquals(JspSemanticParserSource.TOKENIZER_FALLBACK, analysis.parserSource());
-        assertEquals("tolerant-jsp-tokenizer", analysis.parserName());
+        assertEquals(JspSemanticParserSource.JERICHO_WITH_TOKENIZER_MERGE, analysis.parserSource());
+        assertEquals("jericho-html+tolerant-jsp-tokenizer", analysis.parserName());
         assertTrue(analysis.fallbackReason().contains("jsp file path unavailable"));
+        assertTrue(analysis.missingContext().contains("jspFile"));
+        assertTrue(analysis.missingContext().contains("web.xml"));
+        assertTrue(analysis.missingContext().contains("classpathEntries"));
     }
 }

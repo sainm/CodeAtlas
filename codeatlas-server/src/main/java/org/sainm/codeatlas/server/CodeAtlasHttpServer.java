@@ -9,8 +9,16 @@ import org.sainm.codeatlas.ai.AiTextResult;
 import org.sainm.codeatlas.ai.ImpactAssistantResult;
 import org.sainm.codeatlas.ai.ImpactPromptBuilder;
 import org.sainm.codeatlas.ai.SourceRedactor;
+import org.sainm.codeatlas.ai.rag.DeterministicHashEmbeddingProvider;
+import org.sainm.codeatlas.ai.rag.HybridRagSearchEngine;
+import org.sainm.codeatlas.ai.rag.RagAnswerDraftBuilder;
+import org.sainm.codeatlas.ai.rag.RagSearchResult;
+import org.sainm.codeatlas.ai.summary.ArtifactSummary;
+import org.sainm.codeatlas.ai.summary.SummaryKind;
 import org.sainm.codeatlas.graph.impact.ImpactReportJsonExporter;
 import org.sainm.codeatlas.graph.impact.FastImpactAnalyzer;
+import org.sainm.codeatlas.graph.impact.ImpactReport;
+import org.sainm.codeatlas.graph.impact.DeepImpactReportSupplementer;
 import org.sainm.codeatlas.graph.flow.GraphFlowJsonExporter;
 import org.sainm.codeatlas.graph.flow.GraphFlowQueryEngine;
 import org.sainm.codeatlas.graph.neo4j.CypherStatement;
@@ -29,6 +37,8 @@ import java.net.InetSocketAddress;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -40,6 +50,7 @@ public final class CodeAtlasHttpServer {
     private final ReportStore reportStore;
     private final ActiveFactStore activeFactStore;
     private final SymbolSearchIndex symbolSearchIndex;
+    private final ProjectAccessPolicy projectAccessPolicy;
     private final ImpactReportJsonExporter jsonExporter = new ImpactReportJsonExporter();
     private final Neo4jGraphQueryBuilder graphQueryBuilder = new Neo4jGraphQueryBuilder();
     private final NaturalLanguageQueryPlanner queryPlanner = new NaturalLanguageQueryPlanner();
@@ -52,6 +63,9 @@ public final class CodeAtlasHttpServer {
     private final GraphFlowQueryEngine graphFlowQueryEngine = new GraphFlowQueryEngine();
     private final GraphFlowJsonExporter graphFlowJsonExporter = new GraphFlowJsonExporter();
     private final UnifiedDiffParser unifiedDiffParser = new UnifiedDiffParser();
+    private final DeepImpactReportSupplementer deepImpactReportSupplementer = new DeepImpactReportSupplementer();
+    private final HybridRagSearchEngine ragSearchEngine = new HybridRagSearchEngine(new DeterministicHashEmbeddingProvider(128));
+    private final RagAnswerDraftBuilder ragAnswerDraftBuilder = new RagAnswerDraftBuilder();
     private final AiReportAssistant aiReportAssistant = new AiReportAssistant(
         (prompt, config) -> AiTextResult.failure("AI provider is not configured for the local server"),
         new ImpactPromptBuilder(new SourceRedactor())
@@ -71,10 +85,21 @@ public final class CodeAtlasHttpServer {
         SymbolSearchIndex symbolSearchIndex,
         ActiveFactStore activeFactStore
     ) throws IOException {
+        this(address, reportStore, symbolSearchIndex, activeFactStore, ProjectAccessPolicy.allowAll());
+    }
+
+    public CodeAtlasHttpServer(
+        InetSocketAddress address,
+        ReportStore reportStore,
+        SymbolSearchIndex symbolSearchIndex,
+        ActiveFactStore activeFactStore,
+        ProjectAccessPolicy projectAccessPolicy
+    ) throws IOException {
         this.server = HttpServer.create(address, 0);
         this.reportStore = reportStore;
         this.symbolSearchIndex = symbolSearchIndex;
         this.activeFactStore = activeFactStore;
+        this.projectAccessPolicy = projectAccessPolicy == null ? ProjectAccessPolicy.allowAll() : projectAccessPolicy;
         server.createContext("/health", exchange -> safely(exchange, this::health));
         server.createContext("/api/symbols/search", exchange -> safely(exchange, this::symbolSearch));
         server.createContext("/api/reports", exchange -> safely(exchange, this::reports));
@@ -82,8 +107,12 @@ public final class CodeAtlasHttpServer {
         server.createContext("/api/query/plan", exchange -> safely(exchange, this::queryPlan));
         server.createContext("/api/query/resolve", exchange -> safely(exchange, this::queryResolve));
         server.createContext("/api/query/views", exchange -> safely(exchange, this::queryViews));
+        server.createContext("/api/project/overview", exchange -> safely(exchange, this::projectOverview));
+        server.createContext("/api/rag/semantic-search", exchange -> safely(exchange, this::ragSemanticSearch));
+        server.createContext("/api/rag/answer-draft", exchange -> safely(exchange, this::ragAnswerDraft));
         server.createContext("/api/impact/analyze", exchange -> safely(exchange, this::impactAnalyze));
         server.createContext("/api/impact/analyze-diff", exchange -> safely(exchange, this::impactAnalyzeDiff));
+        server.createContext("/api/impact/deep-supplement", exchange -> safely(exchange, this::impactDeepSupplement));
         server.createContext("/api/graph/callers", exchange -> safely(exchange, this::graphCallers));
         server.createContext("/api/graph/callees", exchange -> safely(exchange, this::graphCallees));
         server.createContext("/api/graph/callers/report", exchange -> safely(exchange, this::graphCallersReport));
@@ -216,6 +245,60 @@ public final class CodeAtlasHttpServer {
             .map(this::resultViewJson)
             .collect(Collectors.joining(",", "[", "]"));
         send(exchange, 200, "{\"views\":" + views + "}");
+    }
+
+    private void projectOverview(HttpExchange exchange) throws IOException {
+        if (!exchange.getRequestMethod().equalsIgnoreCase("GET")) {
+            send(exchange, 405, "{\"error\":\"method_not_allowed\"}");
+            return;
+        }
+        Map<String, String> query = query(exchange);
+        String projectId = required(query, "projectId");
+        String snapshotId = required(query, "snapshotId");
+        send(exchange, 200, projectOverviewJson(projectId, snapshotId));
+    }
+
+    private void ragSemanticSearch(HttpExchange exchange) throws IOException {
+        if (!exchange.getRequestMethod().equalsIgnoreCase("GET")) {
+            send(exchange, 405, "{\"error\":\"method_not_allowed\"}");
+            return;
+        }
+        Map<String, String> query = query(exchange);
+        String projectId = required(query, "projectId");
+        String snapshotId = required(query, "snapshotId");
+        String q = required(query, "q");
+        int limit = intValue(query.get("limit"), 20);
+        List<ActiveFact> activeFacts = activeFactStore.activeFacts(projectId, snapshotId);
+        List<RagSearchResult> results = ragSearchEngine.search(
+            q,
+            symbolSearchIndex,
+            ragSummaries(projectId, snapshotId, activeFacts),
+            activeFacts,
+            limit
+        );
+        send(exchange, 200, ragSearchJson(projectId, snapshotId, q, results));
+    }
+
+    private void ragAnswerDraft(HttpExchange exchange) throws IOException {
+        if (!exchange.getRequestMethod().equalsIgnoreCase("GET")) {
+            send(exchange, 405, "{\"error\":\"method_not_allowed\"}");
+            return;
+        }
+        Map<String, String> query = query(exchange);
+        String projectId = required(query, "projectId");
+        String snapshotId = required(query, "snapshotId");
+        String q = required(query, "q");
+        int limit = intValue(query.get("limit"), 20);
+        List<ActiveFact> activeFacts = activeFactStore.activeFacts(projectId, snapshotId);
+        List<RagSearchResult> results = ragSearchEngine.search(
+            q,
+            symbolSearchIndex,
+            ragSummaries(projectId, snapshotId, activeFacts),
+            activeFacts,
+            limit
+        );
+        String answer = ragAnswerDraftBuilder.build(q, results);
+        send(exchange, 200, ragAnswerDraftJson(projectId, snapshotId, q, answer, results));
     }
 
     private void graphCallers(HttpExchange exchange) throws IOException {
@@ -475,6 +558,40 @@ public final class CodeAtlasHttpServer {
         send(exchange, 200, jsonExporter.export(report));
     }
 
+    private void impactDeepSupplement(HttpExchange exchange) throws IOException {
+        if (!exchange.getRequestMethod().equalsIgnoreCase("GET")) {
+            send(exchange, 405, "{\"error\":\"method_not_allowed\"}");
+            return;
+        }
+        Map<String, String> query = query(exchange);
+        String reportId = required(query, "reportId");
+        ImpactReport baseReport = reportStore.findReport(reportId)
+            .orElseThrow(() -> new IllegalArgumentException("report not found: " + reportId));
+        List<ActiveFact> activeFacts = activeFactStore.activeFacts(baseReport.projectId(), baseReport.snapshotId());
+        List<SymbolId> changedSymbols = baseReport.paths().stream()
+            .map(path -> path.changedSymbol())
+            .distinct()
+            .toList();
+        ImpactReport supplemental = new FastImpactAnalyzer().analyze(
+            reportId,
+            baseReport.projectId(),
+            baseReport.snapshotId(),
+            baseReport.changeSetId(),
+            activeFacts,
+            changedSymbols,
+            entrypointPredicate,
+            intValue(query.get("maxDepth"), 10),
+            intValue(query.get("limit"), 100)
+        );
+        ImpactReport deepReport = deepImpactReportSupplementer.supplement(
+            baseReport,
+            supplemental.paths(),
+            supplemental.evidenceList()
+        );
+        reportStore.putReport(deepReport);
+        send(exchange, 200, jsonExporter.export(deepReport));
+    }
+
     private List<SymbolId> changedSymbolsFromDiff(String diffText, List<ActiveFact> activeFacts) {
         Set<String> changedPaths = unifiedDiffParser.parseChangedFiles(diffText).stream()
             .map(ChangedFile::effectivePath)
@@ -599,6 +716,34 @@ public final class CodeAtlasHttpServer {
             + "}";
     }
 
+    private String projectOverviewJson(String projectId, String snapshotId) {
+        List<Map<String, String>> capabilities = List.of(
+            Map.of("label", "Coverage", "title", "Java / JSP / Struts1 / Spring / SQL / Jar", "status", "ready"),
+            Map.of("label", "Graph", "title", "Neo4j active facts with evidence and confidence", "status", "ready"),
+            Map.of("label", "Query", "title", "Natural-language entrypoints with exact symbol fallback", "status", "ready"),
+            Map.of("label", "Speed", "title", "Fast static result first, deep supplement on demand", "status", "ready")
+        );
+        List<Map<String, String>> analysisStatus = List.of(
+            Map.of("id", "fast-static", "label", "Fast static analysis", "state", "ready", "detail", "Spoon/Jasper/JDBC/MyBatis/Jar facts feed the graph"),
+            Map.of("id", "deep-supplement", "label", "Deep supplement", "state", "waiting", "detail", "Tai-e worker is optional and non-blocking"),
+            Map.of("id", "ai-rag", "label", "AI/RAG explanation", "state", "ready", "detail", "Answers are grounded in evidence packs"),
+            Map.of("id", "ffm", "label", "FFM acceleration", "state", "disabled", "detail", "Enabled only after benchmark policy recommends it")
+        );
+        List<Map<String, String>> entrypoints = List.of(
+            Map.of("mode", "impact", "label", "Change impact", "endpoint", "/api/impact/analyze"),
+            Map.of("mode", "variable", "label", "Variable trace", "endpoint", "/api/variables/trace/report"),
+            Map.of("mode", "jsp", "label", "JSP backend flow", "endpoint", "/api/jsp/backend-flow/report"),
+            Map.of("mode", "graph", "label", "Caller/callee graph", "endpoint", "/api/graph/callers/report"),
+            Map.of("mode", "qa", "label", "Evidence-backed AI Q&A", "endpoint", "/api/rag/answer-draft")
+        );
+        return "{\"projectId\":\"" + escape(projectId)
+            + "\",\"snapshotId\":\"" + escape(snapshotId)
+            + "\",\"capabilities\":" + valueJson(capabilities)
+            + ",\"analysisStatus\":" + valueJson(analysisStatus)
+            + ",\"entrypoints\":" + valueJson(entrypoints)
+            + "}";
+    }
+
     private String assistantResultJson(String reportId, ImpactAssistantResult result) {
         return "{\"reportId\":\"" + escape(reportId)
             + "\",\"summary\":\"" + escape(result.summary())
@@ -607,6 +752,146 @@ public final class CodeAtlasHttpServer {
             + ",\"evidenceCount\":" + result.evidenceCount()
             + ",\"aiAssisted\":" + result.aiAssisted()
             + "}";
+    }
+
+    private String ragSearchJson(String projectId, String snapshotId, String query, List<RagSearchResult> results) {
+        return "{\"projectId\":\"" + escape(projectId)
+            + "\",\"snapshotId\":\"" + escape(snapshotId)
+            + "\",\"query\":\"" + escape(query)
+            + "\",\"results\":" + results.stream()
+                .map(this::ragSearchResultJson)
+                .collect(Collectors.joining(",", "[", "]"))
+            + "}";
+    }
+
+    private String ragAnswerDraftJson(
+        String projectId,
+        String snapshotId,
+        String query,
+        String answer,
+        List<RagSearchResult> results
+    ) {
+        return "{\"projectId\":\"" + escape(projectId)
+            + "\",\"snapshotId\":\"" + escape(snapshotId)
+            + "\",\"query\":\"" + escape(query)
+            + "\",\"answer\":\"" + escape(answer)
+            + "\",\"results\":" + results.stream()
+                .map(this::ragSearchResultJson)
+                .collect(Collectors.joining(",", "[", "]"))
+            + "}";
+    }
+
+    private String ragSearchResultJson(RagSearchResult result) {
+        return "{\"symbolId\":\"" + escape(result.symbolId().value())
+            + "\",\"kind\":\"" + result.symbolId().kind()
+            + "\",\"displayName\":\"" + escape(result.displayName())
+            + "\",\"summary\":\"" + escape(result.summary())
+            + "\",\"score\":" + result.score()
+            + ",\"matchKinds\":" + valueJson(result.matchKinds())
+            + ",\"evidenceKeys\":" + valueJson(result.evidenceKeys())
+            + "}";
+    }
+
+    private List<ArtifactSummary> ragSummaries(String projectId, String snapshotId, List<ActiveFact> activeFacts) {
+        Map<SymbolId, List<ActiveFact>> bySymbol = new LinkedHashMap<>();
+        for (ActiveFact activeFact : activeFacts) {
+            bySymbol.computeIfAbsent(activeFact.factKey().source(), ignored -> new ArrayList<>()).add(activeFact);
+            bySymbol.computeIfAbsent(activeFact.factKey().target(), ignored -> new ArrayList<>()).add(activeFact);
+        }
+        List<ArtifactSummary> summaries = new ArrayList<>(bySymbol.entrySet().stream()
+            .map(entry -> new ArtifactSummary(
+                summaryKind(entry.getKey()),
+                entry.getKey(),
+                displayName(entry.getKey()),
+                summaryText(entry.getValue()),
+                entry.getValue().stream()
+                    .flatMap(fact -> fact.evidenceKeys().stream())
+                    .map(org.sainm.codeatlas.graph.model.EvidenceKey::value)
+                    .distinct()
+                    .sorted()
+                    .toList()
+            ))
+            .toList());
+        summaries.addAll(reportStore.reports(projectId, snapshotId).stream()
+            .map(this::reportSummary)
+            .toList());
+        return summaries;
+    }
+
+    private ArtifactSummary reportSummary(ImpactReport report) {
+        return new ArtifactSummary(
+            SummaryKind.IMPACT_REPORT,
+            SymbolId.logicalPath(SymbolKind.CONFIG_KEY, report.projectId(), "_reports", "impact-reports", report.reportId(), "impact-report"),
+            "Impact Report " + report.reportId(),
+            reportSummaryText(report),
+            report.evidenceList().stream()
+                .map(evidence -> "%s|%s|%s|%d".formatted(
+                    evidence.sourceType(),
+                    evidence.evidenceType(),
+                    evidence.filePath(),
+                    evidence.lineNumber()
+                ))
+                .toList()
+        );
+    }
+
+    private String reportSummaryText(ImpactReport report) {
+        String pathReasons = report.paths().stream()
+            .map(path -> path.reason() == null ? "" : path.reason())
+            .filter(reason -> !reason.isBlank())
+            .distinct()
+            .collect(Collectors.joining("; "));
+        String risks = report.paths().stream()
+            .map(path -> path.riskLevel().name())
+            .distinct()
+            .sorted()
+            .collect(Collectors.joining(", "));
+        return "Impact report "
+            + report.reportId()
+            + "; changeSet="
+            + report.changeSetId()
+            + "; paths="
+            + report.paths().size()
+            + "; risks="
+            + risks
+            + (pathReasons.isBlank() ? "." : "; reasons: " + pathReasons + ".");
+    }
+
+    private SummaryKind summaryKind(SymbolId symbolId) {
+        return switch (symbolId.kind()) {
+            case METHOD -> SummaryKind.METHOD;
+            case CLASS, INTERFACE, ENUM, ANNOTATION -> SummaryKind.CLASS;
+            case JSP_PAGE, JSP_FORM, JSP_INPUT -> SummaryKind.JSP_PAGE;
+            case SQL_STATEMENT -> SummaryKind.SQL_STATEMENT;
+            default -> SummaryKind.IMPACT_REPORT;
+        };
+    }
+
+    private String summaryText(List<ActiveFact> activeFacts) {
+        String relations = activeFacts.stream()
+            .map(fact -> fact.factKey().relationType().name())
+            .distinct()
+            .sorted()
+            .collect(Collectors.joining(", "));
+        String qualifiers = activeFacts.stream()
+            .map(fact -> fact.factKey().qualifier())
+            .filter(value -> !value.isBlank())
+            .distinct()
+            .sorted()
+            .collect(Collectors.joining(", "));
+        return "Static evidence count: " + activeFacts.size()
+            + "; relations: " + relations
+            + (qualifiers.isBlank() ? "." : "; qualifiers: " + qualifiers + ".");
+    }
+
+    private String displayName(SymbolId symbolId) {
+        if (symbolId.memberName() != null) {
+            return symbolId.ownerQualifiedName() + "#" + symbolId.memberName();
+        }
+        if (symbolId.localId() != null) {
+            return symbolId.ownerQualifiedName() + "#" + symbolId.localId();
+        }
+        return symbolId.ownerQualifiedName() == null ? symbolId.value() : symbolId.ownerQualifiedName();
     }
 
     private String mapJson(Map<String, ?> map) {
@@ -618,6 +903,11 @@ public final class CodeAtlasHttpServer {
     private String valueJson(Object value) {
         if (value instanceof Number || value instanceof Boolean) {
             return value.toString();
+        }
+        if (value instanceof Map<?, ?> rawMap) {
+            Map<String, Object> converted = new LinkedHashMap<>();
+            rawMap.forEach((key, mapValue) -> converted.put(String.valueOf(key), mapValue));
+            return mapJson(converted);
         }
         if (value instanceof Iterable<?> iterable) {
             String joined = java.util.stream.StreamSupport.stream(iterable.spliterator(), false)
@@ -661,12 +951,20 @@ public final class CodeAtlasHttpServer {
                 sendNoContent(exchange, 204);
                 return;
             }
+            enforceProjectAccess(exchange);
             handler.handle(exchange);
+        } catch (ProjectAccessDeniedException exception) {
+            send(exchange, 403, "{\"error\":\"forbidden\",\"message\":\"" + escape(exception.getMessage()) + "\"}");
         } catch (IllegalArgumentException exception) {
             send(exchange, 400, "{\"error\":\"bad_request\",\"message\":\"" + escape(exception.getMessage()) + "\"}");
         } catch (Exception exception) {
             send(exchange, 500, "{\"error\":\"internal_error\",\"message\":\"" + escape(exception.getMessage() == null ? "Unexpected server error" : exception.getMessage()) + "\"}");
         }
+    }
+
+    private void enforceProjectAccess(HttpExchange exchange) {
+        Map<String, String> query = query(exchange);
+        projectAccessPolicy.requireAllowed(query.get("projectId"));
     }
 
     private void sendNoContent(HttpExchange exchange, int status) throws IOException {

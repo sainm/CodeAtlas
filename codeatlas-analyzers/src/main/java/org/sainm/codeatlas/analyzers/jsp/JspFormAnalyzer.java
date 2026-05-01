@@ -40,7 +40,7 @@ public final class JspFormAnalyzer {
             JspSemanticAnalysis semanticAnalysis = semanticExtractor.extract(jspText, context, jspFile);
             nodes.add(GraphNodeFactory.jspNode(jspPage, NodeRole.JSP_ARTIFACT));
             for (int i = 0; i < forms.size(); i++) {
-                addForm(scope, projectKey, sourceRootKey, jspFile, jspPage, forms.get(i), i, nodes, facts);
+                addForm(scope, projectKey, sourceRootKey, jspFile, jspPage, semanticAnalysis, forms.get(i), i, nodes, facts);
             }
             addTaglibLinks(scope, projectKey, sourceRootKey, jspFile, jspPage, semanticAnalysis, context, nodes, facts);
             addStrutsTilesLinks(scope, projectKey, sourceRootKey, jspFile, jspPage, semanticAnalysis, context, nodes, facts);
@@ -53,7 +53,7 @@ public final class JspFormAnalyzer {
             addIncludeLinks(scope, projectKey, sourceRootKey, jspFile, jspPage, semanticAnalysis, context, nodes, facts);
             addNavigationLinks(scope, projectKey, sourceRootKey, jspFile, jspPage, semanticAnalysis, nodes, facts);
             addStrutsLinkParameterLinks(scope, projectKey, sourceRootKey, jspFile, jspPage, semanticAnalysis, nodes, facts);
-            return new JspAnalysisResult(forms, nodes, facts);
+            return new JspAnalysisResult(forms, nodes, facts, semanticAnalysis);
         } catch (Exception exception) {
             throw new IllegalStateException("Failed to analyze JSP forms: " + jspFile, exception);
         }
@@ -65,6 +65,7 @@ public final class JspFormAnalyzer {
         String sourceRootKey,
         Path jspFile,
         SymbolId jspPage,
+        JspSemanticAnalysis semanticAnalysis,
         JspForm form,
         int index,
         List<GraphNode> nodes,
@@ -74,7 +75,7 @@ public final class JspFormAnalyzer {
         SymbolId actionPath = StrutsConfigAnalyzer.actionPath(projectKey, scope.moduleKey(), sourceRootKey, form.action());
         nodes.add(GraphNodeFactory.jspNode(formSymbol, NodeRole.JSP_ARTIFACT));
         nodes.add(GraphNodeFactory.actionPathNode(actionPath));
-        facts.add(fact(scope, jspPage, RelationType.DECLARES, formSymbol, jspFile, form.line(), "jsp-form", Confidence.CERTAIN));
+        facts.add(fact(scope, jspPage, RelationType.DECLARES, formSymbol, jspFile, form.line(), "jsp-form", jspConfidence(semanticAnalysis, Confidence.CERTAIN)));
         facts.add(fact(scope, formSymbol, RelationType.SUBMITS_TO, actionPath, jspFile, form.line(), "form-action", Confidence.LIKELY));
 
         for (JspInput input : form.inputs()) {
@@ -96,7 +97,7 @@ public final class JspFormAnalyzer {
             );
             nodes.add(GraphNodeFactory.jspNode(inputSymbol, NodeRole.JSP_ARTIFACT));
             nodes.add(GraphNodeFactory.requestParameterNode(parameter));
-            facts.add(fact(scope, formSymbol, RelationType.DECLARES, inputSymbol, jspFile, input.line(), "jsp-input:" + input.name(), Confidence.CERTAIN));
+            facts.add(fact(scope, formSymbol, RelationType.DECLARES, inputSymbol, jspFile, input.line(), "jsp-input:" + input.name(), jspConfidence(semanticAnalysis, Confidence.CERTAIN)));
             facts.add(fact(scope, inputSymbol, RelationType.WRITES_PARAM, actionPath, jspFile, input.line(), input.name(), Confidence.LIKELY));
             facts.add(fact(scope, inputSymbol, RelationType.WRITES_PARAM, parameter, jspFile, input.line(), input.name(), Confidence.LIKELY));
         }
@@ -179,7 +180,7 @@ public final class JspFormAnalyzer {
                     jspFile,
                     action.line(),
                     "jsp-custom-tag:" + action.name() + "->" + location,
-                    Confidence.CERTAIN
+                    jspConfidence(semanticAnalysis, Confidence.CERTAIN)
                 ));
             });
         }
@@ -771,6 +772,16 @@ public final class JspFormAnalyzer {
 
     private boolean isDynamic(String value) {
         return value.contains("<%") || value.contains("${");
+    }
+
+    private Confidence jspConfidence(JspSemanticAnalysis semanticAnalysis, Confidence confidence) {
+        if (semanticAnalysis != null
+            && (semanticAnalysis.parserSource() == JspSemanticParserSource.TOKENIZER_FALLBACK
+                || semanticAnalysis.parserSource() == JspSemanticParserSource.JERICHO_WITH_TOKENIZER_MERGE)
+            && confidence == Confidence.CERTAIN) {
+            return Confidence.LIKELY;
+        }
+        return confidence;
     }
 
     private GraphFact fact(

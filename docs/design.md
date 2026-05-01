@@ -494,6 +494,14 @@ reverse_edge_types: short[edgeCount]
 
 CodeAtlas 需要 RAG，但不是普通文档 RAG，而是 Code Graph RAG。
 
+Vector backend decision:
+
+- MVP default: Neo4j Vector Index, because vector recall must stay close to graph facts, `symbolId`, snapshot scope, and evidence keys.
+- pgvector: optional lightweight backend for deployments that already operate PostgreSQL.
+- OpenSearch: optional backend when full-text code search and vector search should share one search platform.
+- Qdrant: optional dedicated vector backend when vector throughput, payload filtering, or independent scaling becomes important.
+- Details are recorded in `docs/rag-vector-backends.md`.
+
 ```text
 用户问题
   -> 意图识别

@@ -81,15 +81,23 @@ public final class ImpactReportJsonExporter {
                       "symbolId": "%s",
                       "incomingRelation": "%s",
                       "sourceType": "%s",
+                      "analysisLayer": "%s",
                       "confidence": "%s",
                       "evidenceKeys": [%s]
                     }""".formatted(
             escape(step.symbolId().value()),
             relation,
             step.sourceType(),
+            analysisLayer(step),
             step.confidence(),
             step.evidenceKeys().stream().map(this::evidenceKey).collect(Collectors.joining(","))
         );
+    }
+
+    private String analysisLayer(ImpactPathStep step) {
+        return step.sourceType() == org.sainm.codeatlas.graph.model.SourceType.TAI_E
+            ? "DEEP_SUPPLEMENT"
+            : "STATIC_FACT";
     }
 
     private String evidenceKey(EvidenceKey evidenceKey) {

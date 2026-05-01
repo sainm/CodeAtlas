@@ -4,7 +4,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import org.sainm.codeatlas.analyzers.AnalyzerScope;
+import org.sainm.codeatlas.graph.model.Confidence;
 import org.sainm.codeatlas.graph.model.RelationType;
+import org.sainm.codeatlas.graph.model.SourceType;
 import org.sainm.codeatlas.graph.model.SymbolKind;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -234,5 +236,30 @@ class JspFormAnalyzerTest {
         assertTrue(result.facts().stream().noneMatch(fact -> fact.factKey().qualifier().contains("fakeJs")));
         assertTrue(result.facts().stream().noneMatch(fact -> fact.factKey().qualifier().contains("fakeCss")));
         assertTrue(result.facts().stream().noneMatch(fact -> fact.factKey().qualifier().contains("dynamic.do")));
+    }
+
+    @Test
+    void exposesJasperFallbackDiagnosticsAndCapsFallbackFactConfidence() throws Exception {
+        Path jsp = tempDir.resolve("src/main/webapp/user/fallback.jsp");
+        Files.createDirectories(jsp.getParent());
+        Files.writeString(jsp, """
+            <%@ page pageEncoding="UTF-8" %>
+            <%@ taglib prefix="html" uri="http://struts.apache.org/tags-html" %>
+            <html:form action="/user/save.do">
+              <html:text property="name"/>
+            </html:form>
+            <% if (true) {
+            """);
+
+        AnalyzerScope scope = new AnalyzerScope("shop", "_root", "snapshot-1", "run-1", "src/main/webapp/user/fallback.jsp", tempDir);
+        JspAnalysisResult result = new JspFormAnalyzer().analyze(scope, "shop", "src/main/webapp", jsp);
+
+        assertEquals(JspSemanticParserSource.JERICHO_WITH_TOKENIZER_MERGE, result.semanticAnalysis().parserSource());
+        assertTrue(result.semanticAnalysis().fallbackReason().contains("Apache Jasper could not parse"));
+        assertTrue(result.semanticAnalysis().missingContext().contains("web.xml"));
+        assertTrue(result.semanticAnalysis().missingContext().contains("taglibRegistry"));
+        assertTrue(result.facts().stream()
+            .filter(fact -> fact.sourceType() == SourceType.JSP_FALLBACK)
+            .noneMatch(fact -> fact.confidence() == Confidence.CERTAIN));
     }
 }

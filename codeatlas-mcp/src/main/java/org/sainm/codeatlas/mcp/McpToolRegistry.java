@@ -46,9 +46,11 @@ public final class McpToolRegistry {
             case VARIABLE_TRACE_SINK -> "Trace where a variable value flows to through argument propagation and table effects with evidence paths.";
             case JSP_FIND_BACKEND_FLOW -> "Find JSP to backend action/controller flow.";
             case IMPACT_ANALYZE_DIFF -> "Analyze impact from unified diff text by mapping changed files to active evidence symbols.";
-            case RAG_SEMANTIC_SEARCH -> "Search summaries and evidence packs semantically.";
+            case RAG_SEMANTIC_SEARCH -> "Search exact symbols, semantic summaries, historical reports, and graph-neighbor evidence.";
+            case RAG_ANSWER_DRAFT -> "Build a static answer draft from RAG search results with evidence keys.";
             case REPORT_GET_IMPACT_REPORT -> "Read a generated impact report.";
             case REPORT_GET_ASSISTANT_SUMMARY -> "Read report summary, risk explanation, test suggestions, evidence count, and AI/static fallback state.";
+            case PROJECT_OVERVIEW -> "Read project capabilities, analysis status, and suggested entrypoints for dashboard or agent orientation.";
             case QUERY_PLAN -> "Plan a safe read-only query from a natural-language question.";
         };
     }
@@ -80,11 +82,14 @@ public final class McpToolRegistry {
             case IMPACT_ANALYZE_DIFF -> """
                 {"type":"object","required":["projectId","snapshotId","diffText"],"properties":{"projectId":{"type":"string"},"snapshotId":{"type":"string"},"diffText":{"type":"string","description":"Unified diff text"},"changeSetId":{"type":"string","default":"diff"},"maxDepth":{"type":"integer","default":6},"limit":{"type":"integer","default":50}}}
                 """;
-            case RAG_SEMANTIC_SEARCH -> """
+            case RAG_SEMANTIC_SEARCH, RAG_ANSWER_DRAFT -> """
                 {"type":"object","required":["projectId","snapshotId","q"],"properties":{"projectId":{"type":"string"},"snapshotId":{"type":"string"},"q":{"type":"string"},"limit":{"type":"integer","default":20}}}
                 """;
             case REPORT_GET_IMPACT_REPORT, REPORT_GET_ASSISTANT_SUMMARY -> """
                 {"type":"object","required":["reportId"],"properties":{"reportId":{"type":"string"}}}
+                """;
+            case PROJECT_OVERVIEW -> """
+                {"type":"object","required":["projectId","snapshotId"],"properties":{"projectId":{"type":"string"},"snapshotId":{"type":"string"}}}
                 """;
             case QUERY_PLAN -> """
                 {"type":"object","required":["q"],"properties":{"q":{"type":"string","description":"Natural-language analysis question"}}}

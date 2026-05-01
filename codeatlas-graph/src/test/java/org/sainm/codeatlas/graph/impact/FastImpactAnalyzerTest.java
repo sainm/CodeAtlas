@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 
+import org.sainm.codeatlas.graph.benchmark.FfmActivationDecision;
 import org.sainm.codeatlas.graph.model.Confidence;
 import org.sainm.codeatlas.graph.model.EvidenceKey;
 import org.sainm.codeatlas.graph.model.FactKey;
@@ -106,6 +107,30 @@ class FastImpactAnalyzerTest {
             assertEquals(1, report.paths().size());
             assertTrue(report.evidenceList().size() > 0);
         });
+    }
+
+    @Test
+    void canUseFfmRouterOnlyWhenBenchmarkDecisionRecommendsIt() {
+        SymbolId action = method("com.acme.UserAction", "execute");
+        SymbolId service = method("com.acme.UserService", "save");
+        InMemoryGraphRepository repository = new InMemoryGraphRepository();
+        repository.upsertFact(active(action, service, "UserAction.java", 10, Confidence.CERTAIN));
+
+        ImpactReport report = new FastImpactAnalyzer().analyzeWithFfmDecision(
+            "r-ffm",
+            "shop",
+            "snapshot-1",
+            "change-ffm",
+            repository.activeFacts("shop", "snapshot-1"),
+            List.of(service),
+            symbol -> symbol.equals(action),
+            4,
+            10,
+            new FfmActivationDecision(true, "ffm recommended", List.of("large graph"))
+        );
+
+        assertEquals(1, report.paths().size());
+        assertTrue(report.paths().getFirst().reason().contains("FFM graph index"));
     }
 
     private GraphFact active(SymbolId source, SymbolId target, String file, int line, Confidence confidence) {

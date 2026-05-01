@@ -12,7 +12,8 @@ public record JspSemanticAnalysis(
     String encoding,
     JspSemanticParserSource parserSource,
     String parserName,
-    String fallbackReason
+    String fallbackReason,
+    List<String> missingContext
 ) {
     public JspSemanticAnalysis(
         List<JspDirective> directives,
@@ -33,7 +34,8 @@ public record JspSemanticAnalysis(
             encoding,
             JspSemanticParserSource.TOKENIZER_FALLBACK,
             "tolerant-jsp-tokenizer",
-            null
+            null,
+            List.of()
         );
     }
 
@@ -48,5 +50,6 @@ public record JspSemanticAnalysis(
         parserSource = parserSource == null ? JspSemanticParserSource.TOKENIZER_FALLBACK : parserSource;
         parserName = parserName == null || parserName.isBlank() ? "tolerant-jsp-tokenizer" : parserName.trim();
         fallbackReason = fallbackReason == null || fallbackReason.isBlank() ? null : fallbackReason.trim();
+        missingContext = missingContext == null ? List.of() : List.copyOf(missingContext);
     }
 }

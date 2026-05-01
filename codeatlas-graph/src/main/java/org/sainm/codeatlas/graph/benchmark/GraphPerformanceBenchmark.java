@@ -5,6 +5,8 @@ import org.sainm.codeatlas.graph.cache.PrimitiveAdjacencyCache;
 import org.sainm.codeatlas.graph.cache.RelationGroup;
 import org.sainm.codeatlas.graph.model.SymbolId;
 import org.sainm.codeatlas.graph.neo4j.Neo4jGraphQueryBuilder;
+import org.sainm.codeatlas.graph.offheap.CompressedGraphEdge;
+import org.sainm.codeatlas.graph.offheap.OffHeapGraphIndex;
 import org.sainm.codeatlas.graph.store.ActiveFact;
 import java.util.List;
 
@@ -48,5 +50,42 @@ public final class GraphPerformanceBenchmark {
             },
             cache.stats().estimatedHeapBytes()
         );
+    }
+
+    public FfmActivationDecision evaluateFfmActivation(
+        long edgeCount,
+        BenchmarkResult benchmarkResult,
+        FfmActivationPolicy policy
+    ) {
+        if (benchmarkResult == null) {
+            throw new IllegalArgumentException("benchmarkResult is required");
+        }
+        FfmActivationPolicy safePolicy = policy == null ? FfmActivationPolicy.defaultPolicy() : policy;
+        return safePolicy.evaluate(new GraphScaleMetrics(
+            edgeCount,
+            benchmarkResult.p95Millis(),
+            benchmarkResult.estimatedHeapBytes()
+        ));
+    }
+
+    public BenchmarkResult measureOffHeapGraphIndexQueries(
+        int nodeCount,
+        List<CompressedGraphEdge> edges,
+        int startNodeId,
+        int iterations
+    ) {
+        try (OffHeapGraphIndex index = OffHeapGraphIndex.confined(nodeCount, edges)) {
+            return timer.measure(
+                "ffm-offheap-graph-index",
+                Math.min(10, iterations),
+                iterations,
+                () -> {
+                    index.calleesOf(startNodeId);
+                    index.callersOf(startNodeId);
+                    index.reachableCallees(startNodeId, 4);
+                },
+                0L
+            );
+        }
     }
 }

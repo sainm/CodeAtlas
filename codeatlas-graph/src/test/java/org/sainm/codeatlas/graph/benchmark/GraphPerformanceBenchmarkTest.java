@@ -10,6 +10,7 @@ import org.sainm.codeatlas.graph.model.GraphFact;
 import org.sainm.codeatlas.graph.model.RelationType;
 import org.sainm.codeatlas.graph.model.SourceType;
 import org.sainm.codeatlas.graph.model.SymbolId;
+import org.sainm.codeatlas.graph.offheap.CompressedGraphEdge;
 import org.sainm.codeatlas.graph.store.InMemoryGraphRepository;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -51,6 +52,36 @@ class GraphPerformanceBenchmarkTest {
         assertEquals(20, result.iterations());
         assertTrue(result.p95Millis() >= 0.0);
         assertTrue(result.estimatedHeapBytes() > 0L);
+    }
+
+    @Test
+    void evaluatesFfmActivationFromBenchmarkResult() {
+        GraphPerformanceBenchmark benchmark = new GraphPerformanceBenchmark();
+        FfmActivationPolicy policy = new FfmActivationPolicy(10, 5.0d, 1_024L);
+        BenchmarkResult result = new BenchmarkResult("synthetic", 20, 8.0d, 3.0d, 1_000L, 2_048L);
+
+        FfmActivationDecision decision = benchmark.evaluateFfmActivation(10, result, policy);
+
+        assertTrue(decision.recommended());
+    }
+
+    @Test
+    void recordsOffHeapGraphIndexP95AndHeapEstimate() {
+        BenchmarkResult result = new GraphPerformanceBenchmark().measureOffHeapGraphIndexQueries(
+            4,
+            List.of(
+                new CompressedGraphEdge(0, 1, 10),
+                new CompressedGraphEdge(1, 2, 10),
+                new CompressedGraphEdge(2, 3, 10)
+            ),
+            0,
+            20
+        );
+
+        assertEquals("ffm-offheap-graph-index", result.name());
+        assertEquals(20, result.iterations());
+        assertTrue(result.p95Millis() >= 0.0);
+        assertEquals(0L, result.estimatedHeapBytes());
     }
 
     private GraphFact active(SymbolId source, SymbolId target) {

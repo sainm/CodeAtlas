@@ -16,7 +16,8 @@ class AgentRegistryTest {
 
         assertTrue(registry.isAllowed(AgentToolName.QUERY_PLAN));
         assertTrue(registry.isAllowed(AgentToolName.JSP_FIND_BACKEND_FLOW));
-        assertEquals(12, registry.listTools().size());
+        assertTrue(registry.isAllowed(AgentToolName.PROJECT_OVERVIEW));
+        assertEquals(14, registry.listTools().size());
         assertEquals(60, registry.find(AgentToolName.IMPACT_ANALYZE_DIFF).orElseThrow().timeoutSeconds());
     }
 
@@ -123,6 +124,8 @@ class AgentRegistryTest {
         assertTrue(variable.profile().allowedTools().contains(AgentToolName.VARIABLE_TRACE));
         assertTrue(variable.profile().allowedTools().contains(AgentToolName.VARIABLE_TRACE_SOURCE));
         assertTrue(question.profile().allowedTools().contains(AgentToolName.RAG_SEMANTIC_SEARCH));
+        assertTrue(question.profile().allowedTools().contains(AgentToolName.RAG_ANSWER_DRAFT));
+        assertTrue(question.profile().allowedTools().contains(AgentToolName.PROJECT_OVERVIEW));
 
         assertThrows(IllegalArgumentException.class, () -> impact.requireValidAnswer(new AgentAnswer(
             AgentType.IMPACT_ANALYSIS,

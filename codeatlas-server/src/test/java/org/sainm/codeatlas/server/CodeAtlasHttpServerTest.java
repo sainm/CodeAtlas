@@ -123,6 +123,32 @@ class CodeAtlasHttpServerTest {
     }
 
     @Test
+    void servesProjectOverviewForUiDashboard() throws Exception {
+        CodeAtlasHttpServer server = new CodeAtlasHttpServer(new InetSocketAddress(0), new InMemoryReportStore());
+        server.start();
+        try {
+            HttpClient client = HttpClient.newHttpClient();
+            String base = "http://localhost:" + server.port();
+
+            HttpResponse<String> response = client.send(
+                HttpRequest.newBuilder(URI.create(base + "/api/project/overview?projectId=shop&snapshotId=s1")).GET().build(),
+                HttpResponse.BodyHandlers.ofString()
+            );
+
+            assertEquals(200, response.statusCode());
+            assertTrue(response.body().contains("\"projectId\":\"shop\""));
+            assertTrue(response.body().contains("\"snapshotId\":\"s1\""));
+            assertTrue(response.body().contains("\"capabilities\""));
+            assertTrue(response.body().contains("\"analysisStatus\""));
+            assertTrue(response.body().contains("\"entrypoints\""));
+            assertTrue(response.body().contains("Struts1"));
+            assertTrue(response.body().contains("JSP"));
+        } finally {
+            server.stop();
+        }
+    }
+
+    @Test
     void returnsBadRequestJsonForMissingQueryParameters() throws Exception {
         CodeAtlasHttpServer server = new CodeAtlasHttpServer(new InetSocketAddress(0), new InMemoryReportStore());
         server.start();
@@ -341,6 +367,157 @@ class CodeAtlasHttpServerTest {
             assertTrue(response.body().contains("\"intent\":\"SQL_TABLE_IMPACT\""));
             assertTrue(response.body().contains("\"suggestedParameter\":\"symbolId\""));
             assertTrue(response.body().contains(table.value()));
+        } finally {
+            server.stop();
+        }
+    }
+
+    @Test
+    void servesRagSemanticSearchWithGraphExpansionEvidence() throws Exception {
+        SymbolId service = SymbolId.method("shop", "_root", "src/main/java", "com.acme.UserService", "saveUser", "()V");
+        SymbolId mapper = SymbolId.method("shop", "_root", "src/main/java", "com.acme.UserMapper", "insert", "()V");
+        SymbolSearchIndex index = new SymbolSearchIndex();
+        index.add(GraphNodeFactory.methodNode(service, NodeRole.SERVICE));
+        InMemoryGraphRepository repository = new InMemoryGraphRepository();
+        repository.upsertFact(GraphFact.active(
+            new FactKey(service, RelationType.CALLS, mapper, "direct"),
+            new EvidenceKey(SourceType.SPOON, "test", "UserService.java", 22, 22, "mapper.insert(user)"),
+            "shop",
+            "s1",
+            "r1",
+            "scope",
+            Confidence.CERTAIN,
+            SourceType.SPOON
+        ));
+        InMemoryActiveFactStore activeStore = new InMemoryActiveFactStore();
+        activeStore.put("shop", "s1", repository.activeFacts("shop", "s1"));
+        CodeAtlasHttpServer server = new CodeAtlasHttpServer(new InetSocketAddress(0), new InMemoryReportStore(), index, activeStore);
+        server.start();
+        try {
+            HttpClient client = HttpClient.newHttpClient();
+            String base = "http://localhost:" + server.port();
+            String q = URLEncoder.encode("UserService save account", StandardCharsets.UTF_8);
+
+            HttpResponse<String> response = client.send(
+                HttpRequest.newBuilder(URI.create(base + "/api/rag/semantic-search?projectId=shop&snapshotId=s1&q=" + q + "&limit=5")).GET().build(),
+                HttpResponse.BodyHandlers.ofString()
+            );
+
+            assertEquals(200, response.statusCode());
+            assertTrue(response.body().contains("\"query\":\"UserService save account\""));
+            assertTrue(response.body().contains(service.value()));
+            assertTrue(response.body().contains(mapper.value()));
+            assertTrue(response.body().contains("EXACT_SYMBOL"));
+            assertTrue(response.body().contains("VECTOR"));
+            assertTrue(response.body().contains("GRAPH_NEIGHBOR"));
+            assertTrue(response.body().contains("UserService.java"));
+        } finally {
+            server.stop();
+        }
+    }
+
+    @Test
+    void ragSemanticSearchRecallsHistoricalImpactReports() throws Exception {
+        SymbolId action = SymbolId.method("shop", "_root", "src/main/java", "com.acme.CheckoutAction", "execute", "()V");
+        SymbolId table = SymbolId.logicalPath(SymbolKind.DB_TABLE, "shop", "_root", "_database", "orders", null);
+        ImpactPath path = ImpactPath.fromSteps(
+            action,
+            table,
+            List.of(
+                new ImpactPathStep(action, null, SourceType.SPOON, Confidence.CERTAIN),
+                new ImpactPathStep(table, RelationType.WRITES_TABLE, SourceType.SQL, Confidence.LIKELY)
+            ),
+            RiskLevel.HIGH,
+            "checkout writes orders table",
+            false
+        );
+        InMemoryReportStore reports = new InMemoryReportStore();
+        reports.putReport(new ImpactReport(
+            "r-checkout",
+            "shop",
+            "s1",
+            "c-history",
+            ReportDepth.FAST,
+            null,
+            List.of(path),
+            List.of(),
+            false
+        ));
+        CodeAtlasHttpServer server = new CodeAtlasHttpServer(new InetSocketAddress(0), reports);
+        server.start();
+        try {
+            HttpClient client = HttpClient.newHttpClient();
+            String base = "http://localhost:" + server.port();
+            String q = URLEncoder.encode("checkout high risk orders table", StandardCharsets.UTF_8);
+
+            HttpResponse<String> response = client.send(
+                HttpRequest.newBuilder(URI.create(base + "/api/rag/semantic-search?projectId=shop&snapshotId=s1&q=" + q + "&limit=5")).GET().build(),
+                HttpResponse.BodyHandlers.ofString()
+            );
+
+            assertEquals(200, response.statusCode());
+            assertTrue(response.body().contains("r-checkout"));
+            assertTrue(response.body().contains("Impact Report r-checkout"));
+            assertTrue(response.body().contains("checkout writes orders table"));
+        } finally {
+            server.stop();
+        }
+    }
+
+    @Test
+    void servesRagAnswerDraftFromSemanticSearchResults() throws Exception {
+        SymbolId service = SymbolId.method("shop", "_root", "src/main/java", "com.acme.UserService", "saveUser", "()V");
+        SymbolSearchIndex index = new SymbolSearchIndex();
+        index.add(GraphNodeFactory.methodNode(service, NodeRole.SERVICE));
+        CodeAtlasHttpServer server = new CodeAtlasHttpServer(new InetSocketAddress(0), new InMemoryReportStore(), index);
+        server.start();
+        try {
+            HttpClient client = HttpClient.newHttpClient();
+            String base = "http://localhost:" + server.port();
+            String q = URLEncoder.encode("explain UserService saveUser", StandardCharsets.UTF_8);
+
+            HttpResponse<String> response = client.send(
+                HttpRequest.newBuilder(URI.create(base + "/api/rag/answer-draft?projectId=shop&snapshotId=s1&q=" + q + "&limit=5")).GET().build(),
+                HttpResponse.BodyHandlers.ofString()
+            );
+
+            assertEquals(200, response.statusCode());
+            assertTrue(response.body().contains("\"query\":\"explain UserService saveUser\""));
+            assertTrue(response.body().contains("Static answer draft"));
+            assertTrue(response.body().contains("UserService#saveUser"));
+            assertTrue(response.body().contains("EXACT_SYMBOL"));
+        } finally {
+            server.stop();
+        }
+    }
+
+    @Test
+    void rejectsApiRequestsForProjectsOutsideServerPolicy() throws Exception {
+        CodeAtlasHttpServer server = new CodeAtlasHttpServer(
+            new InetSocketAddress(0),
+            new InMemoryReportStore(),
+            new SymbolSearchIndex(),
+            (projectId, snapshotId) -> List.of(),
+            ProjectAccessPolicy.allowOnly("shop")
+        );
+        server.start();
+        try {
+            HttpClient client = HttpClient.newHttpClient();
+            String base = "http://localhost:" + server.port();
+
+            HttpResponse<String> allowed = client.send(
+                HttpRequest.newBuilder(URI.create(base + "/api/rag/answer-draft?projectId=shop&snapshotId=s1&q=user")).GET().build(),
+                HttpResponse.BodyHandlers.ofString()
+            );
+            HttpResponse<String> denied = client.send(
+                HttpRequest.newBuilder(URI.create(base + "/api/rag/answer-draft?projectId=other&snapshotId=s1&q=user")).GET().build(),
+                HttpResponse.BodyHandlers.ofString()
+            );
+
+            assertEquals(200, allowed.statusCode());
+            assertEquals(403, denied.statusCode());
+            assertTrue(denied.body().contains("\"error\":\"forbidden\""));
+            assertTrue(denied.body().contains("other"));
         } finally {
             server.stop();
         }
@@ -585,6 +762,68 @@ class CodeAtlasHttpServerTest {
 
             assertTrue(response.body().contains("\"reportId\": \"r-impact\""));
             assertTrue(response.body().contains("\"paths\""));
+        } finally {
+            server.stop();
+        }
+    }
+
+    @Test
+    void servesDeepImpactSupplementFromExistingFastReport() throws Exception {
+        SymbolId api = SymbolId.logicalPath(SymbolKind.API_ENDPOINT, "shop", "_root", "src/main/java", "/api/users", "POST");
+        SymbolId action = SymbolId.method("shop", "_root", "src/main/java", "com.acme.UserAction", "execute", "()V");
+        SymbolId service = SymbolId.method("shop", "_root", "src/main/java", "com.acme.UserService", "save", "()V");
+        ImpactPath fastPath = ImpactPath.fromSteps(
+            action,
+            service,
+            List.of(
+                new ImpactPathStep(action, null, SourceType.SPOON, Confidence.CERTAIN),
+                new ImpactPathStep(service, RelationType.CALLS, SourceType.SPOON, Confidence.CERTAIN)
+            ),
+            RiskLevel.MEDIUM,
+            "action calls service",
+            false
+        );
+        InMemoryReportStore reportStore = new InMemoryReportStore();
+        reportStore.putReport(new ImpactReport("r-deep", "shop", "s1", "c1", ReportDepth.FAST, null, List.of(fastPath), List.of(), false));
+        InMemoryGraphRepository repository = new InMemoryGraphRepository();
+        repository.upsertFact(GraphFact.active(
+            new FactKey(api, RelationType.ROUTES_TO, action, "api-route"),
+            new EvidenceKey(SourceType.STATIC_RULE, "test", "UserController.java", 5, 5, "route"),
+            "shop",
+            "s1",
+            "r1",
+            "scope",
+            Confidence.LIKELY,
+            SourceType.STATIC_RULE
+        ));
+        repository.upsertFact(GraphFact.active(
+            new FactKey(action, RelationType.CALLS, service, "direct"),
+            new EvidenceKey(SourceType.SPOON, "test", "UserAction.java", 20, 20, "call"),
+            "shop",
+            "s1",
+            "r1",
+            "scope",
+            Confidence.CERTAIN,
+            SourceType.SPOON
+        ));
+        InMemoryActiveFactStore activeStore = new InMemoryActiveFactStore();
+        activeStore.put("shop", "s1", repository.activeFacts("shop", "s1"));
+        CodeAtlasHttpServer server = new CodeAtlasHttpServer(new InetSocketAddress(0), reportStore, new SymbolSearchIndex(), activeStore);
+        server.start();
+        try {
+            HttpClient client = HttpClient.newHttpClient();
+            String base = "http://localhost:" + server.port();
+
+            HttpResponse<String> response = client.send(
+                HttpRequest.newBuilder(URI.create(base + "/api/impact/deep-supplement?reportId=r-deep&maxDepth=4&limit=20")).GET().build(),
+                HttpResponse.BodyHandlers.ofString()
+            );
+
+            assertEquals(200, response.statusCode());
+            assertTrue(response.body().contains("\"depth\": \"DEEP\""));
+            assertTrue(response.body().contains(api.value()));
+            assertTrue(response.body().contains("UserController.java"));
+            assertEquals(ReportDepth.DEEP, reportStore.findReport("r-deep").orElseThrow().depth());
         } finally {
             server.stop();
         }

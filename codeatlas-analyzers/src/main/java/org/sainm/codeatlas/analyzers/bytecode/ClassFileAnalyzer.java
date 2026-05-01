@@ -52,16 +52,41 @@ public final class ClassFileAnalyzer {
             var entries = jar.entries();
             while (entries.hasMoreElements()) {
                 var entry = entries.nextElement();
-                if (entry.isDirectory() || !entry.getName().endsWith(".class") || entry.getName().equals("module-info.class")) {
+                if (entry.isDirectory()) {
                     continue;
                 }
-                try (InputStream input = jar.getInputStream(entry)) {
-                    analyzeClassBytes(scope, projectKey, sourceRootKey, jarPath, entry.getName(), input.readAllBytes(), nodes, facts);
+                if (entry.getName().endsWith(".class") && !entry.getName().equals("module-info.class")) {
+                    try (InputStream input = jar.getInputStream(entry)) {
+                        analyzeClassBytes(scope, projectKey, sourceRootKey, jarPath, entry.getName(), input.readAllBytes(), nodes, facts);
+                    }
+                } else if (isClasspathResource(entry.getName())) {
+                    nodes.add(GraphNodeFactory.configNode(SymbolId.logicalPath(
+                        SymbolKind.CONFIG_KEY,
+                        projectKey,
+                        scope.moduleKey(),
+                        sourceRootKey,
+                        jarPath.toString(),
+                        "resource:" + entry.getName()
+                    )));
                 }
             }
         } catch (IOException exception) {
             throw new IllegalStateException("Failed to analyze jar: " + jarPath, exception);
         }
+    }
+
+    private boolean isClasspathResource(String entryName) {
+        String normalized = entryName == null ? "" : entryName.toLowerCase(java.util.Locale.ROOT);
+        return normalized.endsWith(".xml")
+            || normalized.endsWith(".properties")
+            || normalized.endsWith(".factories")
+            || normalized.endsWith(".handlers")
+            || normalized.endsWith(".schemas")
+            || normalized.endsWith(".yml")
+            || normalized.endsWith(".yaml")
+            || normalized.endsWith(".dicon")
+            || normalized.endsWith(".tld")
+            || normalized.endsWith(".xsd");
     }
 
     private void analyzeClassFile(

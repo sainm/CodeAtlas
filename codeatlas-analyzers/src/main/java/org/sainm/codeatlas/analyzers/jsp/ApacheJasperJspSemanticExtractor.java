@@ -146,7 +146,8 @@ final class ApacheJasperJspSemanticExtractor {
                 encoding,
                 JspSemanticParserSource.APACHE_JASPER,
                 "apache-jasper",
-                null
+                null,
+                List.of()
             );
         }
 

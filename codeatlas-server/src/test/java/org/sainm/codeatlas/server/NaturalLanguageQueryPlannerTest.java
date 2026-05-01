@@ -18,6 +18,15 @@ class NaturalLanguageQueryPlannerTest {
     }
 
     @Test
+    void routesProjectOverviewQuestion() {
+        QueryPlan plan = planner.plan("项目总览和分析状态");
+
+        assertEquals("PROJECT_OVERVIEW", plan.intent());
+        assertEquals("/api/project/overview", plan.endpoint());
+        assertEquals("PROJECT_OVERVIEW_VIEW", plan.resultView());
+    }
+
+    @Test
     void routesJspFlowQuestion() {
         QueryPlan plan = planner.plan("JSP form submit to which Struts action backend flow");
 
@@ -76,5 +85,15 @@ class NaturalLanguageQueryPlannerTest {
         assertEquals("SQL_TABLE_IMPACT", plan.intent());
         assertTrue(plan.relationTypes().contains("READS_TABLE"));
         assertTrue(plan.relationTypes().contains("WRITES_TABLE"));
+    }
+
+    @Test
+    void routesCodeQuestionToRagSemanticSearch() {
+        QueryPlan plan = planner.plan("explain UserService and find related code");
+
+        assertEquals("RAG_SEMANTIC_SEARCH", plan.intent());
+        assertEquals("/api/rag/answer-draft", plan.endpoint());
+        assertTrue(plan.requiredParameters().contains("q"));
+        assertEquals("RAG_SEARCH_VIEW", plan.resultView());
     }
 }

@@ -76,6 +76,30 @@ class AiReportAssistantTest {
     }
 
     @Test
+    void auditLogRedactsAiPromptAndDoesNotStoreApiKey() {
+        AiRequestAuditLog auditLog = new AiRequestAuditLog(new SourceRedactor());
+        AiReportAssistant assistant = new AiReportAssistant(
+            (prompt, config) -> AiTextResult.success("ok"),
+            new ImpactPromptBuilder(new SourceRedactor()),
+            auditLog
+        );
+
+        assistant.summarizeImpact(
+            secretReport(),
+            new AiRuntimeConfig(AiProviderType.CUSTOM, "http://localhost", "sk-secret-api-key", "model", "embed", 3),
+            new AiProjectPolicy(true, true, 200)
+        );
+
+        assertEquals(1, auditLog.events().size());
+        AiRequestAuditEvent event = auditLog.events().getFirst();
+        assertEquals("impact-summary", event.task());
+        assertEquals("model", event.model());
+        assertTrue(!event.redactedUserPrompt().contains("plain-secret"));
+        assertTrue(!event.toString().contains("sk-secret-api-key"));
+        assertTrue(event.redactedUserPrompt().contains("password=[REDACTED]"));
+    }
+
+    @Test
     void fallsBackToStaticSummaryWhenProviderFails() {
         AiProvider provider = new AiProvider() {
             @Override
@@ -122,5 +146,17 @@ class AiReportAssistantTest {
         );
         ImpactEvidence evidence = new ImpactEvidence("UserAction.java", 12, "call", "service.save()", SourceType.SPOON, Confidence.CERTAIN);
         return new ImpactReport("r2", "p1", "s1", "c1", ReportDepth.FAST, null, List.of(path), List.of(evidence), false);
+    }
+
+    private ImpactReport secretReport() {
+        ImpactEvidence evidence = new ImpactEvidence(
+            "config.properties",
+            1,
+            "snippet",
+            "password=plain-secret",
+            SourceType.SPOON,
+            Confidence.CERTAIN
+        );
+        return new ImpactReport("r3", "p1", "s1", "c1", ReportDepth.FAST, null, List.of(), List.of(evidence), false);
     }
 }

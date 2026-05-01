@@ -11,4 +11,6 @@ dependencies {
     implementation libs.tomcat.embed.jasper
     implementation libs.ant
     implementation libs.jsqlparser
+    implementation libs.javaparser.core
+    implementation libs.jericho.html
 }

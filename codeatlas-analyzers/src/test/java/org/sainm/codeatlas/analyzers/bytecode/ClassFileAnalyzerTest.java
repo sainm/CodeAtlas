@@ -143,6 +143,23 @@ class ClassFileAnalyzerTest {
             && fact.confidence() == Confidence.LIKELY));
     }
 
+    @Test
+    void indexesClasspathResourceFilesFromBusinessJars() throws Exception {
+        Path jar = compileBusinessJar();
+        AnalyzerScope scope = new AnalyzerScope("shop", "_root", "snapshot-1", "run-1", "project", tempDir);
+
+        ClassFileAnalysisResult result = new ClassFileAnalyzer().analyze(scope, "shop", "src/main/java", List.of(jar));
+
+        assertTrue(result.nodes().stream().anyMatch(node -> node.symbolId().kind() == SymbolKind.CONFIG_KEY
+            && node.symbolId().ownerQualifiedName().endsWith("pricing-logic.jar")
+            && node.symbolId().localId().equals("resource:META-INF/spring.factories")));
+        assertTrue(result.nodes().stream().anyMatch(node -> node.symbolId().kind() == SymbolKind.CONFIG_KEY
+            && node.symbolId().ownerQualifiedName().endsWith("pricing-logic.jar")
+            && node.symbolId().localId().equals("resource:legacy/plugin-init.xml")));
+        assertTrue(result.nodes().stream().noneMatch(node -> node.symbolId().kind() == SymbolKind.CONFIG_KEY
+            && node.symbolId().localId().equals("resource:assets/logo.png")));
+    }
+
     private Path compileBusinessJar() throws Exception {
         Path source = tempDir.resolve("business-jar-src/com/vendor/logic/PricingLogic.java");
         Files.createDirectories(source.getParent());
@@ -290,6 +307,9 @@ class ClassFileAnalyzerTest {
             addClass(output, classes, "org/springframework/web/bind/annotation/RequestMapping.class");
             addClass(output, classes, "org/springframework/web/bind/annotation/GetMapping.class");
             addClass(output, classes, "org/springframework/web/bind/annotation/RequestMethod.class");
+            addResource(output, "META-INF/spring.factories", "com.vendor.logic.Plugin=true");
+            addResource(output, "legacy/plugin-init.xml", "<plugin/>");
+            addResource(output, "assets/logo.png", "not-indexed");
         }
         return jar;
     }
@@ -297,6 +317,12 @@ class ClassFileAnalyzerTest {
     private static void addClass(JarOutputStream output, Path classes, String entryName) throws Exception {
         output.putNextEntry(new JarEntry(entryName));
         Files.copy(classes.resolve(entryName), output);
+        output.closeEntry();
+    }
+
+    private static void addResource(JarOutputStream output, String entryName, String content) throws Exception {
+        output.putNextEntry(new JarEntry(entryName));
+        output.write(content.getBytes(java.nio.charset.StandardCharsets.UTF_8));
         output.closeEntry();
     }
 }

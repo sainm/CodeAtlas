@@ -22,6 +22,46 @@
 - [x] MCP: added read-only `query.plan` tool descriptor for natural-language query planning.
 - [x] MCP: added read-only `query-view` resource descriptor for result display contracts.
 - [x] MCP: added read-only report assistant summary tool descriptor for risk explanation and test suggestions.
+- [x] MCP: tool planning now supports request principal context, project allow-lists, fixed-window rate limiting, and redacted audit events.
+- [x] Security: AI API keys can be stored as AES-GCM encrypted payloads and decrypted only at runtime from a local master secret.
+- [x] RAG: added embedding provider contracts, deterministic local fallback embeddings, and an in-memory semantic summary index for testable recall.
+- [x] RAG: added hybrid search that combines exact symbol search, vector recall, and active graph-fact expansion with evidence keys.
+- [x] RAG/API: added `/api/rag/semantic-search` for exact symbol search, semantic recall, graph-neighbor expansion, and evidence-key results.
+- [x] RAG/API: semantic search now also recalls historical impact report summaries from the report store.
+- [x] JSP: Jasper fallback analysis now exposes missing context diagnostics and caps fallback JSP relation confidence at `LIKELY`.
+- [x] Bytecode: ASM-style class scanning now covers jar classes, annotations, inheritance/implementation, calls, fields, Spring endpoints, JPA hints, and config resources.
+- [x] JSP: added SMAP mapping assessment contract to classify generated-servlet line mapping as candidate, deferred, or blocked.
+- [x] Java: JavaParser 3.28.0 is available as an optional fast scanner with separate `JAVAPARSER_FAST` evidence, not a primary fact source.
+- [x] Java: Spoon binding analysis now has a no-classpath fallback wrapper with explicit mode and fallback reason for legacy unresolved dependencies.
+- [x] JSP: Jericho HTML Parser 3.4 is integrated as the tolerant fallback parser merged with tokenizer results; script/style false positives are filtered.
+- [x] UI: Variable Trace View now supports source/sink/all direction switching with per-direction path counts.
+- [x] UI: AI Q&A view now shows the answer draft beside matched evidence nodes and evidence keys.
+- [x] UI: added a backend analysis status panel for fast static analysis, deep supplement, AI/RAG explanation, and FFM acceleration states.
+- [x] UI: Graph Explorer now exposes caller, callee, combined, and entry-to-SQL query modes with depth/limit controls and node refocus expansion.
+- [x] UI: added a project overview page with capability cards and guided low-threshold entry points.
+- [x] UI/Open source: selected Ant Design as the enterprise component baseline, integrated Cytoscape.js graph canvas, and integrated React Flow path rendering with Vite manual chunks.
+- [x] Query UX: project overview is now a backend result-view contract and natural-language route for overview/status questions.
+- [x] API/UI: added `/api/project/overview` and wired the overview page to backend capabilities, analysisStatus, and entrypoints.
+- [x] UI: project overview now renders backend capabilities and entrypoints with static fallback only when the endpoint has not been loaded.
+- [x] MCP/Agent: exposed `project.overview` as a read-only orientation tool for dashboard and code-question agent workflows.
+- [x] RAG/Neo4j: added a first-version Neo4j Vector Index contract for summary schema, embedding upsert, and vector query statements.
+- [x] License: Tai-e review recorded as GPL-3.0/LGPL-3.0, optional enhancement worker only, not default distribution.
+- [x] Tai-e: added independent JVM launch-plan contract with Tai-e jar, classpath/app-classpath, input classes, analyses, heap, output directory, and timeout metadata.
+- [x] Tai-e: added controlled analysis profiles for call graph `cg`, pointer analysis `pta`, and `pta` with `taint-config`.
+- [x] Tai-e: added signature mapper from Tai-e/Soot-style method and field signatures into CodeAtlas `symbolId` descriptors.
+- [x] Tai-e: added Neo4j importer for Tai-e call edges as `TAI_E` evidenced `CALLS` facts.
+- [x] Tai-e: optional worker supervisor now enforces timeout semantics and degrades failures without blocking fast MVP analysis.
+- [x] Tai-e: impact JSON/Markdown marks Tai-e path steps as `DEEP_SUPPLEMENT`, separate from regular static facts.
+- [x] Tai-e: sample compatibility verifier checks classpath inputs and Tai-e output signature mapping.
+- [x] FFM: added CSR/CSC off-heap graph index with compressed int node/edge ids, caller/callee queries, bounded BFS, confined/shared arena factories, mmap read-only mapping, and benchmark coverage.
+- [x] FFM: integrated with Impact Analysis through an explicit benchmark-driven router; default Fast Impact path remains JVM active-facts unless FFM is recommended.
+- [x] RAG: evaluated pgvector, OpenSearch, and Qdrant as optional vector backends while keeping Neo4j Vector Index as v1 default.
+- [x] RAG/API: added `/api/rag/answer-draft` to produce a static evidence-backed answer draft from RAG results.
+- [x] MCP/Agent: exposed `rag.answerDraft` as a read-only tool for code-question workflows.
+- [x] MCP: added `code-question` prompt that instructs clients to use `rag.answerDraft` and answer only from evidence.
+- [x] Security: HTTP APIs now support project allow-list enforcement with 403 responses for forbidden projectId values.
+- [x] Query UX: natural-language code questions such as "explain/find related code" route to `RAG_SEMANTIC_SEARCH` with `RAG_SEARCH_VIEW`.
+- [x] Security: AI request audit events record provider/model/task and redacted prompts without persisting API keys.
 - [x] Agent: added read-only agent tool registry and bounded profiles for impact analysis, variable trace, and code question agents.
 - [x] Agent: added tool call guard that rejects out-of-profile tools, non-read-only tools, and calls over the profile step limit.
 - [x] Agent: added answer/evidence contract so agent output can carry summary, findings, evidence, confidence, sourceType, and truncation state.
@@ -58,6 +98,8 @@
 - [x] Impact Report: JSON/Markdown affected symbol categories no longer guess Java layer names; Java roles must come from graph facts.
 - [x] Impact Report: Fast report regression verifies tombstoned old snapshot relations do not leak into new paths/evidence/affected symbols.
 - [x] Performance: added benchmark result contracts for Neo4j query templates and JVM primitive adjacency cache P95/heap estimates.
+- [x] Performance: added benchmark-driven FFM activation policy requiring edge count, P95 latency, and heap estimate thresholds before recommending off-heap graph work.
+- [x] Impact Report: added Deep Impact Report supplementer and `/api/impact/deep-supplement` to merge deeper active-fact paths/evidence into an existing Fast Report.
 - [x] Performance: Fast Impact Report has a 30-second regression guard on a synthetic 250-edge chain.
 - [x] Variable trace: sink query includes `READS_PARAM`, `BINDS_TO`, and `COVERED_BY` so Struts DynaActionForm and Validator destinations are visible.
 - [x] Variable trace: added active-facts source/sink path reports with confidence, sourceTypes, qualifiers, and evidenceKeys for request parameters.
@@ -153,7 +195,7 @@
 - [x] 解析 Maven 多模块结构。
 - [x] 解析 Gradle `settings.gradle(.kts)` 和基础 source sets。
 - [x] 评估 Gradle Tooling API，用于复杂 Gradle 项目增强。
-- [ ] 使用 ASM/ClassGraph 快速扫描 class、annotation、继承、实现、资源文件。
+- [x] 使用 ASM/ClassGraph 快速扫描 class、annotation、继承、实现、资源文件。
 - [x] 使用轻量 class/jar 索引建立业务 jar class/method 节点，后续再以 ASM/ClassGraph 增强 annotation 和字节码调用边。
 - [x] 轻量 class/jar 索引识别 interface、enum、annotation 类型节点。
 - [x] 建立文件到符号的快速索引。
@@ -173,8 +215,8 @@
 - [x] 将 Spoon `CtMethod` 映射到统一 `symbolId`。
 - [x] 提取构造器、静态初始化块、内部类、匿名类和 lambda 的稳定标识。
 - [x] 标记 synthetic/bridge/source-only/jvm-only 方法。
-- [ ] 保留 JavaParser 作为可选快速扫描器，不作为主事实源。
-- [ ] 使用 JDT 或 Spoon 内部 JDT 能力作为绑定解析兜底。
+- [x] 保留 JavaParser 作为可选快速扫描器，不作为主事实源。
+- [x] 使用 JDT 或 Spoon 内部 JDT 能力作为绑定解析兜底。
 
 ## 5. JSP 分析
 
@@ -195,12 +237,12 @@
 - [x] 解析 Struts taglib 扩展：html:textarea、html:radio、html:multibox、bean:write、logic:iterate。
 - [x] 记录 Struts JSP tag 语义：html:form -> SUBMITS_TO，html input property -> WRITES_PARAM；logic:iterate 暂不建模控制流。
 - [x] 解析 Spring form tag。
-- [ ] 调研并接入 JetHTMLParser 或 Jericho 作为容错解析器。
+- [x] 调研并接入 JetHTMLParser 或 Jericho 作为容错解析器。
 - [x] 提取 form/action/input/select/textarea。
 - [x] 建立 JSP input -> request parameter 关系。
-- [ ] 评估 Jasper 生成 Servlet + SMAP 回映射方案。
+- [x] 评估 Jasper 生成 Servlet + SMAP 回映射方案。
 - [x] 明确不使用 jsoup 直接解析 JSP。
-- [ ] Jasper 失败时记录缺失上下文并降级到 JetHTMLParser/Jericho，相关关系标记为 `POSSIBLE` 或 `LIKELY`。
+- [x] Jasper 失败时记录缺失上下文并降级到现有 tolerant JSP parser，相关关系标记为 `POSSIBLE` 或 `LIKELY`。
 
 ## 6. 框架适配
 
@@ -293,54 +335,54 @@
 - [x] 关联受影响 JSP、API、Action、Controller、Service、DAO、Mapper、SQL、table。
 - [x] 为每条影响路径计算 confidence。
 - [x] 输出 Fast Impact Report。
-- [ ] 输出 Deep Impact Report 增量补充。
+- [x] 输出 Deep Impact Report 增量补充。
 - [x] 支持 Markdown/JSON 报告格式。
 - [x] 支持“为什么受影响”的路径解释。
 - [x] 验证删除关系后不会从旧 snapshot 残留到新报告。
 
 ## 10. Tai-e 深度分析（增强阶段）
 
-- [ ] 完成 Tai-e license review。
-- [ ] 用样例项目验证 Tai-e 输入 classpath 和输出 signature 可映射性。
-- [ ] 建立 Tai-e worker 独立 JVM。
-- [ ] 准备 classpath 和 compiled classes 输入。
-- [ ] 配置 call graph analysis。
-- [ ] 配置 pointer analysis。
-- [ ] 配置 taint analysis source/sink。
-- [ ] 实现 Tai-e signature -> CodeAtlas symbolId 映射。
-- [ ] 将 Tai-e 分析结果导入 Neo4j。
-- [ ] 给 Tai-e worker 设置超时、内存上限和失败降级。
-- [ ] 在报告中区分 Spoon 事实和 Tai-e 深度补强。
-- [ ] 确保 Tai-e 失败不影响 MVP 影响报告。
+- [x] 完成 Tai-e license review。
+- [x] 用样例项目验证 Tai-e 输入 classpath 和输出 signature 可映射性。
+- [x] 建立 Tai-e worker 独立 JVM。
+- [x] 准备 classpath 和 compiled classes 输入。
+- [x] 配置 call graph analysis。
+- [x] 配置 pointer analysis。
+- [x] 配置 taint analysis source/sink。
+- [x] 实现 Tai-e signature -> CodeAtlas symbolId 映射。
+- [x] 将 Tai-e 分析结果导入 Neo4j。
+- [x] 给 Tai-e worker 设置超时、内存上限和失败降级。
+- [x] 在报告中区分 Spoon 事实和 Tai-e 深度补强。
+- [x] 确保 Tai-e 失败不影响 MVP 影响报告。
 
 ## 11. FFM OffHeapGraphIndex（benchmark 驱动增强阶段）
 
 - [x] 建立 Neo4j 查询 P95 耗时 benchmark。
 - [x] 建立 JVM primitive adjacency cache heap 占用 benchmark。
-- [ ] 定义启用 FFM 的规模阈值：edge 数、P95 查询耗时、heap 压力。
-- [ ] 设计 CSR/CSC 数据格式。
-- [ ] 设计 node id 和 edge id 压缩编码。
-- [ ] 使用 `MemorySegment` 存储 offsets、targets、edgeTypes。
-- [ ] 使用 `Arena.ofConfined()` 管理任务级临时内存。
-- [ ] 使用 `Arena.ofShared()` 管理只读共享索引。
-- [ ] 使用 `FileChannel.map(..., Arena)` 支持 mmap 持久缓存。
-- [ ] 实现 caller/callee 查询。
-- [ ] 实现多跳 BFS。
-- [ ] 实现 visited bitmap 和 frontier queue。
-- [ ] 与 Impact Analysis Engine 集成。
-- [ ] 增加 heap 使用和查询耗时 benchmark。
-- [ ] 只有 benchmark 证明收益后，才将 FFM 接入默认影响分析路径。
+- [x] 定义启用 FFM 的规模阈值：edge 数、P95 查询耗时、heap 压力。
+- [x] 设计 CSR/CSC 数据格式。
+- [x] 设计 node id 和 edge id 压缩编码。
+- [x] 使用 `MemorySegment` 存储 offsets、targets、edgeTypes。
+- [x] 使用 `Arena.ofConfined()` 管理任务级临时内存。
+- [x] 使用 `Arena.ofShared()` 管理只读共享索引。
+- [x] 使用 `FileChannel.map(..., Arena)` 支持 mmap 持久缓存。
+- [x] 实现 caller/callee 查询。
+- [x] 实现多跳 BFS。
+- [x] 实现 visited bitmap 和 frontier queue。
+- [x] 与 Impact Analysis Engine 集成。
+- [x] 增加 heap 使用和查询耗时 benchmark。
+- [x] 只有 benchmark 证明收益后，才将 FFM 接入默认影响分析路径。
 
 ## 12. RAG 与向量检索
 
 - [x] 设计 MethodSummary、ClassSummary、JspPageSummary、SqlStatementSummary、ImpactReportSummary。
-- [ ] 接入 embedding provider。
-- [ ] 首版使用 Neo4j Vector Index。
-- [ ] 实现精确符号检索 + 向量召回 + Neo4j 图扩展。
+- [x] 接入 embedding provider。
+- [x] 首版使用 Neo4j Vector Index。
+- [x] 实现精确符号检索 + 向量召回 + 图事实扩展（MVP 内存契约，后续接 Neo4j Vector Index）。
 - [x] 实现源码/JSP/XML/SQL evidence pack 构建。
-- [ ] 支持自然语言代码问答。
-- [ ] 支持相似代码和历史报告召回。
-- [ ] 评估 pgvector、OpenSearch、Qdrant 作为后续扩展。
+- [x] 支持自然语言代码问答的检索规划与证据召回（答案生成继续走 Agent/AI 增强）。
+- [x] 支持相似代码和历史报告召回（MVP 内存契约）。
+- [x] 评估 pgvector、OpenSearch、Qdrant 作为后续扩展。
 
 ## 13. AI 与报告生成
 
@@ -381,19 +423,20 @@
 - [x] 暴露 `jsp.findBackendFlow`。
 - [x] 暴露 `impact.analyzeDiff`。
 - [x] 暴露 `rag.semanticSearch`。
+- [x] 暴露 `rag.answerDraft`。
 - [x] 暴露 `report.getImpactReport`。
 - [x] 实现 MCP Resources：symbol、jsp、table、report。
-- [x] 实现 MCP Prompts：impact-review、variable-trace、jsp-flow-analysis、test-recommendation。
-- [ ] 增加 project 权限、限流、脱敏、审计。
+- [x] 实现 MCP Prompts：impact-review、variable-trace、jsp-flow-analysis、code-question、test-recommendation。
+- [x] 增加 project 权限、限流、脱敏、审计。
 
 ## 16. UI 与报告
 
 - [x] 使用 React + TypeScript + Vite 初始化 `codeatlas-ui`。
 - [x] 配置前端 Gradle 集成任务，支持统一 build。
-- [ ] 选择企业级组件库，默认 Ant Design 或同类方案。
-- [ ] 接入 Cytoscape.js 用于代码图谱探索。
-- [ ] 接入 React Flow 或同类库用于影响路径/变量流线性展示。
-- [ ] 项目总览页。
+- [x] 选择企业级组件库，默认 Ant Design 或同类方案。
+- [x] 接入 Cytoscape.js 用于代码图谱探索。
+- [x] 接入 React Flow 或同类库用于影响路径/变量流线性展示。
+- [x] 项目总览页。
 - [x] 变更影响报告页。
 - [x] 方法调用链查询页。
 - [x] 变量来源/流向查询页。
@@ -408,13 +451,13 @@
 - [x] AI 风险摘要展示。
 - [x] 证据路径展示。
 - [x] 置信度标识。
-- [ ] 后台深度分析状态展示。
-- [ ] Graph Explorer 支持 caller/callee、入口到 SQL 链路、节点展开和深度限制。
+- [x] 后台深度分析状态展示。
+- [x] Graph Explorer 支持 caller/callee、入口到 SQL 链路、节点展开和深度限制。
 - [x] Impact Report 支持风险等级、建议测试、AI 摘要、证据路径。
-- [ ] Variable Trace View 支持来源/流向双向切换。
+- [x] Variable Trace View 支持来源/流向双向切换。
 - [x] JSP Flow View 支持 JSP -> Action/Controller -> Service -> DAO/Mapper -> SQL/table。
 - [x] Symbol Search 支持 class/method/JSP/SQL/table/config 统一搜索。
-- [ ] AI Q&A 页面要求答案旁展示证据节点和路径。
+- [x] AI Q&A 页面要求答案旁展示证据节点和路径。
 - [x] UI 对所有大图查询展示 `truncated` 状态和继续展开入口。
 - [x] AI 摘要旁显示“基于 N 条静态分析证据生成”。
 - [x] 提供原始 JSON 明细查看入口。
@@ -440,17 +483,17 @@
 - [x] 测试 AI 关闭和开启两种模式。
 - [x] 测试 Neo4j 查询性能。
 - [x] 测试 JVM primitive adjacency cache 内存和速度。
-- [ ] 增强阶段测试 FFM 图索引内存和速度。
+- [x] 增强阶段测试 FFM 图索引内存和速度。
 
 ## 18. 安全与治理
 
 - [x] 源码片段脱敏。
-- [ ] API key 加密存储。
-- [ ] AI 请求日志脱敏。
+- [x] API key 加密存储。
+- [x] AI 请求日志脱敏。
 - [x] MCP 工具白名单。
 - [x] 禁止任意数据库查询暴露。
 - [x] 禁止无确认写操作。
-- [ ] 项目级访问控制。
+- [x] 项目级访问控制。
 - [x] 审计 Agent 和 MCP 调用。
 - [x] 标记 AI_ASSISTED 结果，禁止混淆为确定事实。
 

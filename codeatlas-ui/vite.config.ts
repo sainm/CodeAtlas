@@ -3,6 +3,17 @@ import { defineConfig } from 'vite';
 
 export default defineConfig({
   plugins: [react()],
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          antd: ['antd'],
+          cytoscape: ['cytoscape'],
+          reactflow: ['@xyflow/react']
+        }
+      }
+    }
+  },
   server: {
     port: 5173,
     proxy: {
