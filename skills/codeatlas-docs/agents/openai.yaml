@@ -1,4 +1,0 @@
-interface:
-  display_name: "CodeAtlas Docs"
-  short_description: "Maintain CodeAtlas design, plan, and task memory docs."
-  default_prompt: "Use this skill when updating CodeAtlas project memory docs."

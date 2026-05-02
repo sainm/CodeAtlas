@@ -1,15 +1,3 @@
-plugins {
-    id 'application'
-}
-
-description = 'CodeAtlas API server.'
-
 dependencies {
-    implementation project(':codeatlas-graph')
-    implementation project(':codeatlas-analyzers')
-    implementation project(':codeatlas-ai')
-}
-
-application {
-    mainClass = 'org.sainm.codeatlas.server.CodeAtlasServer'
+    api project(':codeatlas-graph')
 }

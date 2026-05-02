@@ -1,5 +1,0 @@
-interface:
-  display_name: "CodeAtlas Java JSP Analyzer"
-  short_description: "Build CodeAtlas source analyzers."
-  default_prompt: "Use this skill when implementing CodeAtlas Java, JSP, framework, or SQL analyzers."
-

@@ -2,19 +2,25 @@ plugins {
     id 'base'
 }
 
-group = 'org.sainm.codeatlas'
-version = '0.1.0-SNAPSHOT'
+ext {
+    javaModuleNames = [
+            'codeatlas-symbols',
+            'codeatlas-facts',
+            'codeatlas-graph',
+            'codeatlas-analyzers',
+            'codeatlas-worker',
+            'codeatlas-server',
+            'codeatlas-ai',
+            'codeatlas-mcp'
+    ]
+}
 
-ext.javaProjects = [
-    project(':codeatlas-server'),
-    project(':codeatlas-worker'),
-    project(':codeatlas-analyzers'),
-    project(':codeatlas-graph'),
-    project(':codeatlas-ai'),
-    project(':codeatlas-mcp')
-]
+subprojects {
+    group = 'org.sainm.codeatlas'
+    version = '0.1.0-SNAPSHOT'
+}
 
-configure(javaProjects) {
+configure(subprojects.findAll { javaModuleNames.contains(it.name) }) {
     apply plugin: 'java-library'
 
     java {
@@ -28,12 +34,17 @@ configure(javaProjects) {
         options.release = 25
     }
 
+    dependencies {
+        testImplementation platform('org.junit:junit-bom:5.11.4')
+        testImplementation 'org.junit.jupiter:junit-jupiter'
+        testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    }
+
     tasks.withType(Test).configureEach {
         useJUnitPlatform()
     }
+}
 
-    dependencies {
-        testImplementation libs.junit.jupiter
-        testRuntimeOnly libs.junit.platform.launcher
-    }
+project(':codeatlas-ui') {
+    apply plugin: 'base'
 }

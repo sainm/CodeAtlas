@@ -1,10 +1,4 @@
-plugins {
-    id 'java-library'
-}
-
-description = 'CodeAtlas read-only MCP integration contracts.'
-
 dependencies {
-    api project(':codeatlas-graph')
+    api project(':codeatlas-server')
+    api project(':codeatlas-ai')
 }
-

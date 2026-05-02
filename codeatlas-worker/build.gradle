@@ -1,15 +1,4 @@
-plugins {
-    id 'application'
-}
-
-description = 'CodeAtlas analysis worker.'
-
 dependencies {
-    implementation project(':codeatlas-graph')
-    implementation project(':codeatlas-analyzers')
+    api project(':codeatlas-analyzers')
+    api project(':codeatlas-graph')
 }
-
-application {
-    mainClass = 'org.sainm.codeatlas.worker.CodeAtlasWorker'
-}
-

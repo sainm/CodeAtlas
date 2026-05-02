@@ -1,30 +1,7 @@
-plugins {
-    id 'base'
+tasks.register('uiInfo') {
+    group = 'help'
+    description = 'Prints the placeholder UI module status.'
+    doLast {
+        println 'codeatlas-ui placeholder module; Vite/React scaffold will be added in the UI implementation slice.'
+    }
 }
-
-description = 'CodeAtlas React frontend.'
-
-def npmCommand = System.getProperty('os.name').toLowerCase().contains('windows') ? 'npm.cmd' : 'npm'
-
-tasks.register('npmInstall', Exec) {
-    workingDir projectDir
-    commandLine npmCommand, 'install'
-    inputs.file 'package.json'
-    outputs.dir 'node_modules'
-}
-
-tasks.register('npmBuild', Exec) {
-    dependsOn 'npmInstall'
-    workingDir projectDir
-    commandLine npmCommand, 'run', 'build'
-    inputs.dir 'src'
-    inputs.file 'package.json'
-    inputs.file 'tsconfig.json'
-    inputs.file 'vite.config.ts'
-    outputs.dir 'dist'
-}
-
-tasks.named('build') {
-    dependsOn 'npmBuild'
-}
-

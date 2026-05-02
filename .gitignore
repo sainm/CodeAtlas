@@ -1,4 +1,8 @@
 .gradle/
+.gradle-user-home/
+gradle-dist/
+gradle-dist-*/
+gradle-*-bin.zip
 build/
 **/build/
 out/
@@ -30,6 +34,8 @@ replay_pid*
 .idea/
 .vscode/
 *.iml
+
+.superpowers/
 
 .DS_Store
 Thumbs.db

@@ -1,16 +1,3 @@
-plugins {
-    id 'java-library'
-}
-
-description = 'CodeAtlas source and framework analyzer contracts.'
-
 dependencies {
-    api project(':codeatlas-graph')
-    implementation libs.spoon.core
-    implementation libs.jgit
-    implementation libs.tomcat.embed.jasper
-    implementation libs.ant
-    implementation libs.jsqlparser
-    implementation libs.javaparser.core
-    implementation libs.jericho.html
+    api project(':codeatlas-facts')
 }

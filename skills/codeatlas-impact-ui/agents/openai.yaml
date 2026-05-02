@@ -1,5 +1,0 @@
-interface:
-  display_name: "CodeAtlas Impact UI"
-  short_description: "Build impact reports and UI flows."
-  default_prompt: "Use this skill when implementing CodeAtlas impact analysis, query APIs, or result UI."
-

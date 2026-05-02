@@ -1,481 +1,299 @@
-# CodeAtlas Plan
+# CodeAtlas 计划
 
-## 1. 总体路线
+> 本文由 `docs/design.md` 生成。`docs/design.md` 是唯一事实源；本文是派生执行计划。
 
-CodeAtlas 采用“先闭环、再加深、再增强”的路线。MVP 的目标不是覆盖所有高级静态分析能力，而是快速打通最小业务影响链路：
+## 1. 路线图
 
-```text
-Git diff
-  -> 变更符号
-  -> Spring/Struts/JSP/MyBatis/Java direct call 最小链路
-  -> Neo4j + JVM 内存索引
-  -> 影响路径报告
-  -> AI/UI/MCP 展示与解释
-```
-
-总体目标：
+CodeAtlas 采用“先闭环、再加深、再加固”的路线。MVP 首先要交付一条有实际业务价值、带证据、可解释的 Java 影响分析闭环；深度分析、离堆加速和自动修改类工作流都放在后续增强阶段。
 
 ```text
-10 到 30 秒给出初版变更影响报告
-先用 Neo4j + JVM primitive adjacency cache
-Java 25 + Gradle 作为工程基线
-提供可视化前端查看图谱、链路、报告和问答
-Tai-e 和 FFM 放到 benchmark 驱动增强阶段
+导入 / Git diff
+  -> workspace 审查与分析规划
+  -> analyzer worker
+  -> fact/evidence staging
+  -> committed active graph
+  -> 影响 / 变量 / DB / 功能规划报告
+  -> REST、UI、MCP、AI 解释
 ```
 
 MVP 分期：
 
-```text
-MVP-0: 工程骨架、图谱 schema、symbolId 规范、evidence/confidence 契约
-MVP-1: Java/Spring/Struts/JSP/MyBatis 最小链路；Seasar2 仅 discovery/candidate；不做 Tai-e，不做 FFM
-MVP-2: Git diff -> 变更符号 -> 已提交图谱/增量刷新 -> Neo4j/内存索引影响路径报告
-MVP-3: 基础变量追踪和 SQL/table 影响
-MVP-4a: 可视化前端和 REST 查询接口
-MVP-4b: AI 摘要和 Code Graph RAG v1
-MVP-4c: MCP 只读接口和受控 Agent
-Enhancement: Tai-e 深度分析、FFM OffHeapGraphIndex、OpenRewrite 迁移增强
-```
+- MVP-0：工程基线、图谱模型、SymbolId、fact/evidence、snapshot 语义。
+- MVP-1：导入审查和最小 Java Web 分析链路。
+- MVP-2：committed graph、增量分析、Git diff 影响报告。
+- MVP-3：变量追踪和 SQL/table 影响。
+- MVP-4a：REST 查询契约和可视化前端。
+- MVP-4b：AI 摘要和 Code Graph RAG v1。
+- MVP-4c：只读 MCP 和受控 Agent。
+- 生产加固：生产级写入语义、benchmark 靶机、报表适配器、native 边界、字段级数据影响。
+- 增强阶段：Tai-e 深度 worker、FFM OffHeapGraphIndex、架构治理和迁移辅助。
 
-## 2. MVP-0: 工程骨架与核心契约
+## 2. MVP-0：基线和核心契约
 
 目标：
 
-- 建立 Java 25 + Gradle multi-project 工程骨架。
-- 建立 Neo4j 图谱 schema、统一 symbolId 规范。
-- 明确 evidence、confidence、sourceType、snapshot、tombstone 和增量图谱语义。
-- 建立可视化前端工程骨架。
+- 建立 Java 25 + Gradle multi-project 工程基线。
+- 定义 graph schema、SymbolId、confidence、sourceType、evidence、snapshot、tombstone 和 active view 语义。
+- 明确 AI、cache、vector index 和 FFM 都是 committed facts 之上的派生层。
 
 交付物：
 
-- 后端服务骨架。
-- 分析 worker 骨架。
+- graph、analyzers、worker、server、UI、AI、MCP 等 Gradle 模块。
+- Neo4j schema 契约、constraints 和 indexes。
+- SymbolId parser、normalizer、registry、alias、provisional 和 validation。
+- FactRecord、Evidence、Materialized Edge、snapshot、analysis run、scope run、staging、commit、rollback、active view、tombstone ownership 契约。
 - React + TypeScript + Vite 前端骨架。
-- Neo4j 连接、constraints、indexes、基础 upsert 能力。
-- Symbol ID 生成器、parser、alias registry、round-trip 归一化测试。
-- Fact/evidence 数据契约。
-- Snapshot/tombstone 增量写入契约，包含 staging、commit、rollback、active view 原子切换。
-- Gradle Java Toolchains 固定 Java 25。
 
 验收：
 
-- 工程能启动健康检查。
-- 能连接 Neo4j。
-- 能写入和查询一个 Project、Class、Method、JspPage、SqlStatement 示例节点。
-- 同一 symbol 从不同 analyzer 输入能归一到同一 `symbolId`。
-- Java method `symbolId` 必须使用 erased JVM descriptor；没有 descriptor 的 method 只能作为候选，不能写确定性调用事实。
-- JSP/XML/SQL/report symbol 必须使用 sourceRoot + 相对路径，不包含本机绝对路径。
-- provisional/unresolved symbol 后续 resolved 时能通过 alias 合并或跳转。
-- 当前 snapshot 查询不会返回已 tombstone 的旧关系。
-- 分析 run 失败时不会暴露半更新 facts，旧 active snapshot 仍可查询。
-- 前端能启动空白项目页或健康页。
+- health endpoint 可启动。
+- Neo4j 能创建并查询 Project、Class、Method、JspPage、SqlStatement、DbTable 示例节点。
+- Java method SymbolId 使用 erased JVM descriptor。
+- JSP/XML/SQL/report identity 使用 source root + 相对路径，不包含本机绝对路径。
+- provisional symbol 后续能通过 alias merge 或 redirect 解析。
+- 失败的 analysis run 不暴露半写入 facts。
+- current snapshot 查询不返回 tombstoned facts。
 
-暂不做：
-
-- 完整静态分析。
-- Tai-e。
-- FFM。
-- AI 自动问答。
-- UI 复杂图谱交互。
-
-## 3. MVP-1: 最小业务链路
+## 3. MVP-1：导入审查和最小业务链路
 
 目标：
 
-- 前置最小入口链路，确保影响报告有业务价值。
-- 打通五类 MVP 必需边：Spring RequestMapping、Struts action、JSP form/action、Java direct call、MyBatis statement。
+- 将本地目录或上传归档转换为经过审查的分析范围。
+- 建立可支撑影响报告的最小 Spring/Struts1/JSP/HTML/MyBatis/SQL/Java direct-call 链路。
 
-核心能力：
+交付物：
 
-- Spoon 解析 Java 类、方法、字段、注解、direct method invocation；快速路径只对 changed scope/cache miss scope 增量运行，不做全项目同步重扫。
-- Spring 识别 `@Controller`、`@RestController`、`@RequestMapping`、`@Service`、`@Autowired`。
-- Struts1 解析 `struts-config.xml`、Action、ActionForm、ActionForward。
-- JSP 通过 WebAppContext + Jasper 解析 directive、taglib、EL、scriptlet、include、forward。
-- JetHTMLParser/Jericho 容错提取 JSP form、input、select、textarea。
-- MyBatis 解析 Mapper interface、XML namespace、statement id。
-- JSqlParser 基础识别 SQL table 和读写类型。
+- Workspace profiler 和 ImportReviewReport。
+- 文件能力等级 L1-L5，以及 READY、PARTIAL、BOUNDARY_ONLY、UNSUPPORTED、BROKEN 项目状态。
+- AnalysisScopeDecision，用于记录 assisted import 中用户确认的 include/exclude、共享库、依赖补充、source root/lib/web root/scripts 和忽略目录。
+- Analysis planner 和 work queue。
+- Java source analyzer，使用 Spoon，并明确 no-classpath fallback 边界。
+- Bytecode analyzer，在源码缺失时使用 ASM/ClassGraph/ProGuardCORE。
+- Spring adapter，覆盖 controller、mapping、service、injection hints 和 routes。
+- Struts1 adapter，覆盖 config、module、action、form、forward、Tiles、Validator、plugin、message resource。
+- JSP analyzer，基于 WebAppContext，优先 Jasper，失败时 tolerant parser fallback，覆盖 form、input、directive、taglib、include、forward、EL、scriptlet request parameter facts。
+- HTML/JS static client analyzer，只覆盖稳定 form、静态 link、静态 request 和 resource reference。
+- MyBatis XML/interface analyzer 和 JSqlParser/JDBC SQL extraction。
+- Seasar2 discovery/candidate adapter，MVP 中只输出 POSSIBLE confidence。
 
-必须写入的最小关系：
+最小关系契约：
 
 ```text
 ApiEndpoint -[:ROUTES_TO]-> Method
 ActionPath -[:ROUTES_TO]-> Method
 JspForm -[:SUBMITS_TO]-> ApiEndpoint/ActionPath
+JspPage -[:USES_TAGLIB|INCLUDES]-> TagLibrary/JspPage
+JspForm -[:RENDERS_INPUT]-> JspInput
+JspInput -[:BINDS_TO]-> RequestParameter/FormField/ParamSlot
+JspTag/JspExpression -[:READS_MODEL_ATTR|READS_REQUEST_PARAM|READS_SESSION_ATTR]-> ModelAttribute/RequestParameter/SessionAttribute
+JspTag/JspScriptlet -[:WRITES_MODEL_ATTR|WRITES_REQUEST_ATTR|WRITES_SESSION_ATTR]-> ModelAttribute/RequestAttribute/SessionAttribute
+HtmlPage/JspPage -[:CONTAINS|LOADS_SCRIPT]-> HtmlForm/HtmlInput/HtmlLink/ScriptResource
+HtmlForm -[:RENDERS_INPUT]-> HtmlInput
+HtmlInput -[:BINDS_TO]-> RequestParameter/FormField/ParamSlot
+HtmlLink -[:NAVIGATES_TO]-> HtmlPage/ApiEndpoint/ActionPath
+DomEventHandler -[:SUBMITS_TO|CALLS_HTTP|NAVIGATES_TO]-> ClientRequest/ApiEndpoint/ActionPath
+ClientRequest -[:CALLS_HTTP|SUBMITS_TO]-> ApiEndpoint/ActionPath
+EntryPoint -[:INVOKES|ROUTES_TO]-> Method
+Schedule/CronTrigger -[:SCHEDULES|TRIGGERS]-> EntryPoint/Method
+MessageListener/BatchJob/CliCommand -[:HAS_PARAM]-> JobParameter
+ShellScript -[:INVOKES|CALLS_COMMAND|USES_CONFIG]-> MainMethod/CliCommand/BatchJob/ExternalCommand/ConfigKey
 Method -[:CALLS]-> Method
 Method -[:BINDS_TO]-> SqlStatement
+DataSource -[:CONTAINS]-> DbSchema
+DbSchema -[:CONTAINS]-> DbTable
+DbTable -[:CONTAINS]-> DbColumn
 SqlStatement -[:READS_TABLE|WRITES_TABLE]-> DbTable
+SqlStatement -[:READS_COLUMN|WRITES_COLUMN|HAS_PARAM]-> DbColumn/SqlParameter
+ReportDefinition -[:READS_TABLE|READS_COLUMN|USES_CONFIG]-> DbTable/DbColumn/ConfigKey
+ReportField -[:MAPS_TO_COLUMN]-> DbColumn
+FeatureSeed -[:MATCHES]-> EntryPoint/Method/SqlStatement/DbTable/DbColumn/ConfigKey/SourceFile
+FeatureScope -[:CONTAINS]-> EntryPoint/Method/SqlStatement/DbTable/DbColumn/ConfigKey/TestCase
+ChangeItem -[:REQUIRES_CHANGE|SUGGESTS_REVIEW|REQUIRES_TEST]-> EntryPoint/Method/SqlStatement/DbTable/DbColumn/ConfigKey/TestCase
+SavedQuery -[:MATCHES|WATCHES]-> EntryPoint/Method/SqlStatement/DbTable/DbColumn/ConfigKey/FeatureScope
+Method -[:CALLS_NATIVE|HAS_NATIVE_BOUNDARY]-> NativeLibrary/ConfigKey
+NativeLibrary/Project -[:EXPORTS_SYMBOL]-> BoundarySymbol
+Method/ShellScript/ConfigKey -[:REFERENCES_SYMBOL]-> BoundarySymbol/NativeLibrary/ExternalCommand
 ```
 
-交付物：
-
-- Java source analyzer v1。
-- Spring adapter v1。
-- Struts1 adapter v1。
-- WebAppContext + JSP analyzer v1。
-- MyBatis/JSqlParser analyzer v1。
-- Neo4j 写入和查询 API。
-- Seasar2 dicon/component discovery v0，仅输出候选节点和 `POSSIBLE` 关系，不进入 MVP 确定性影响报告验收。
-
 验收：
 
-- 能查询一个 JSP 提交到哪个 Action/Controller。
-- 能查询一个 Action/Controller 被哪些 JSP/API 调用。
-- 能展示 JSP/API -> Action/Controller -> Service -> Mapper -> SQL/table 的最短路径。
-- 缺失 TLD/classpath 时，JSP 仍能通过容错解析输出 `POSSIBLE` 关系。
-- SMAP parser 完成前，JSP evidence 只能承诺 JSP path、tag、粗粒度行号和 parser source；generated servlet 行号不能当作确定 JSP 原始定位。
+- 能从 JSP form 追踪到 Action/Controller。
+- 能从 JSP/HTML form 或静态 JS ClientRequest 追踪到 Action/Controller。
+- 能从 Action/Controller 反查 JSP/API/Web Client entrypoint。
+- 能展示 JSP/API -> Action/Controller -> Service -> DAO/Mapper -> SQL/table 最短路径。
+- 保留 EntryPoint 抽象，以便接入 batch、main、scheduler、message 和 shell 入口。
+- 缺失 TLD/classpath 时降级为 POSSIBLE，而不是伪造 CERTAIN facts。
+- Seasar2 不阻塞 MVP 报告，也不进入确定性影响路径。
 
-暂不做：
-
-- Tai-e 指针分析。
-- FFM。
-- Seasar2 确定性影响链路。
-- 复杂 JavaScript 动态 URL。
-- 完整跨方法变量追踪。
-
-## 4. MVP-2: Git Diff 影响路径报告
+## 4. MVP-2：增量图谱和 Git Diff 影响
 
 目标：
 
-- 基于 Git diff 快速输出初版影响报告。
-- 使用上一 committed snapshot 的 Neo4j active facts + JVM primitive adjacency cache，结合 changed scope 增量刷新，暂不上 FFM。
-
-核心能力：
-
-- JGit 读取 commit、branch、diff、changed files。
-- changed file -> changed symbol 定位。
-- method/JSP/XML/SQL/config 变更分类。
-- Java changed file 优先使用符号索引和 file hash 定位；只有缓存缺失或文件变更需要刷新事实时才运行 Spoon changed-scope 分析。
-- 初版报告不得等待全项目 Spoon 模型重建。
-
-Gradle Tooling API 判断：
-
-- MVP 先使用 `settings.gradle(.kts)` 的轻量 include 解析和标准 source root 探测。
-- 暂不把 Gradle Tooling API 放入默认扫描路径，避免老项目插件执行、副作用、下载依赖和 daemon 兼容性拖慢首版扫描。
-- 对复杂 Gradle 项目，增强阶段再以独立 worker、超时、只读模式接入 Tooling API，失败时回退轻量解析。
-- 从变更 method 反查 caller。
-- 从入口正查下游链路。
-- 使用 JVM 内存邻接表缓存热点 caller/callee 边。
-- 输出受影响 JSP、API、Action、Controller、Service、DAO、Mapper、SQL、table。
-- 每条影响路径带 evidence、confidence、sourceType。
+- 基于 Git diff、committed active facts、changed-scope analysis 和 JVM cache fallback，快速生成初版影响报告。
 
 交付物：
 
-- Impact Analysis Engine v1。
-- JVM InMemoryGraphCache v1，包含分片、失效和 Neo4j 回退。
-- PR Impact Report JSON。
-- Impact query REST API v1。
-- 基础影响报告页面和 Markdown 输出。
+- JGit reader，读取 branch、commit、diff、changed files 和 changed hunks。
+- Changed file 到 changed symbol 的 resolver。
+- Scope-aware incremental scan planner。
+- Staging store、batch commit coordinator、active view switch 和 rollback 语义。
+- Neo4j graph writer/query service。
+- JVM primitive adjacency cache，支持 caller/callee、invalidation、relation group 和 Neo4j fallback。
+- Impact analysis engine 和 report builder。
+- JSON 和 Markdown 影响报告。
 
 验收：
 
-- 小型 PR 能在 10 到 30 秒生成初版影响报告。
-- 报告包含影响入口、路径、风险等级和建议测试。
-- 前端能展示影响入口、路径、证据和置信度。
-- 删除或修改关系后，报告不会展示旧 snapshot 的残留边。
-- AI 关闭时报告仍可生成。
+- 小型 PR 初版影响报告在命名 benchmark profile 下目标为 10 到 30 秒。
+- 报告包含 affected entrypoints、paths、risk level、suggested tests、evidence、confidence、sourceType 和 truncation state。
+- 删除或变更的关系不会从旧 snapshot 泄漏到新报告。
+- AI 关闭时仍能生成完整静态报告。
 
-暂不做：
-
-- Deep taint。
-- FFM。
-- OpenRewrite 自动修复。
-- 多服务链路。
-
-## 5. MVP-3: 基础变量追踪与 SQL/table 影响
+## 5. MVP-3：变量追踪和 SQL/Table 影响
 
 目标：
 
-- 支持方法内和基础跨方法变量追踪。
-- 打通 JSP input、request parameter、ActionForm、Service 参数、SQL 参数。
+- 在 MVP 深度内追踪 request parameter、JSP input、form field、Java variable、service/DAO argument、SQL parameter 和 DB table。
 
-核心能力：
+交付物：
 
-- 方法内 def-use。
-- `request.getParameter` 来源追踪。
-- JSP input name 到后端参数映射。
-- ActionForm 字段绑定。
-- getter/setter 简单传播。
+- 方法内 def-use 和 alias propagation。
+- Request parameter read/write facts。
+- JSP input -> request parameter mapping。
+- ActionForm/DynaActionForm field binding。
+- Getter/setter 简单传播。
 - Controller/Action -> Service -> DAO/Mapper 参数传播。
-- MyBatis SQL 参数绑定。
-- SQL/table 影响查询。
-
-交付物：
-
-- Variable Trace Engine v1。
-- SQL/table impact query。
-- 变量来源/流向查询接口。
-- Variable Trace View 前端页面。
+- MyBatis/JDBC SQL parameter binding。
+- SQL/table 和 DB impact reports。
+- Variable trace source/sink/all query contracts。
 
 验收：
 
-- 能回答一个 request 参数从哪个 JSP 字段来。
-- 能回答一个 JSP 字段最终流向哪些 Service/DAO/SQL。
-- 能回答一个 SQL/table 被哪些入口影响。
-- 能在报告中展示变量路径和 SQL/table 证据。
+- 能把 request parameter 向上追踪到 JSP input，并向下追踪到 Java/SQL sink。
+- 能展示 JSP field 下游影响到哪些 Service/DAO/SQL/table。
+- 能展示 table 或 field 变更影响哪些 read/write code entrypoints。
+- Variable trace 输出 evidence paths 和 confidence。
 
-暂不做：
-
-- 完整对象别名分析。
-- 完整动态 SQL 解析。
-- 复杂集合、反射和多线程传播。
-
-## 6. MVP-4a: 可视化前端和 REST 查询接口
+## 6. MVP-4a：REST 和可视化前端
 
 目标：
 
-- 先把影响报告和图谱路径给人看清楚，再接 AI 和 MCP。
+- 让用户无需阅读 raw SymbolId 或 JSON，也能理解图谱和影响结果。
 
-核心能力：
+交付物：
 
+- REST APIs：使用 `/api/v1` 版本化，覆盖 workspaces、projects、import-reviews、analysis-runs、snapshots、symbols、impact、variables、db-impact、features、architecture-health、reports、evidence、saved-queries、subscriptions、review-threads、policies、ci-checks、exports、admin，以及 project overview、query planning、result-view contracts。
 - Project Dashboard。
-- Impact Report。
+- Task Workbench：首页统一输入框、常用任务入口、最近报告、结果摘要、下一步动作和右侧证据/覆盖/盲区面板。
+- Impact Report View。
+- DB Impact View。
 - Graph Explorer。
 - Variable Trace View。
-- JSP Flow View。
-- Symbol Search。
-- Candidate Picker。
+- JSP/Web Client Flow View。
+- SQL/Table Path View：从入口、方法、Mapper 或 SQL 出发查看 SQL/table/column 路径下钻，不替代 DB Impact 的 read/write/display/test 分组报告。
+- Feature Change/Add Plan View。
+- Architecture Health View。
+- Symbol Search 和 Candidate Picker。
 - Evidence Panel。
-- REST API：symbol search、impact report、path query、variable trace、jsp flow。
+
+验收：
+
+- 查询结果按 summary、evidence paths、evidence list、graph/detail 组织。
+- 默认项目首页是 Project Dashboard + Task Workbench 组合页；Dashboard 提供项目概览，Task Workbench 是主操作区。
+- 首页能从 Git diff、DB 表/字段、JSP/HTML 页面、变量名、Java symbol 或自然语言功能描述进入对应任务。
+- 搜索结果有歧义时先显示 candidates。
+- 默认视图不暴露 raw SymbolId，raw JSON 和 SymbolId 只作为下钻详情。
+- 大图查询有 depth/limit 限制，并展示 truncation。
+- 右侧 Evidence Panel 在报告、变量追踪、DB 影响、JSP/Web Client 链路和图谱探索中复用，统一展示 confidence、sourceType、boundary、evidence 和分析覆盖。
+- 查询类 API pin 到 committed snapshot；长任务使用 async job；列表接口提供分页、排序和最大 limit；错误响应结构化。
+- 删除、清理、重建索引、触发深度分析等写入类管理操作必须有幂等 key 或 `confirm=true`，并写审计日志。
+- 每条展示路径都能回溯到 evidence。
+
+## 7. MVP-4b：AI 摘要和 RAG
+
+目标：
+
+- 在静态 evidence 可用之后再引入 AI；AI 只负责解释、排序、摘要、候选建议和盲区说明。
 
 交付物：
 
-- 可视化前端 v1。
-- REST Query API v1。
-- 报告 JSON schema。
+- AI provider abstraction 和 runtime config。
+- API key protection 和 prompt/source redaction。
+- Evidence pack builder。
+- AI report assistant，生成 impact summary、risk explanation、test suggestions。
+- AI candidate staging 语义：只进入 `AI_ASSISTED_CANDIDATE` relation family 或 planning artifact，默认不参与确定性影响路径。
+- AI candidate 生命周期：携带 `createdFromEvidencePackId`、`expiresAt` 或 `staleAgainstSnapshot`，底层 evidence 变化后自动 stale。
+- Code Graph RAG v1，包含 exact symbol search、graph expansion、vector recall、historical impact report recall。
+- Static answer draft fallback。
 
 验收：
 
-- 前端能展示影响入口、路径、证据、置信度和截断提示。
-- 查询结果按“答案摘要、证据路径、证据列表、图谱与明细”四层展示。
-- 搜索词匹配多个符号时，先显示候选列表再执行追踪。
-- Graph Explorer 默认限制深度和节点数。
-- UI 展示的所有路径都能回溯到 Neo4j evidence。
+- AI answer 必须引用 evidence paths。
+- AI output 标记为 AI assisted，不得被当作事实。
+- AI candidate 不能清理或覆盖 Spoon/XML/JSP/SQL/Impact Flow 静态 facts。
+- AI 关闭时 static reports、UI queries、MCP tools 仍可工作。
 
-暂不做：
-
-- AI Q&A。
-- MCP。
-- Agent。
-
-## 7. MVP-4b: AI 摘要和 Code Graph RAG v1
+## 8. MVP-4c：只读 MCP 和受控 Agent
 
 目标：
 
-- 在事实图谱和影响报告闭环之后，补充智能解释。
-
-核心能力：
-
-- AI Provider 抽象和系统/项目级配置。
-- 源码片段脱敏。
-- AI 生成影响摘要、风险解释、测试建议。
-- Code Graph RAG v1：精确符号检索 + Neo4j 图扩展 + 少量向量召回。
-- AI Q&A。
-- 意图识别支持 symbol search、caller/callee、变量来源/流向、影响分析、JSP 链路、SQL/table 影响。
+- 向 IDE 和外部 AI 工具开放受控查询能力，同时禁止 raw database、filesystem 或 shell access。
 
 交付物：
 
-- AI Summary Generator。
-- Code Graph RAG service v1。
-- AI Q&A 页面。
+- 只读 MCP server。
+- Tool、resource、prompt registries。
+- ImpactAnalysisAgent、DbImpactAgent、VariableImpactAgent、FeatureChangePlanAgent、FeatureAdditionPlanAgent、CodeQuestionAgent。
+- Tool guard、project allow-list、rate limiting、redacted audit logging、step limits、source budget controls。
 
 验收：
 
-- AI 摘要必须引用 evidence path。
-- AI 关闭时所有报告和 UI 查询仍可工作。
-- AI 回答不能脱离 evidence pack。
-- AI 摘要旁显示“基于 N 条静态分析证据生成”。
+- MCP client 能查询 symbol search、callers、callees、impact paths、DB impact、variable impact、JSP flow、feature plan、reports 和 RAG answer drafts。
+- Agent 只能调用 profile 允许的只读工具。
+- Raw Cypher、SQL statement、file glob、shell command 和写操作会被拒绝。
+- Agent 能输出 ImpactReport、DbImpactReport、VariableImpactReport 或 ChangePlanReport，并在快速报告后正确标记 deep supplement、pending scopes、stale/upgrade available。
+- Agent output 包含 evidence、confidence、sourceType 和 truncation state。
 
-暂不做：
-
-- AI 直接判断最终影响范围。
-- Agent。
-- MCP。
-
-## 8. MVP-4c: MCP 只读接口和受控 Agent
+## 9. 生产加固
 
 目标：
 
-- 把已封装的查询能力开放给 IDE 和外部 AI 工具。
-
-核心能力：
-
-- 只读 MCP Server。
-- ImpactAnalysisAgent、VariableTraceAgent、CodeQuestionAgent。
-- Tool Registry。
-- 工具调用审计、限流、脱敏。
+- 将 MVP 闭环加固为企业可落地系统：写入可预期、confidence 可追踪、性能由 benchmark 驱动、不支持边界清晰。
 
 交付物：
 
-- MCP server v1。
-- Agent Orchestrator v1。
-- MCP tools/resources/prompts。
+- Jasper SMAP parser，以及原始 JSP/generated servlet 映射。
+- 字段级 `MAPS_TO_COLUMN`、`READS_COLUMN`、`WRITES_COLUMN`。
+- 报表 adapter plugin layer，覆盖 Interstage List Creator、WingArc1st SVF、PSF、PMD、BIP、SVF XML、layout XML、field definition XML。
+- JNI/native boundary modeling。
+- 生产级 Neo4j batch write 和 single-writer coordination。
+- Confidence aggregation rules。
+- 小型、中型现代 Java/Spring/MyBatis、中型遗留 Struts1/JSP 三类 benchmark fixtures。
 
 验收：
 
-- 外部 MCP 客户端能查询调用方、影响路径、变量来源、JSP 链路。
-- Agent 不能执行任意 Cypher 或任意文件读取。
-- 所有 Agent 输出都包含 evidence、confidence、sourceType。
+- include/tagfile/custom-tag JSP 映射保留 candidates，并对歧义 evidence 降级。
+- 有 evidence 时，DB column 变更能追踪到 Java fields、JSP forms、SQL 和 reports。
+- Native boundary 明确要求人工确认，但不阻塞其它非 native path branch。
+- Batch failure 后 previous active view 仍可查询。
+- 性能结论绑定 named benchmark profiles。
 
-暂不做：
+## 10. 增强阶段
 
-- 自动改代码。
-- 无人工确认的写操作。
+Tai-e deep worker：
 
-## 9. Enhancement-1: Tai-e 深度分析 Worker
+- 可选独立 JVM worker，用于 call graph、pointer analysis、taint analysis 和 deep supplement facts。
+- 不得阻塞 MVP reports。
+- 必须将 Tai-e signatures 映射回 CodeAtlas SymbolId，并标记 deep supplement source。
 
-进入条件：
+FFM OffHeapGraphIndex：
 
-- MVP 影响报告闭环稳定。
-- Spoon direct call 和基础变量追踪无法满足多态/跨方法数据流需求。
-- 已完成 Tai-e license review 和样例项目可行性验证。
+- 只有 benchmark thresholds 证明优于 Neo4j + JVM cache 时才启用。
+- 使用 CSR/CSC compressed graph structures、MemorySegment、mmap、bounded BFS 和 primitive queues/bitmaps。
 
-目标：
+治理和迁移：
 
-- 引入 Tai-e 作为深度调用图和数据流分析 worker。
-
-核心能力：
-
-- 编译产物/classpath 准备。
-- Tai-e 独立 worker JVM。
-- 指针分析和 on-the-fly call graph。
-- 多态调用候选补强。
-- taint/source-sink 配置。
-- Tai-e method signature 与 Spoon symbolId 映射。
-
-验收：
-
-- Tai-e 失败不影响 MVP 影响报告。
-- 深度分析能补充多态调用和跨方法变量流。
-- 输出结果能映射回源码文件和行号。
-
-## 10. Enhancement-2: FFM OffHeapGraphIndex
-
-进入条件：
-
-- 单项目 active edge 数达到百万级以上，或 Neo4j/JVM cache P95 查询无法满足 SLA。
-- 已有 heap 占用、P95 查询耗时、Neo4j 查询计划和 JVM cache benchmark。
-- 证明 FFM 在目标数据规模上明显优于 JVM primitive adjacency cache。
-
-目标：
-
-- 降低 JVM heap 压力。
-- 加速高频调用链和影响路径查询。
-
-核心能力：
-
-- 从 Neo4j 或分析结果导出调用图。
-- 构建 CSR/CSC 压缩邻接表。
-- 使用 JDK FFM `MemorySegment` 存储 primitive 图结构。
-- 支持 caller/callee、多跳 BFS、visited bitmap、frontier queue。
-- 支持 mmap 落盘和重载。
-
-验收：
-
-- 大图路径搜索不产生大量 Java 对象。
-- JVM heap 占用稳定。
-- 常见影响路径查询比纯 Neo4j 和 JVM cache 更快。
-
-## 11. Enhancement-3: 规则、迁移和工程化增强
-
-目标：
-
-- 从影响分析平台扩展到架构治理和自动迁移建议。
-
-核心能力：
-
-- 架构规则：Controller 不能直接调用 DAO、跨层调用检查等。
-- OpenRewrite recipe 生成和执行前预览。
-- 测试推荐和覆盖率集成。
-- 历史缺陷、owner、变更频率纳入风险评分。
-- UI 图谱探索和报告归档增强。
-
-验收：
-
-- 能发现架构违规路径。
-- 能生成迁移建议而不自动执行。
-- 能把历史风险纳入 PR 报告。
-
-## 12. Enhancement-4: Review Hardening Backlog
-
-本阶段用于吸收架构 review 后确认的增强点。它们不改变 MVP 主线，但会影响企业级落地质量。
-
-### 12.1 JSP SMAP 精确定位
-
-进入条件：
-
-- JSP/Jasper 原型能稳定生成 servlet 或解析失败诊断。
-- 当前 evidence 已能保存 JSP path、tag、line 和 parser source。
-- MVP 报告已经能显式区分 `SMAP_DEFERRED`、`GENERATED_ONLY`、`SMAP_MISSING` 等定位状态。
-
-目标：
-
-- 解析 Jasper generated servlet 的 SMAP。
-- 将 generated Java 行号映射回原 JSP/include/tagfile。
-- 在 evidence 中同时保留原 JSP 位置和 generated servlet 位置。
-
-验收：
-
-- 嵌套 include、自定义 tag、tag file 场景不会错误标成单一确定行号。
-- SMAP 缺失时报告显示降级原因，而不是静默使用不可靠行号。
-
-### 12.2 字段级数据影响
-
-目标：
-
-- 增加 `MAPS_TO_COLUMN`、`READS_COLUMN`、`WRITES_COLUMN` 语义。
-- 覆盖 JPA entity field、MyBatis resultMap/property、JDBC setter/getter、ActionForm/DTO field 到 DB column 的可追踪关系。
-
-验收：
-
-- 能回答“改了 users.email 字段，会影响哪些 Java 字段、JSP 表单、SQL 和报表”。
-
-### 12.3 Report Adapter
-
-目标：
-
-- 增加报表资源解析插件层。
-- 首批支持 Interstage List Creator、WingArc1st SVF 等企业报表定义的可插拔解析。
-- 解析 PSF、PMD、BIP、SVF XML、布局 XML、字段定义 XML 中的 SQL/table/column/parameter。
-
-验收：
-
-- 能回答“改了数据库字段 -> 哪些报表可能受影响”。
-- 报表解析失败时能输出 `POSSIBLE` 候选和失败 evidence。
-
-### 12.4 JNI/native 边界
-
-目标：
-
-- 识别 Java `native` 方法、`System.load`、`System.loadLibrary`、JNI wrapper jar 和 native library。
-- 影响报告遇到 native 边界时显式标记中断和人工确认要求。
-
-验收：
-
-- native 方法不会被当作普通可解析 Java 方法。
-- 报告显示 `analysisBoundary=NATIVE` 和 `requiresManualReview=true`。
-
-### 12.5 Neo4j 批量写入与并发
-
-目标：
-
-- 以文件为最小 source scope，以 JAR/module 为最小 classpath cache scope。
-- 图谱写入改为 staging + batch upsert + atomic active view switch。
-- batch 按 `projectId + snapshotId + analyzerId + scopeKey` 分组。
-- 同一 `projectId + snapshotId` 默认单写入协调器提交；分析可并行，提交需串行或按不相交 scope 分区。
-- 对高频热点节点支持稳定写入顺序、batch size 控制、幂等死锁重试和后续单写入协调器。
-
-验收：
-
-- 并发分析时不会因为 BaseService/CommonAction 等热点节点导致大量死锁。
-- tombstone 只影响当前 analyzer + 当前 scope。
-- 任一 batch 提交失败时，查询仍返回上一 committed active facts，不返回半更新结果。
-
-### 12.6 Benchmark 靶机
-
-目标：
-
-- 建立小型 fixture、中型现代开源项目、遗留 Struts1/JSP 靶机三层 benchmark。
-- 指标覆盖扫描、写入、查询 P95、heap、报告耗时、误报/漏报样例。
-
-验收：
-
-- FFM/Tai-e/缓存策略的启用必须有 benchmark 数据支撑。
+- Architecture rule checks。
+- OpenRewrite recipe proposal 和 preview。
+- 基于 evidence、history、ownership、change frequency 的 test recommendations。
+- Report archiving 和 collaboration enhancements。
