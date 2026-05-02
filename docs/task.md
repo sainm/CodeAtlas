@@ -33,15 +33,15 @@
 - [ ] 定义 MVP 关系：DECLARES、CALLS、ROUTES_TO、SUBMITS_TO、BINDS_TO、READS_TABLE、WRITES_TABLE、INCLUDES、FORWARDS_TO、READS_PARAM、WRITES_PARAM、PASSES_PARAM、USES_CONFIG、USES_TAGLIB、RENDERS_INPUT、READS_MODEL_ATTR、READS_REQUEST_PARAM、READS_SESSION_ATTR、WRITES_MODEL_ATTR、WRITES_REQUEST_ATTR、WRITES_SESSION_ATTR、READS_FIELD、WRITES_FIELD、CONTAINS、LOADS_SCRIPT、NAVIGATES_TO、HANDLES_DOM_EVENT、CALLS_HTTP、INVOKES、SCHEDULES、TRIGGERS、PUBLISHES_TO、CONSUMES_FROM、HAS_PARAM、CALLS_COMMAND、READS_COLUMN、WRITES_COLUMN、HAS_VARIANT、GUARDED_BY、MAPS_TO_COLUMN、MATCHES、WATCHES、REQUIRES_CHANGE、SUGGESTS_REVIEW、REQUIRES_TEST、EXPORTS_SYMBOL、REFERENCES_SYMBOL。
 - [ ] 定义边界和增强关系：CALLS_NATIVE、HAS_NATIVE_BOUNDARY、AUTO_BINDS_TO、INTERCEPTS、CONFIGURES_PROPERTY、SUMMARIZES、COMMENTS_ON、VIOLATES_POLICY、SUPPRESSED_BY、EXPORTED_AS、REFLECTS_TO。
 - [ ] 实现 Neo4j constraints 和 indexes。
-- [ ] 实现 SymbolKind registry。
-- [ ] 实现 SymbolId parser 和 normalizer。
-- [ ] 实现 Java method SymbolId，使用 erased JVM descriptor。
+- [x] 实现 SymbolKind registry。
+- [x] 实现 SymbolId parser 和 normalizer。
+- [x] 实现 Java method SymbolId，使用 erased JVM descriptor。
 - [ ] 实现 JSP/XML/SQL/report identities，使用 source root 和相对路径。
-- [ ] 实现 Flow Identity 和 Artifact Identity 契约。
+- [proto] 实现 Flow Identity 和 Artifact Identity 契约。
 - [ ] 实现 provisional symbol 处理。
 - [ ] 实现 resolved symbol 的 alias merge 或 redirect。
-- [ ] 增加 SymbolId round-trip 测试。
-- [ ] 增加非法 SymbolId validation 测试。
+- [x] 增加 SymbolId round-trip 测试。
+- [x] 增加非法 SymbolId validation 测试。
 
 ## 3. Fact、Evidence、Snapshot 和提交语义
 
