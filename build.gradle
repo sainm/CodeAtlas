@@ -1,5 +1,6 @@
 plugins {
     id 'base'
+    id 'org.springframework.boot' version '4.0.5' apply false
 }
 
 ext {

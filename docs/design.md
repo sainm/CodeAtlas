@@ -2954,6 +2954,7 @@ CodeAtlas 自身运行平台和工程基线：
 - 后端和分析 worker 使用 Java 25 LTS。
 - 构建系统使用 Gradle，采用 multi-project 结构。
 - 使用 Gradle Java Toolchains 固定 Java 25 编译/运行基线。
+- CodeAtlas 自身 REST server 使用 Spring Boot + Spring MVC，统一承载 `/api/v1` REST 契约、结构化错误、validation、CORS、审计和后续 async job API；不得使用临时自定义 HTTP server 作为正式服务栈。
 - 被分析项目不受 CodeAtlas 运行 JDK 限制，首批需要支持 Java 6/7/8 风格老项目以及现代 Java 项目。
 - 后端服务、分析 worker、MCP server、前端应用在 Gradle 中分模块管理。
 

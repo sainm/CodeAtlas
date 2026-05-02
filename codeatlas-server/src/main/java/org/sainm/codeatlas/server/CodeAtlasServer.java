@@ -13,9 +13,4 @@ public final class CodeAtlasServer {
     public static String dependencySummary() {
         return CodeAtlasGraph.moduleName();
     }
-
-    public static void main(String[] args) {
-        HealthResponse health = health();
-        System.out.println(health.status() + " " + health.service());
-    }
 }

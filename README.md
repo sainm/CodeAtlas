@@ -144,6 +144,7 @@ codeatlas-ui
 
 - JDK 25
 - Gradle wrapper 已随仓库提交
+- 后端 REST 服务基线使用 Spring Boot + Spring MVC
 
 常用命令：
 

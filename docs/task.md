@@ -18,13 +18,14 @@
 
 ## 1. 工程基线
 
-- [ ] 创建 Java 25 + Gradle multi-project 工程。
-- [ ] 增加 graph、analyzers、worker、server、UI、AI、MCP 模块。
-- [ ] 配置 Gradle Java Toolchains 使用 Java 25。
-- [ ] 增加后端 health endpoint。
-- [ ] 增加 React + TypeScript + Vite 前端骨架。
-- [ ] 增加本地开发说明。
-- [ ] 增加 CI 任务：后端测试、前端 build、文档检查。
+- [x] 创建 Java 25 + Gradle multi-project 工程。
+- [x] 增加 graph、analyzers、worker、server、UI、AI、MCP 模块。
+- [x] 配置 Gradle Java Toolchains 使用 Java 25。
+- [x] server 模块使用 Spring Boot + Spring MVC 承载 `/api/v1` REST 契约。
+- [x] 增加后端 health endpoint。
+- [x] 增加 React + TypeScript + Vite 前端骨架。
+- [x] 增加本地开发说明。
+- [x] 增加 CI 任务：后端测试、前端 build、文档检查。
 
 ## 2. 图谱模型和身份标识
 

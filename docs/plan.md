@@ -39,6 +39,7 @@ MVP 分期：
 交付物：
 
 - graph、analyzers、worker、server、UI、AI、MCP 等 Gradle 模块。
+- server 模块使用 Spring Boot + Spring MVC 承载 `/api/v1` REST 契约。
 - Neo4j schema 契约、constraints 和 indexes。
 - SymbolId parser、normalizer、registry、alias、provisional 和 validation。
 - FactRecord、Evidence、Materialized Edge、snapshot、analysis run、scope run、staging、commit、rollback、active view、tombstone ownership 契约。
@@ -46,7 +47,7 @@ MVP 分期：
 
 验收：
 
-- health endpoint 可启动。
+- Spring Boot health endpoint 可启动，并且只匹配精确 `/api/v1/health` 路径。
 - Neo4j 能创建并查询 Project、Class、Method、JspPage、SqlStatement、DbTable 示例节点。
 - Java method SymbolId 使用 erased JVM descriptor。
 - JSP/XML/SQL/report identity 使用 source root + 相对路径，不包含本机绝对路径。
