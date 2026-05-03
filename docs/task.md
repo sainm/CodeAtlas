@@ -70,24 +70,24 @@
 - [x] 将文件分类为 L1 structured、L2 semi-structured、L3 boundary、L4 inventory、L5 skipped。
 - [x] 识别 Gradle、Maven、Ant-like、Eclipse/IDE-only、source-only 和 unknown legacy layouts。
 - [x] 识别 web root、WEB-INF、WebRoot、WebContent、source roots、classpath candidates、resource roots。
-- [ ] 识别 entrypoint 线索：main methods、Spring/Struts/JSP、HTML forms、static JS requests、scheduler/message listeners、shell Java commands。
-- [ ] 将非 Java 项目和 native/COBOL/C/JCL 文件记录为 inventory 或 boundary diagnostics。
-- [ ] 生成 ImportReviewReport，包含 project candidates、capability levels、blind spots 和 recommended analysis scopes。
-- [ ] ImportReviewReport 包含 workspace 总览、项目清单、项目关系、覆盖能力、盲区风险、建议用户确认事项和推荐分析计划。
-- [ ] 在 ASSISTED_IMPORT_REVIEW 下，存在 PARTIAL、BOUNDARY_ONLY、UNSUPPORTED、BROKEN 或 UNKNOWN 项目时，正式分析前展示警告并要求用户确认。
-- [ ] 将用户确认的 include/exclude 项目、共享库标记、补充依赖、source root/lib/web root/scripts 和忽略目录记录为 AnalysisScopeDecision。
-- [ ] 将 AnalysisScopeDecision 写入分析元数据和最终报告，确保不可分析范围、用户排除范围和降级范围可审计。
-- [ ] DIRECT_IMPORT 遇到无 Java 文件、压缩包不安全、主体明显非 Java 或路径不可读时阻止或警告。
-- [ ] 增加 mixed workspace import review 测试。
+- [x] 识别 entrypoint 线索：main methods、Spring/Struts/JSP、HTML forms、static JS requests、scheduler/message listeners、shell Java commands。
+- [x] 将非 Java 项目和 native/COBOL/C/JCL 文件记录为 inventory 或 boundary diagnostics。
+- [x] 生成 ImportReviewReport，包含 project candidates、capability levels、blind spots 和 recommended analysis scopes。
+- [x] ImportReviewReport 包含 workspace 总览、项目清单、项目关系、覆盖能力、盲区风险、建议用户确认事项和推荐分析计划。
+- [x] 在 ASSISTED_IMPORT_REVIEW 下，存在 PARTIAL、BOUNDARY_ONLY、UNSUPPORTED、BROKEN 或 UNKNOWN 项目时，正式分析前展示警告并要求用户确认。
+- [x] 将用户确认的 include/exclude 项目、共享库标记、补充依赖、source root/lib/web root/scripts 和忽略目录记录为 AnalysisScopeDecision。
+- [x] 将 AnalysisScopeDecision 写入分析元数据和最终报告，确保不可分析范围、用户排除范围和降级范围可审计。
+- [x] DIRECT_IMPORT 遇到无 Java 文件、压缩包不安全、主体明显非 Java 或路径不可读时阻止或警告。
+- [x] 增加 mixed workspace import review 测试。
 
 ## 5. 分析规划和 Work Queue
 
-- [ ] 将 ImportReviewReport、Git diff、selected scopes 和 existing snapshots 转换为 analyzer task graph。
-- [ ] 优先处理 changed scopes 和 cache-miss scopes，支撑 fast reports。
-- [ ] 将 background deep tasks 与 fast report tasks 分开调度。
-- [ ] 增加 task timeout、retry、cancellation 和 worker failure isolation。
-- [ ] 确保默认不执行被分析项目的 build scripts。
-- [ ] 增加 degraded 和 partial project analysis 的 planning 测试。
+- [x] 将 ImportReviewReport、Git diff、selected scopes 和 existing snapshots 转换为 analyzer task graph。
+- [x] 优先处理 changed scopes 和 cache-miss scopes，支撑 fast reports。
+- [x] 将 background deep tasks 与 fast report tasks 分开调度。
+- [x] 增加 task timeout、retry、cancellation 和 worker failure isolation。
+- [x] 确保默认不执行被分析项目的 build scripts。
+- [x] 增加 degraded 和 partial project analysis 的 planning 测试。
 
 ## 6. Java Source 和 Bytecode 分析
 
