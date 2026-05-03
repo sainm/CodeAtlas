@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
+import java.nio.file.AccessDeniedException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -84,6 +85,20 @@ class WorkspaceInventoryScannerTest {
     }
 
     @Test
+    void keepsOversizedBytecodeArtifactsAnalyzable() throws IOException {
+        write("lib/app.jar", new byte[] {1, 2, 3});
+
+        WorkspaceInventory inventory = new WorkspaceInventoryScanner(1)
+                .scan(ImportRequest.localFolder("ws-large-bytecode", tempDir, ImportMode.DIRECT_IMPORT));
+
+        FileInventoryEntry entry = inventory.requireEntry("lib/app.jar");
+
+        assertEquals(FileCapabilityLevel.L1_STRUCTURED, entry.level());
+        assertEquals(64, entry.sha256().length());
+        assertTrue(entry.decodeDiagnostic().binary());
+    }
+
+    @Test
     void marksDecodeFailuresAsSkippedWithDiagnostic() throws IOException {
         write("src/main/java/Broken.java", new byte[] {(byte) 0xc3, 0x28});
 
@@ -97,9 +112,38 @@ class WorkspaceInventoryScannerTest {
     }
 
     @Test
+    void allowsConsecutiveDotsInsideFileNameSegments() throws IOException {
+        write("src/main/java/Foo..java", "class Foo {}\n");
+
+        WorkspaceInventory inventory = WorkspaceInventoryScanner.defaults()
+                .scan(ImportRequest.localFolder("ws-dots", tempDir, ImportMode.DIRECT_IMPORT));
+
+        assertEquals(FileCapabilityLevel.L1_STRUCTURED, inventory.requireEntry("src/main/java/Foo..java").level());
+    }
+
+    @Test
     void rejectsUnreadableOrMissingRoots() {
         assertThrows(IllegalArgumentException.class,
                 () -> ImportRequest.localFolder("ws-5", tempDir.resolve("missing"), ImportMode.DIRECT_IMPORT));
+    }
+
+    @Test
+    void recordsUnreadableFilesAsSkippedDiagnostics() throws IOException {
+        write("src/main/java/App.java", "class App {}\n");
+
+        WorkspaceInventoryScanner scanner = new WorkspaceInventoryScanner(1024, (maxFileBytes, sourceRoot, file) -> {
+            if (file.getFileName().toString().equals("App.java")) {
+                throw new AccessDeniedException(file.toString());
+            }
+            return WorkspaceInventoryScanner.toEntry(maxFileBytes, sourceRoot, file);
+        });
+        WorkspaceInventory inventory = scanner.scan(ImportRequest.localFolder("ws-unreadable", tempDir, ImportMode.DIRECT_IMPORT));
+
+        FileInventoryEntry entry = inventory.requireEntry("src/main/java/App.java");
+
+        assertEquals(FileCapabilityLevel.L5_SKIPPED, entry.level());
+        assertEquals("UNREADABLE_PATH", entry.decodeDiagnostic().code());
+        assertEquals("", entry.sha256());
     }
 
     private void write(String relativePath, String content) throws IOException {

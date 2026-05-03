@@ -24,11 +24,22 @@ public final class AnalysisPlanner {
         ExistingSnapshotSummary normalizedSnapshot = snapshot == null
                 ? new ExistingSnapshotSummary("", List.of())
                 : snapshot;
-        Set<String> includedProjects = new HashSet<>(report.analysisScopeDecision().includedProjectRoots());
+        Set<String> includedProjects = new HashSet<>();
         report.analysisScopeDecision().auditEntries().stream()
                 .filter(entry -> entry.disposition() == AnalysisScopeDisposition.INCLUDED)
                 .map(AnalysisScopeAuditEntry::scopePath)
                 .forEach(includedProjects::add);
+        if (includedProjects.isEmpty() && report.analysisScopeDecision().auditEntries().isEmpty()) {
+            if (report.analysisScopeDecision().includedProjectRoots().isEmpty() && !report.requiresUserConfirmation()) {
+                report.recommendedAnalysisScopes().stream()
+                        .map(RecommendedAnalysisScope::projectRoot)
+                        .forEach(includedProjects::add);
+            } else {
+                includedProjects.addAll(report.analysisScopeDecision().includedProjectRoots());
+                includedProjects.removeAll(report.analysisScopeDecision().excludedProjectRoots());
+                includedProjects.removeAll(report.analysisScopeDecision().sharedLibraryRoots());
+            }
+        }
         List<AnalyzerTask> tasks = new ArrayList<>();
         for (RecommendedAnalysisScope scope : report.recommendedAnalysisScopes()) {
             if (!includedProjects.contains(scope.projectRoot())) {
@@ -80,6 +91,7 @@ public final class AnalysisPlanner {
         String lower = path.toLowerCase();
         return switch (analyzerId) {
             case "java-source" -> lower.endsWith(".java");
+            case "java-bytecode" -> lower.endsWith(".jar") || lower.endsWith(".class");
             case "jsp-web" -> lower.endsWith(".jsp") || lower.endsWith(".jspx")
                     || lower.endsWith(".html") || lower.endsWith(".htm") || lower.endsWith(".js");
             case "boundary" -> true;

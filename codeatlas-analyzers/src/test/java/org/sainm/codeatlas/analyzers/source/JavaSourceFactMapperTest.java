@@ -1,6 +1,7 @@
 package org.sainm.codeatlas.analyzers.source;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
@@ -108,6 +109,77 @@ class JavaSourceFactMapperTest {
                 "method://shop/_root/src/main/java/com.acme.App#target(Ljava/lang/String;)V");
         assertFact(batch, "CALLS", "method://shop/_root/src/main/java/com.acme.App#run(I)V",
                 "method://shop/_root/src/main/java/com.acme.App#target(I)V");
+    }
+
+    @Test
+    void mapsRepeatedCallsToOneFactPerFactKey() throws IOException {
+        write("src/main/java/com/acme/App.java", """
+                package com.acme;
+
+                class App {
+                    void run() {
+                        helper();
+                        helper();
+                    }
+
+                    private void helper() {}
+                }
+                """);
+        JavaSourceAnalysisResult result = JavaSourceAnalyzer.defaults().analyze(
+                tempDir,
+                List.of(tempDir.resolve("src/main/java/com/acme/App.java")));
+
+        JavaSourceFactBatch batch = JavaSourceFactMapper.defaults().map(
+                result,
+                new JavaSourceFactContext(
+                        "shop",
+                        "_root",
+                        "src/main/java",
+                        "snapshot-1",
+                        "analysis-1",
+                        "scope-1",
+                        "src/main/java"));
+
+        long repeatedCallFacts = batch.facts().stream()
+                .filter(fact -> matches(
+                        fact,
+                        "CALLS",
+                        "method://shop/_root/src/main/java/com.acme.App#run()V",
+                        "method://shop/_root/src/main/java/com.acme.App#helper()V"))
+                .count();
+        assertEquals(1, repeatedCallFacts);
+    }
+
+    @Test
+    void mapsConstructorCallsToInitFacts() throws IOException {
+        write("src/main/java/com/acme/App.java", """
+                package com.acme;
+
+                class App {
+                    void run() {
+                        new Service();
+                    }
+                }
+
+                class Service {}
+                """);
+        JavaSourceAnalysisResult result = JavaSourceAnalyzer.defaults().analyze(
+                tempDir,
+                List.of(tempDir.resolve("src/main/java/com/acme/App.java")));
+
+        JavaSourceFactBatch batch = JavaSourceFactMapper.defaults().map(
+                result,
+                new JavaSourceFactContext(
+                        "shop",
+                        "_root",
+                        "src/main/java",
+                        "snapshot-1",
+                        "analysis-1",
+                        "scope-1",
+                        "src/main/java"));
+
+        assertFact(batch, "CALLS", "method://shop/_root/src/main/java/com.acme.App#run()V",
+                "method://shop/_root/src/main/java/com.acme.Service#<init>()V");
     }
 
     @Test

@@ -109,16 +109,114 @@ class AnalysisPlannerTest {
         assertTrue(graph.hasTask("java-source", "app"));
     }
 
+    @Test
+    void doesNotPlanScopesOverriddenByExclusionOrSharedLibrarySelection() throws IOException {
+        write("app/build.gradle", "plugins { id 'java' }\n");
+        write("app/src/main/java/App.java", "class App {}\n");
+        write("lib/build.gradle", "plugins { id 'java' }\n");
+        write("lib/src/main/java/Library.java", "class Library {}\n");
+        ImportReviewReport report = generateReport();
+        AnalysisScopeDecision decision = AnalysisScopeDecisionGenerator.defaults().confirm(
+                report,
+                new AnalysisScopeDecisionRequest(
+                        List.of("app", "lib"),
+                        List.of("app"),
+                        List.of("lib"),
+                        List.of(),
+                        List.of(),
+                        List.of(),
+                        List.of(),
+                        List.of(),
+                        List.of()));
+
+        AnalyzerTaskGraph graph = AnalysisPlanner.defaults().plan(
+                report.withAnalysisScopeDecision(decision),
+                new GitDiffSummary(List.of("app/src/main/java/App.java", "lib/src/main/java/Library.java")),
+                new ExistingSnapshotSummary("snap-1", List.of()));
+
+        assertAudit(decision, "app", AnalysisScopeDisposition.EXCLUDED);
+        assertAudit(decision, "lib", AnalysisScopeDisposition.SHARED_LIBRARY);
+        assertFalse(graph.hasTask("java-source", "app"));
+        assertFalse(graph.hasTask("java-source", "lib"));
+    }
+
+    @Test
+    void plansBytecodeOnlyProjectsThatWereImplicitlyIncluded() throws IOException {
+        write("lib/app.jar", new byte[] {1, 2, 3});
+        ImportReviewReport report = generateReport();
+        AnalysisScopeDecision decision = AnalysisScopeDecisionGenerator.defaults()
+                .confirm(report, AnalysisScopeDecisionRequest.empty());
+
+        AnalyzerTaskGraph graph = AnalysisPlanner.defaults().plan(
+                report.withAnalysisScopeDecision(decision),
+                new GitDiffSummary(List.of("lib/app.jar")),
+                new ExistingSnapshotSummary("snap-1", List.of()));
+
+        assertTrue(report.recommendedAnalysisScopes().stream()
+                .anyMatch(scope -> scope.projectRoot().equals(".") && scope.analyzerId().equals("java-bytecode")));
+        assertTrue(graph.hasTask("java-bytecode", "."));
+        assertEquals(AnalyzerTaskReason.CHANGED_SCOPE, graph.requireTask("java-bytecode", ".").reason());
+    }
+
+    @Test
+    void plansReadyDirectImportsWithoutExplicitScopeDecision() throws IOException {
+        write("app/src/main/java/App.java", "class App {}\n");
+        ImportReviewReport report = generateReport(ImportMode.DIRECT_IMPORT);
+
+        AnalyzerTaskGraph graph = AnalysisPlanner.defaults().plan(
+                report,
+                new GitDiffSummary(List.of("app/src/main/java/App.java")),
+                new ExistingSnapshotSummary("snap-1", List.of()));
+
+        assertFalse(report.requiresUserConfirmation());
+        assertTrue(graph.hasTask("java-source", "app"));
+    }
+
+    @Test
+    void plansDirectImportWebScopesWithoutExplicitScopeDecision() throws IOException {
+        write("app/src/main/webapp/index.jsp", "<html></html>\n");
+        ImportReviewReport report = generateReport(ImportMode.DIRECT_IMPORT);
+
+        AnalyzerTaskGraph graph = AnalysisPlanner.defaults().plan(
+                report,
+                new GitDiffSummary(List.of("app/src/main/webapp/index.jsp")),
+                new ExistingSnapshotSummary("snap-1", List.of()));
+
+        assertFalse(report.requiresUserConfirmation());
+        assertEquals(ProjectReviewStatus.PARTIAL, report.requireProject("app").status());
+        assertTrue(report.recommendedAnalysisScopes().stream()
+                .anyMatch(scope -> scope.projectRoot().equals("app") && scope.analyzerId().equals("jsp-web")));
+        assertTrue(graph.hasTask("jsp-web", "app"));
+    }
+
     private ImportReviewReport generateReport() throws IOException {
+        return generateReport(ImportMode.ASSISTED_IMPORT_REVIEW);
+    }
+
+    private ImportReviewReport generateReport(ImportMode mode) throws IOException {
         WorkspaceInventory inventory = WorkspaceInventoryScanner.defaults()
-                .scan(ImportRequest.localFolder("ws-plan", tempDir, ImportMode.ASSISTED_IMPORT_REVIEW));
+                .scan(ImportRequest.localFolder("ws-plan", tempDir, mode));
         WorkspaceLayoutProfile layoutProfile = WorkspaceLayoutDetector.defaults().detect(inventory);
         return ImportReviewReportGenerator.defaults().generate(inventory, layoutProfile);
+    }
+
+    private static void assertAudit(
+            AnalysisScopeDecision decision,
+            String scopePath,
+            AnalysisScopeDisposition disposition) {
+        assertTrue(decision.auditEntries().stream()
+                .anyMatch(entry -> entry.scopePath().equals(scopePath) && entry.disposition() == disposition));
     }
 
     private void write(String relativePath, String content) throws IOException {
         Path file = tempDir.resolve(relativePath);
         Files.createDirectories(file.getParent());
         Files.writeString(file, content, StandardCharsets.UTF_8);
+    }
+
+    private void write(String relativePath, byte[] content) throws IOException {
+        Path file = tempDir.resolve(relativePath);
+        Files.createDirectories(file.getParent());
+        Files.write(file, content);
     }
 }

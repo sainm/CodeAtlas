@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
+import java.nio.file.AccessDeniedException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -84,8 +85,62 @@ class DirectImportGateTest {
         assertTrue(decision.hasBlockingIssue("NO_JAVA_CONTENT"));
     }
 
+    @Test
+    void allowsDirectImportWhenWorkspaceOnlyHasBytecodeArtifacts() throws IOException {
+        write("lib/app.jar", new byte[] {1, 2, 3});
+
+        GateFixture fixture = fixture(ImportRequest.localFolder("ws-bytecode", tempDir, ImportMode.DIRECT_IMPORT));
+
+        ImportGateDecision decision = DirectImportGate.defaults()
+                .evaluate(fixture.request(), fixture.inventory(), fixture.report());
+
+        assertTrue(fixture.report().capabilityCoverage().contains(CapabilityArea.JAVA_BYTECODE));
+        assertTrue(decision.allowed());
+    }
+
+    @Test
+    void allowsDirectImportWhenBytecodeArtifactsExceedInventoryTextLimit() throws IOException {
+        write("lib/app.jar", new byte[] {1, 2, 3});
+
+        GateFixture fixture = fixture(
+                ImportRequest.localFolder("ws-large-bytecode", tempDir, ImportMode.DIRECT_IMPORT),
+                new WorkspaceInventoryScanner(1));
+
+        ImportGateDecision decision = DirectImportGate.defaults()
+                .evaluate(fixture.request(), fixture.inventory(), fixture.report());
+
+        assertTrue(fixture.report().capabilityCoverage().contains(CapabilityArea.JAVA_BYTECODE));
+        assertTrue(decision.allowed());
+    }
+
+    @Test
+    void blocksDirectImportWhenAnyPathIsUnreadable() throws IOException {
+        write("src/main/java/App.java", "class App {}\n");
+        write("src/main/java/Secret.java", "class Secret {}\n");
+        WorkspaceInventoryScanner scanner = new WorkspaceInventoryScanner(1024, (maxFileBytes, sourceRoot, file) -> {
+            if (file.getFileName().toString().equals("Secret.java")) {
+                throw new AccessDeniedException(file.toString());
+            }
+            return WorkspaceInventoryScanner.toEntry(maxFileBytes, sourceRoot, file);
+        });
+
+        GateFixture fixture = fixture(
+                ImportRequest.localFolder("ws-unreadable", tempDir, ImportMode.DIRECT_IMPORT),
+                scanner);
+
+        ImportGateDecision decision = DirectImportGate.defaults()
+                .evaluate(fixture.request(), fixture.inventory(), fixture.report());
+
+        assertFalse(decision.allowed());
+        assertTrue(decision.hasBlockingIssue("UNREADABLE_PATH"));
+    }
+
     private GateFixture fixture(ImportRequest request) throws IOException {
-        WorkspaceInventory inventory = WorkspaceInventoryScanner.defaults().scan(request);
+        return fixture(request, WorkspaceInventoryScanner.defaults());
+    }
+
+    private GateFixture fixture(ImportRequest request, WorkspaceInventoryScanner scanner) throws IOException {
+        WorkspaceInventory inventory = scanner.scan(request);
         WorkspaceLayoutProfile layoutProfile = WorkspaceLayoutDetector.defaults().detect(inventory);
         ImportReviewReport report = ImportReviewReportGenerator.defaults().generate(inventory, layoutProfile);
         return new GateFixture(request, inventory, report);
@@ -95,6 +150,12 @@ class DirectImportGateTest {
         Path file = tempDir.resolve(relativePath);
         Files.createDirectories(file.getParent());
         Files.writeString(file, content, StandardCharsets.UTF_8);
+    }
+
+    private void write(String relativePath, byte[] content) throws IOException {
+        Path file = tempDir.resolve(relativePath);
+        Files.createDirectories(file.getParent());
+        Files.write(file, content);
     }
 
     private record GateFixture(

@@ -29,10 +29,10 @@ public final class AnalysisScopeDecisionGenerator {
             String root = project.rootPath();
             if (excluded.contains(root)) {
                 auditEntries.add(new AnalysisScopeAuditEntry(root, AnalysisScopeDisposition.EXCLUDED, "user excluded project"));
-            } else if (included.contains(root) || (included.isEmpty() && project.status() == ProjectReviewStatus.READY)) {
-                auditEntries.add(new AnalysisScopeAuditEntry(root, AnalysisScopeDisposition.INCLUDED, "project selected for analysis"));
             } else if (shared.contains(root)) {
                 auditEntries.add(new AnalysisScopeAuditEntry(root, AnalysisScopeDisposition.SHARED_LIBRARY, "project marked as shared library"));
+            } else if (included.contains(root) || (included.isEmpty() && project.status() == ProjectReviewStatus.READY)) {
+                auditEntries.add(new AnalysisScopeAuditEntry(root, AnalysisScopeDisposition.INCLUDED, "project selected for analysis"));
             } else if (project.status() == ProjectReviewStatus.BOUNDARY_ONLY
                     || project.status() == ProjectReviewStatus.UNSUPPORTED
                     || project.status() == ProjectReviewStatus.UNKNOWN) {

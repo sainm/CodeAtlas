@@ -50,9 +50,31 @@ class JavaChangedScopeAnalyzerTest {
         assertFalse(cache.containsAstObjects());
     }
 
+    @Test
+    void skipsChangedJavaFilesThatInventoryMarkedSkipped() throws IOException {
+        write("src/main/java/com/acme/Broken.java", new byte[] {(byte) 0xc3, 0x28});
+        WorkspaceInventory inventory = WorkspaceInventoryScanner.defaults()
+                .scan(ImportRequest.localFolder("ws-java", tempDir, ImportMode.DIRECT_IMPORT));
+
+        JavaChangedScopeAnalysis analysis = JavaChangedScopeAnalyzer.defaults().analyze(
+                tempDir,
+                inventory,
+                new GitDiffSummary(List.of("src/main/java/com/acme/Broken.java")),
+                new JavaSourceIncrementalCache());
+
+        assertTrue(analysis.analyzedPaths().isEmpty());
+        assertTrue(analysis.result().classes().isEmpty());
+    }
+
     private void write(String relativePath, String content) throws IOException {
         Path file = tempDir.resolve(relativePath);
         Files.createDirectories(file.getParent());
         Files.writeString(file, content, StandardCharsets.UTF_8);
+    }
+
+    private void write(String relativePath, byte[] content) throws IOException {
+        Path file = tempDir.resolve(relativePath);
+        Files.createDirectories(file.getParent());
+        Files.write(file, content);
     }
 }

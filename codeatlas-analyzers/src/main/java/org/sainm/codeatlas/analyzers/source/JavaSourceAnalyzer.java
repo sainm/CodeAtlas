@@ -7,9 +7,11 @@ import java.util.List;
 
 import spoon.Launcher;
 import spoon.reflect.CtModel;
+import spoon.reflect.code.CtConstructorCall;
 import spoon.reflect.code.CtInvocation;
 import spoon.reflect.cu.SourcePosition;
 import spoon.reflect.declaration.CtAnnotation;
+import spoon.reflect.declaration.CtConstructor;
 import spoon.reflect.declaration.CtField;
 import spoon.reflect.declaration.CtMethod;
 import spoon.reflect.declaration.CtType;
@@ -94,20 +96,49 @@ public final class JavaSourceAnalyzer {
                         location(sourceRoot, method.getPosition())));
             }
         }
+        for (CtConstructor<?> constructor : model.getElements(new TypeFilter<>(CtConstructor.class))) {
+            CtType<?> ownerType = constructor.getParent(CtType.class);
+            SourceLocation constructorLocation = location(sourceRoot, constructor.getPosition());
+            if (ownerType == null || ownerType.isShadow() || constructorLocation.relativePath().isBlank()) {
+                continue;
+            }
+            methods.add(new JavaMethodInfo(
+                    ownerType.getQualifiedName(),
+                    "<init>",
+                    JavaDescriptor.methodDescriptor(constructor.getParameters().stream()
+                            .map(parameter -> parameter.getType())
+                            .toList(), null),
+                    "void",
+                    annotations(constructor),
+                    constructorLocation));
+        }
         for (CtInvocation<?> invocation : model.getElements(new TypeFilter<>(CtInvocation.class))) {
             CtMethod<?> ownerMethod = invocation.getParent(CtMethod.class);
+            CtConstructor<?> ownerConstructor = ownerMethod == null ? invocation.getParent(CtConstructor.class) : null;
             CtType<?> ownerType = invocation.getParent(CtType.class);
             CtExecutableReference<?> executable = invocation.getExecutable();
             invocations.add(new JavaInvocationInfo(
                     ownerType == null ? "" : ownerType.getQualifiedName(),
-                    ownerMethod == null ? "" : ownerMethod.getSimpleName(),
-                    ownerMethod == null ? "" : JavaDescriptor.methodDescriptor(ownerMethod.getParameters().stream()
-                            .map(parameter -> parameter.getType())
-                            .toList(), ownerMethod.getType()),
+                    ownerName(ownerMethod, ownerConstructor),
+                    ownerSignature(ownerMethod, ownerConstructor),
                     typeName(executable.getDeclaringType()),
                     executable.getSimpleName(),
                     JavaDescriptor.methodDescriptor(executable.getParameters(), executable.getType()),
                     location(sourceRoot, invocation.getPosition())));
+        }
+        for (CtConstructorCall<?> constructorCall : model.getElements(new TypeFilter<>(CtConstructorCall.class))) {
+            CtMethod<?> ownerMethod = constructorCall.getParent(CtMethod.class);
+            CtConstructor<?> ownerConstructor = ownerMethod == null ? constructorCall.getParent(CtConstructor.class) : null;
+            CtType<?> ownerType = constructorCall.getParent(CtType.class);
+            CtExecutableReference<?> executable = constructorCall.getExecutable();
+            invocations.add(new JavaInvocationInfo(
+                    ownerType == null ? "" : ownerType.getQualifiedName(),
+                    ownerName(ownerMethod, ownerConstructor),
+                    ownerSignature(ownerMethod, ownerConstructor),
+                    typeName(executable.getDeclaringType()),
+                    "<init>",
+                    JavaDescriptor.methodDescriptor(executable.getParameters(), null),
+                    location(sourceRoot, constructorCall.getPosition())));
         }
         return new JavaSourceAnalysisResult(
                 noClasspathFallbackUsed,
@@ -116,6 +147,27 @@ public final class JavaSourceAnalyzer {
                 sortedFields(fields),
                 sortedInvocations(invocations),
                 diagnostics);
+    }
+
+    private static String ownerName(CtMethod<?> ownerMethod, CtConstructor<?> ownerConstructor) {
+        if (ownerMethod != null) {
+            return ownerMethod.getSimpleName();
+        }
+        return ownerConstructor == null ? "" : "<init>";
+    }
+
+    private static String ownerSignature(CtMethod<?> ownerMethod, CtConstructor<?> ownerConstructor) {
+        if (ownerMethod != null) {
+            return JavaDescriptor.methodDescriptor(ownerMethod.getParameters().stream()
+                    .map(parameter -> parameter.getType())
+                    .toList(), ownerMethod.getType());
+        }
+        if (ownerConstructor != null) {
+            return JavaDescriptor.methodDescriptor(ownerConstructor.getParameters().stream()
+                    .map(parameter -> parameter.getType())
+                    .toList(), null);
+        }
+        return "";
     }
 
     private static List<String> annotations(spoon.reflect.declaration.CtElement element) {

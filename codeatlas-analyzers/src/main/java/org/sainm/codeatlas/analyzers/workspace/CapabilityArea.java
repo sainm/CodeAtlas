@@ -2,6 +2,7 @@ package org.sainm.codeatlas.analyzers.workspace;
 
 public enum CapabilityArea {
     JAVA_SOURCE,
+    JAVA_BYTECODE,
     JSP_WEB,
     HTML_JS,
     SHELL,

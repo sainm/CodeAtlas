@@ -40,6 +40,12 @@ public final class WorkspaceLayoutDetector {
     }
 
     private static boolean hasProjectBoundarySignal(String path, FileCapabilityLevel level) {
+        if (level == FileCapabilityLevel.L5_SKIPPED) {
+            return false;
+        }
+        if (isBytecodeArtifact(path)) {
+            return true;
+        }
         String name = fileName(path);
         if (name.equals("build.gradle")
                 || name.equals("settings.gradle")
@@ -64,6 +70,19 @@ public final class WorkspaceLayoutDetector {
     }
 
     private static String inferRoot(String path) {
+        if (isBytecodeArtifact(path) && !isUnderWebInf(path)) {
+            int lib = path.indexOf("/lib/");
+            if (path.startsWith("lib/")) {
+                return ".";
+            }
+            if (lib > 0) {
+                return path.substring(0, lib);
+            }
+            String outputRoot = inferBytecodeOutputRoot(path);
+            if (!outputRoot.isBlank()) {
+                return outputRoot;
+            }
+        }
         for (String marker : List.of(
                 "src/main/java/",
                 "src/test/java/",
@@ -99,6 +118,32 @@ public final class WorkspaceLayoutDetector {
             return slash > 0 ? webRoot.substring(0, slash) : ".";
         }
         return parent(path);
+    }
+
+    private static String inferBytecodeOutputRoot(String path) {
+        for (String marker : List.of(
+                "target/classes/",
+                "target/test-classes/",
+                "build/classes/")) {
+            if (path.startsWith(marker)) {
+                return ".";
+            }
+        }
+        for (String marker : List.of(
+                "/target/classes/",
+                "/target/test-classes/",
+                "/build/classes/",
+                "/build/libs/",
+                "/target/")) {
+            int index = path.indexOf(marker);
+            if (index > 0) {
+                return path.substring(0, index);
+            }
+        }
+        if (path.startsWith("target/") || path.startsWith("build/libs/")) {
+            return ".";
+        }
+        return "";
     }
 
     private static String parent(String path) {
@@ -158,7 +203,7 @@ public final class WorkspaceLayoutDetector {
             if (!hasStandardSourceRoot && !isUnderWebRoot(path) && !isUnderResourceRoot(path)) {
                 addKnownRoot(path, "src", sourceRoots);
             }
-            if (name.equals(".classpath") || (extension(path).equals(".jar") && path.contains("/lib/"))) {
+            if (name.equals(".classpath") || isBytecodeArtifact(path)) {
                 classpathCandidates.add(path);
             }
             if (layoutType == null && (!sourceRoots.isEmpty() || !webRoots.isEmpty())) {
@@ -232,5 +277,14 @@ public final class WorkspaceLayoutDetector {
                 case UNKNOWN_LEGACY -> 6;
             };
         }
+    }
+
+    private static boolean isBytecodeArtifact(String path) {
+        String lower = path.toLowerCase(Locale.ROOT);
+        return lower.endsWith(".jar") || lower.endsWith(".class");
+    }
+
+    private static boolean isUnderWebInf(String path) {
+        return path.startsWith("WEB-INF/") || path.contains("/WEB-INF/");
     }
 }

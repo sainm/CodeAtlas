@@ -381,7 +381,47 @@ class FactStagingStoreTest {
 
         store.commit("analysis-2");
 
-        assertEquals(List.of(firstScopeFact, secondScopeFact), store.activeFacts("shop"));
+        List<FactRecord> activeFacts = store.activeFacts("shop");
+        assertEquals(2, activeFacts.size());
+        assertEquals(firstScopeFact.factKey(), activeFacts.getFirst().factKey());
+        assertEquals("snapshot-3", activeFacts.getFirst().snapshotId());
+        assertEquals("snapshot-2", activeFacts.getFirst().validFromSnapshot());
+        assertEquals(secondScopeFact, activeFacts.get(1));
+    }
+
+    @Test
+    void incrementalCommitCarriesUntouchedFactsIntoCommittedSnapshotView() {
+        InMemoryFactStagingStore store = new InMemoryFactStagingStore();
+        Evidence firstEvidence = callEvidence("spoon", "src/main/java/com/foo/A.java");
+        FactRecord firstScopeFact = callFact(
+                "analysis-1",
+                "snapshot-2",
+                "scope-1",
+                "spoon",
+                "src/main/java/com/foo/A.java",
+                "B",
+                firstEvidence.evidenceKey());
+        stageOneScope(store, "analysis-1", "snapshot-2", "scope-1", firstEvidence, firstScopeFact);
+        store.commit("analysis-1");
+
+        Evidence secondEvidence = callEvidence("spoon", "src/main/java/com/foo/C.java");
+        FactRecord secondScopeFact = callFact(
+                "analysis-2",
+                "snapshot-3",
+                "scope-2",
+                "spoon",
+                "src/main/java/com/foo/C.java",
+                "D",
+                secondEvidence.evidenceKey());
+        stageOneScope(store, "analysis-2", "snapshot-3", "scope-2", secondEvidence, secondScopeFact);
+
+        store.commit("analysis-2");
+
+        FactRecord carriedForward = store.activeFacts("shop").getFirst();
+        assertEquals(firstScopeFact.factKey(), carriedForward.factKey());
+        assertEquals("snapshot-3", carriedForward.snapshotId());
+        assertEquals("snapshot-2", carriedForward.validFromSnapshot());
+        assertEquals("snapshot-3", MaterializedEdge.from(carriedForward).snapshotId());
     }
 
     @Test
@@ -448,7 +488,12 @@ class FactStagingStoreTest {
 
         store.commit("analysis-2");
 
-        assertEquals(List.of(untouchedDataFact, replacementCall), store.activeFacts("shop"));
+        List<FactRecord> activeFacts = store.activeFacts("shop");
+        assertEquals(2, activeFacts.size());
+        assertEquals(untouchedDataFact.factKey(), activeFacts.getFirst().factKey());
+        assertEquals("snapshot-3", activeFacts.getFirst().snapshotId());
+        assertEquals("snapshot-2", activeFacts.getFirst().validFromSnapshot());
+        assertEquals(replacementCall, activeFacts.get(1));
     }
 
     @Test
@@ -517,7 +562,9 @@ class FactStagingStoreTest {
 
         List<FactRecord> activeFacts = store.activeFacts("shop");
         assertEquals(2, activeFacts.size());
-        assertTrue(activeFacts.contains(untouchedFlowFact));
+        assertTrue(activeFacts.stream().anyMatch(fact -> fact.factKey().equals(untouchedFlowFact.factKey())
+                && fact.snapshotId().equals("snapshot-3")
+                && fact.validFromSnapshot().equals("snapshot-2")));
         assertTrue(activeFacts.contains(replacementDataFact));
     }
 
@@ -619,6 +666,60 @@ class FactStagingStoreTest {
                 "snapshot-2",
                 List.of(RelationFamily.CALL, RelationFamily.DATA),
                 2)), requests);
+    }
+
+    @Test
+    void carriesCustomSourceRootFactsForwardToNextSnapshot() {
+        InMemoryFactStagingStore store = new InMemoryFactStagingStore();
+        Evidence generatedEvidence = callEvidence("spring", "generated/sources/annotations/java/main/com/foo/Api.java");
+        FactRecord generatedFact = customRootEndpointFact(
+                "analysis-1",
+                "snapshot-2",
+                "scope-generated",
+                "spring",
+                "generated/sources/annotations/java/main/com/foo/Api.java",
+                generatedEvidence.evidenceKey());
+        stageScopes(
+                store,
+                "analysis-1",
+                "snapshot-2",
+                List.of(ScopeRun.planned(
+                        "scope-generated",
+                        "analysis-1",
+                        "spring",
+                        "generated/sources/annotations/java/main/com/foo/Api.java",
+                        RelationFamily.CALL).start()),
+                List.of(generatedFact),
+                List.of(generatedEvidence));
+        store.commit("analysis-1");
+
+        Evidence nextEvidence = callEvidence("spoon", "src/main/java/com/foo/Other.java");
+        FactRecord nextFact = callFact(
+                "analysis-2",
+                "snapshot-3",
+                "scope-next",
+                "spoon",
+                "src/main/java/com/foo/Other.java",
+                nextEvidence.evidenceKey());
+        stageScopes(
+                store,
+                "analysis-2",
+                "snapshot-3",
+                List.of(ScopeRun.planned(
+                        "scope-next",
+                        "analysis-2",
+                        "spoon",
+                        "src/main/java/com/foo/Other.java",
+                        RelationFamily.CALL).start()),
+                List.of(nextFact),
+                List.of(nextEvidence));
+
+        store.commit("analysis-2");
+
+        assertTrue(store.activeFacts("shop").stream()
+                .anyMatch(fact -> fact.factKey().equals(generatedFact.factKey())
+                        && fact.snapshotId().equals("snapshot-3")
+                        && fact.validFromSnapshot().equals("snapshot-2")));
     }
 
     @Test
@@ -1022,6 +1123,31 @@ class FactStagingStoreTest {
                 Confidence.CERTAIN,
                 100,
                 SourceType.BOUNDARY_SYMBOL);
+    }
+
+    private static FactRecord customRootEndpointFact(
+            String analysisRunId,
+            String snapshotId,
+            String scopeRunId,
+            String analyzerId,
+            String scopeKey,
+            String evidenceKey) {
+        return FactRecord.create(
+                List.of("generated/sources/annotations/java/main"),
+                "method://shop/_root/generated/sources/annotations/java/main/com.foo.Api#list()V",
+                "api-endpoint://shop/_root/generated/sources/annotations/java/main/GET:/orders",
+                "ROUTES_TO",
+                "spring",
+                "shop",
+                snapshotId,
+                analysisRunId,
+                scopeRunId,
+                analyzerId,
+                scopeKey,
+                evidenceKey,
+                Confidence.CERTAIN,
+                100,
+                SourceType.SPOON);
     }
 
     private static void stageOneScope(

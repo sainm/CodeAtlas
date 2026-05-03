@@ -163,7 +163,7 @@ public final class SymbolIdParser {
         List<String> normalized = new ArrayList<>();
         for (String sourceRoot : sourceRoots) {
             String value = requireSegment(sourceRoot, "source root", String.valueOf(sourceRoots)).replace('\\', '/');
-            if (value.startsWith("/") || value.endsWith("/") || value.contains(":/") || value.contains("..")) {
+            if (value.startsWith("/") || value.endsWith("/") || value.contains(":/") || hasTraversalSegment(value)) {
                 throw new IllegalArgumentException("source root must be logical and relative: " + sourceRoot);
             }
             normalized.add(value);
@@ -193,9 +193,18 @@ public final class SymbolIdParser {
     private static void validateRelative(SymbolKind kind, String path, String raw) {
         boolean containsSchemeLikeSeparator = path.contains(":/")
                 && !(kind.kind().equals(DefaultSymbolKind.API_ENDPOINT.kind()) && hasOnlyEndpointMethodSeparators(path));
-        if (path.isBlank() || path.startsWith("/") || containsSchemeLikeSeparator || path.contains("..")) {
+        if (path.isBlank() || path.startsWith("/") || containsSchemeLikeSeparator || hasTraversalSegment(path)) {
             throw new IllegalArgumentException("Symbol id path must be logical and relative: " + raw);
         }
+    }
+
+    private static boolean hasTraversalSegment(String path) {
+        for (String segment : path.split("/", -1)) {
+            if (segment.equals("..")) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static boolean hasOnlyEndpointMethodSeparators(String path) {

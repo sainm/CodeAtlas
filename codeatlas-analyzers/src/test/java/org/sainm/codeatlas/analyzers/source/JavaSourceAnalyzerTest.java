@@ -126,6 +126,61 @@ class JavaSourceAnalyzerTest {
                 && field.typeDescriptor().equals("[Ljava/lang/Object;")));
     }
 
+    @Test
+    void extractsConstructorsAndInvocationsInsideConstructorBodies() throws IOException {
+        write("src/main/java/com/acme/App.java", """
+                package com.acme;
+
+                class App {
+                    App(Service service) {
+                        service.save();
+                    }
+                }
+
+                class Service {
+                    void save() {}
+                }
+                """);
+
+        JavaSourceAnalysisResult result = JavaSourceAnalyzer.defaults().analyze(
+                tempDir,
+                List.of(tempDir.resolve("src/main/java/com/acme/App.java")));
+
+        assertTrue(result.methods().stream().anyMatch(method -> method.ownerQualifiedName().equals("com.acme.App")
+                && method.simpleName().equals("<init>")
+                && method.signature().equals("(Lcom/acme/Service;)V")));
+        assertTrue(result.directInvocations().stream().anyMatch(invocation -> invocation.ownerQualifiedName().equals("com.acme.App")
+                && invocation.ownerMethodName().equals("<init>")
+                && invocation.ownerMethodSignature().equals("(Lcom/acme/Service;)V")
+                && invocation.targetQualifiedName().equals("com.acme.Service")
+                && invocation.targetSimpleName().equals("save")));
+    }
+
+    @Test
+    void extractsConstructorCallsFromMethodBodies() throws IOException {
+        write("src/main/java/com/acme/App.java", """
+                package com.acme;
+
+                class App {
+                    void run() {
+                        new Service();
+                    }
+                }
+
+                class Service {}
+                """);
+
+        JavaSourceAnalysisResult result = JavaSourceAnalyzer.defaults().analyze(
+                tempDir,
+                List.of(tempDir.resolve("src/main/java/com/acme/App.java")));
+
+        assertTrue(result.directInvocations().stream().anyMatch(invocation -> invocation.ownerQualifiedName().equals("com.acme.App")
+                && invocation.ownerMethodName().equals("run")
+                && invocation.targetQualifiedName().equals("com.acme.Service")
+                && invocation.targetSimpleName().equals("<init>")
+                && invocation.targetSignature().equals("()V")));
+    }
+
     private void write(String relativePath, String content) throws IOException {
         Path file = tempDir.resolve(relativePath);
         Files.createDirectories(file.getParent());

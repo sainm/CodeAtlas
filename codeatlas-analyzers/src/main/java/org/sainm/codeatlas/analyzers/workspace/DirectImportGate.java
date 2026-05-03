@@ -58,7 +58,7 @@ public final class DirectImportGate {
     private static void addUnreadablePathIssues(WorkspaceInventory inventory, List<ImportGateIssue> issues) {
         for (FileInventoryEntry entry : inventory.entries()) {
             String code = entry.decodeDiagnostic().code();
-            if (code.equals("DECODE_FAILED")) {
+            if (code.equals("DECODE_FAILED") || code.equals("UNREADABLE_PATH")) {
                 issues.add(ImportGateIssue.blocking(
                         "UNREADABLE_PATH",
                         entry.relativePath(),
@@ -74,6 +74,7 @@ public final class DirectImportGate {
 
     private static void addWorkspaceShapeIssues(ImportReviewReport report, List<ImportGateIssue> issues) {
         boolean hasJava = report.capabilityCoverage().contains(CapabilityArea.JAVA_SOURCE)
+                || report.capabilityCoverage().contains(CapabilityArea.JAVA_BYTECODE)
                 || report.capabilityCoverage().contains(CapabilityArea.JSP_WEB);
         boolean hasBoundaryOnly = report.capabilityCoverage().contains(CapabilityArea.C_NATIVE)
                 || report.capabilityCoverage().contains(CapabilityArea.COBOL)

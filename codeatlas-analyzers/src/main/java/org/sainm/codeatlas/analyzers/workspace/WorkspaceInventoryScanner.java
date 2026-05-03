@@ -34,12 +34,21 @@ public final class WorkspaceInventoryScanner {
             ".docx", ".xls", ".xlsx", ".ppt", ".pptx");
 
     private final long maxFileBytes;
+    private final FileEntryReader entryReader;
 
     public WorkspaceInventoryScanner(long maxFileBytes) {
+        this(maxFileBytes, (limit, sourceRoot, file) -> toEntry(limit, sourceRoot, file));
+    }
+
+    WorkspaceInventoryScanner(long maxFileBytes, FileEntryReader entryReader) {
         if (maxFileBytes < 1) {
             throw new IllegalArgumentException("maxFileBytes must be positive");
         }
+        if (entryReader == null) {
+            throw new IllegalArgumentException("entryReader is required");
+        }
         this.maxFileBytes = maxFileBytes;
+        this.entryReader = entryReader;
     }
 
     public static WorkspaceInventoryScanner defaults() {
@@ -57,7 +66,11 @@ public final class WorkspaceInventoryScanner {
                     .sorted(Comparator.comparing(path -> relativePath(request.sourceRoot(), path)))
                     .toList();
             for (Path file : files) {
-                entries.add(toEntry(request.sourceRoot(), file));
+                try {
+                    entries.add(entryReader.toEntry(maxFileBytes, request.sourceRoot(), file));
+                } catch (IOException exception) {
+                    entries.add(unreadableEntry(request.sourceRoot(), file, exception));
+                }
             }
         }
         return new WorkspaceInventory(
@@ -69,11 +82,11 @@ public final class WorkspaceInventoryScanner {
                 entries);
     }
 
-    private FileInventoryEntry toEntry(Path sourceRoot, Path file) throws IOException {
+    static FileInventoryEntry toEntry(long maxFileBytes, Path sourceRoot, Path file) throws IOException {
         String relativePath = relativePath(sourceRoot, file);
         long sizeBytes = Files.size(file);
-        FileCapabilityLevel level = classify(relativePath, sizeBytes);
-        DecodeDiagnostic diagnostic = decodeDiagnostic(relativePath, file, sizeBytes, level);
+        FileCapabilityLevel level = classify(relativePath, sizeBytes, maxFileBytes);
+        DecodeDiagnostic diagnostic = decodeDiagnostic(relativePath, file, sizeBytes, level, maxFileBytes);
         String sha256 = level == FileCapabilityLevel.L5_SKIPPED ? "" : sha256(file);
         if (diagnostic.code().equals("DECODE_FAILED")) {
             level = FileCapabilityLevel.L5_SKIPPED;
@@ -82,12 +95,30 @@ public final class WorkspaceInventoryScanner {
         return new FileInventoryEntry(relativePath, sizeBytes, sha256, level, diagnostic);
     }
 
-    private FileCapabilityLevel classify(String relativePath, long sizeBytes) {
+    private static FileInventoryEntry unreadableEntry(Path sourceRoot, Path file, IOException exception) {
+        long sizeBytes;
+        try {
+            sizeBytes = Files.size(file);
+        } catch (IOException ignored) {
+            sizeBytes = 0;
+        }
+        return new FileInventoryEntry(
+                relativePath(sourceRoot, file),
+                sizeBytes,
+                "",
+                FileCapabilityLevel.L5_SKIPPED,
+                DecodeDiagnostic.skipped("UNREADABLE_PATH", exception.getMessage()));
+    }
+
+    private static FileCapabilityLevel classify(String relativePath, long sizeBytes, long maxFileBytes) {
+        String fileName = fileName(relativePath);
+        String extension = extension(fileName);
+        if (isBytecodeExtension(extension)) {
+            return FileCapabilityLevel.L1_STRUCTURED;
+        }
         if (sizeBytes > maxFileBytes) {
             return FileCapabilityLevel.L5_SKIPPED;
         }
-        String fileName = fileName(relativePath);
-        String extension = extension(fileName);
         if (fileName.equals("pom.xml") || fileName.equals("build.xml") || fileName.equals("build.gradle")
                 || fileName.equals("settings.gradle") || fileName.equals("Makefile") || fileName.equals("CMakeLists.txt")) {
             return FileCapabilityLevel.L2_SEMI_STRUCTURED;
@@ -107,11 +138,16 @@ public final class WorkspaceInventoryScanner {
         return FileCapabilityLevel.L5_SKIPPED;
     }
 
-    private DecodeDiagnostic decodeDiagnostic(
+    private static boolean isBytecodeExtension(String extension) {
+        return extension.equals(".class") || extension.equals(".jar");
+    }
+
+    private static DecodeDiagnostic decodeDiagnostic(
             String relativePath,
             Path file,
             long sizeBytes,
-            FileCapabilityLevel level) throws IOException {
+            FileCapabilityLevel level,
+            long maxFileBytes) throws IOException {
         if (level == FileCapabilityLevel.L5_SKIPPED) {
             if (sizeBytes > maxFileBytes) {
                 return DecodeDiagnostic.skipped("FILE_TOO_LARGE", "file exceeds inventory size limit");
@@ -162,5 +198,10 @@ public final class WorkspaceInventoryScanner {
         String lower = fileName.toLowerCase(Locale.ROOT);
         int dot = lower.lastIndexOf('.');
         return dot >= 0 ? lower.substring(dot) : "";
+    }
+
+    @FunctionalInterface
+    interface FileEntryReader {
+        FileInventoryEntry toEntry(long maxFileBytes, Path sourceRoot, Path file) throws IOException;
     }
 }

@@ -41,7 +41,7 @@ public final class ImportReviewReportGenerator {
                 .toList();
         Map<String, ProjectReviewCandidate> projects = buildProjects(layoutProfile, entrypoints, diagnostics);
         List<RecommendedAnalysisScope> scopes = recommendScopes(projects.values(), inventory);
-        List<String> confirmationItems = confirmationItems(inventory.mode(), projects.values());
+        List<String> confirmationItems = confirmationItems(inventory.mode(), projects.values(), blindSpots);
         boolean requiresConfirmation = !confirmationItems.isEmpty();
         ImportReviewOverview overview = new ImportReviewOverview(
                 inventory.workspaceId(),
@@ -89,8 +89,14 @@ public final class ImportReviewReportGenerator {
         for (Map.Entry<String, List<BoundaryDiagnostic>> entry : diagnosticsByRoot.entrySet()) {
             projects.computeIfAbsent(entry.getKey(), root -> reviewCandidate(
                     new ProjectLayoutCandidate(root, ProjectLayoutType.UNKNOWN_LEGACY, List.of(), List.of(), List.of(), List.of(), List.of()),
-                    List.of(),
+                    entrypointsByRoot.getOrDefault(root, List.of()),
                     entry.getValue()));
+        }
+        for (Map.Entry<String, List<EntrypointClue>> entry : entrypointsByRoot.entrySet()) {
+            projects.computeIfAbsent(entry.getKey(), root -> reviewCandidate(
+                    new ProjectLayoutCandidate(root, ProjectLayoutType.UNKNOWN_LEGACY, List.of(), List.of(), List.of(), List.of(), List.of()),
+                    entry.getValue(),
+                    diagnosticsByRoot.getOrDefault(root, List.of())));
         }
         return projects;
     }
@@ -118,18 +124,25 @@ public final class ImportReviewReportGenerator {
             List<BoundaryDiagnostic> diagnostics) {
         boolean hasJavaScope = !candidate.sourceRoots().isEmpty()
                 || entrypoints.stream().anyMatch(ImportReviewReportGenerator::isJavaEntrypoint);
+        boolean hasBytecodeScope = !candidate.classpathCandidates().isEmpty();
         boolean hasWebScope = !candidate.webRoots().isEmpty()
                 || entrypoints.stream().anyMatch(ImportReviewReportGenerator::isWebEntrypoint);
         boolean hasBuild = candidate.layoutType() == ProjectLayoutType.GRADLE
                 || candidate.layoutType() == ProjectLayoutType.MAVEN
                 || candidate.layoutType() == ProjectLayoutType.ANT_LIKE;
-        if (!diagnostics.isEmpty() && !hasJavaScope && !hasWebScope && !hasBuild) {
+        if (!diagnostics.isEmpty() && !hasJavaScope && !hasBytecodeScope && !hasWebScope && !hasBuild) {
             return ProjectReviewStatus.BOUNDARY_ONLY;
         }
-        if (hasJavaScope || hasBuild) {
+        if (hasJavaScope || hasBytecodeScope) {
             return ProjectReviewStatus.READY;
         }
         if (hasWebScope) {
+            return ProjectReviewStatus.PARTIAL;
+        }
+        if (hasBuild) {
+            return ProjectReviewStatus.PARTIAL;
+        }
+        if (!entrypoints.isEmpty()) {
             return ProjectReviewStatus.PARTIAL;
         }
         if (!diagnostics.isEmpty()) {
@@ -141,12 +154,21 @@ public final class ImportReviewReportGenerator {
     private static List<RecommendedAnalysisScope> recommendScopes(
             Iterable<ProjectReviewCandidate> projects,
             WorkspaceInventory inventory) {
+        List<ProjectReviewCandidate> projectList = new ArrayList<>();
+        projects.forEach(projectList::add);
         List<RecommendedAnalysisScope> scopes = new ArrayList<>();
-        for (ProjectReviewCandidate project : projects) {
-            if (project.status() == ProjectReviewStatus.READY && hasUnderRoot(inventory, project.rootPath(), ".java")) {
+        for (ProjectReviewCandidate project : projectList) {
+            if (project.status() == ProjectReviewStatus.READY
+                    && hasOwnedUnderRoot(inventory, project.rootPath(), ".java", projectList)) {
                 scopes.add(new RecommendedAnalysisScope(project.rootPath(), "java-source", "Java source roots are available"));
             }
-            if (hasUnderRoot(inventory, project.rootPath(), ".jsp") || hasUnderRoot(inventory, project.rootPath(), ".jspx")) {
+            if (project.status() == ProjectReviewStatus.READY
+                    && (hasOwnedUnderRoot(inventory, project.rootPath(), ".jar", projectList)
+                            || hasOwnedUnderRoot(inventory, project.rootPath(), ".class", projectList))) {
+                scopes.add(new RecommendedAnalysisScope(project.rootPath(), "java-bytecode", "Java bytecode artifacts are available"));
+            }
+            if (hasOwnedUnderRoot(inventory, project.rootPath(), ".jsp", projectList)
+                    || hasOwnedUnderRoot(inventory, project.rootPath(), ".jspx", projectList)) {
                 scopes.add(new RecommendedAnalysisScope(project.rootPath(), "jsp-web", "JSP web roots are available"));
             }
             if (project.status() == ProjectReviewStatus.BOUNDARY_ONLY) {
@@ -158,7 +180,8 @@ public final class ImportReviewReportGenerator {
 
     private static List<String> confirmationItems(
             ImportMode mode,
-            Iterable<ProjectReviewCandidate> projects) {
+            Iterable<ProjectReviewCandidate> projects,
+            List<BoundaryDiagnostic> blindSpots) {
         if (mode != ImportMode.ASSISTED_IMPORT_REVIEW) {
             return List.of();
         }
@@ -167,6 +190,9 @@ public final class ImportReviewReportGenerator {
             if (project.status() != ProjectReviewStatus.READY) {
                 items.add(project.rootPath() + " requires confirmation: " + project.status());
             }
+        }
+        for (BoundaryDiagnostic blindSpot : blindSpots) {
+            items.add(blindSpot.evidencePath() + " requires confirmation: " + blindSpot.boundary());
         }
         return List.copyOf(items);
     }
@@ -180,9 +206,13 @@ public final class ImportReviewReportGenerator {
             String name = fileName(path);
             if (entry.level() == FileCapabilityLevel.L5_SKIPPED) {
                 areas.add(CapabilityArea.UNSUPPORTED);
+                continue;
             }
             if (path.endsWith(".java")) {
                 areas.add(CapabilityArea.JAVA_SOURCE);
+            }
+            if (path.endsWith(".class") || path.endsWith(".jar")) {
+                areas.add(CapabilityArea.JAVA_BYTECODE);
             }
             if (path.endsWith(".jsp") || path.endsWith(".jspx")) {
                 areas.add(CapabilityArea.JSP_WEB);
@@ -225,18 +255,59 @@ public final class ImportReviewReportGenerator {
     }
 
     private static String ownerRoot(WorkspaceLayoutProfile layoutProfile, String evidencePath) {
+        String bestRoot = "";
         for (ProjectLayoutCandidate candidate : layoutProfile.candidates()) {
             if (isUnderRoot(evidencePath, candidate.rootPath())) {
-                return candidate.rootPath();
+                String root = candidate.rootPath();
+                if (bestRoot.isBlank() || rootDepth(root) > rootDepth(bestRoot)) {
+                    bestRoot = root;
+                }
             }
+        }
+        if (!bestRoot.isBlank()) {
+            return bestRoot;
         }
         int slash = evidencePath.indexOf('/');
         return slash > 0 ? evidencePath.substring(0, slash) : ".";
     }
 
-    private static boolean hasUnderRoot(WorkspaceInventory inventory, String root, String suffix) {
+    private static int rootDepth(String root) {
+        String normalized = ProjectLayoutCandidate.normalizeRoot(root);
+        if (normalized.equals(".")) {
+            return 0;
+        }
+        return normalized.split("/", -1).length;
+    }
+
+    private static boolean hasOwnedUnderRoot(
+            WorkspaceInventory inventory,
+            String root,
+            String suffix,
+            List<ProjectReviewCandidate> projects) {
         for (FileInventoryEntry entry : inventory.entries()) {
-            if (isUnderRoot(entry.relativePath(), root) && entry.relativePath().toLowerCase(Locale.ROOT).endsWith(suffix)) {
+            if (entry.level() == FileCapabilityLevel.L5_SKIPPED) {
+                continue;
+            }
+            if (isUnderRoot(entry.relativePath(), root)
+                    && !isUnderNestedProject(entry.relativePath(), root, projects)
+                    && entry.relativePath().toLowerCase(Locale.ROOT).endsWith(suffix)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean isUnderNestedProject(
+            String path,
+            String root,
+            List<ProjectReviewCandidate> projects) {
+        String normalizedRoot = ProjectLayoutCandidate.normalizeRoot(root);
+        for (ProjectReviewCandidate project : projects) {
+            String candidateRoot = project.rootPath();
+            if (candidateRoot.equals(normalizedRoot)) {
+                continue;
+            }
+            if (isUnderRoot(candidateRoot, normalizedRoot) && isUnderRoot(path, candidateRoot)) {
                 return true;
             }
         }

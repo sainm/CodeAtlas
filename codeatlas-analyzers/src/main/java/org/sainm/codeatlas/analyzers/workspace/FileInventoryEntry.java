@@ -32,10 +32,19 @@ public record FileInventoryEntry(
             throw new IllegalArgumentException("relativePath is required");
         }
         String normalized = relativePath.replace('\\', '/');
-        if (normalized.startsWith("/") || normalized.endsWith("/") || normalized.contains("//") || normalized.contains("..")) {
+        if (normalized.startsWith("/") || normalized.endsWith("/") || normalized.contains("//") || hasTraversalSegment(normalized)) {
             throw new IllegalArgumentException("relativePath must be normalized and relative");
         }
         return normalized;
+    }
+
+    private static boolean hasTraversalSegment(String path) {
+        for (String segment : path.split("/")) {
+            if (segment.equals("..")) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static void requireSha256(String sha256) {

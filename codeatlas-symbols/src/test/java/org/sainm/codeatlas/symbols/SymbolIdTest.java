@@ -43,6 +43,15 @@ class SymbolIdTest {
     }
 
     @Test
+    void allowsConsecutiveDotsButRejectsTraversalSegmentsInSymbolPaths() {
+        SymbolId symbolId = SymbolIdParser.parse("source-file://shop/_root/src/main/java/com/acme/Foo..java");
+
+        assertEquals("source-file://shop/_root/src/main/java/com/acme/Foo..java", symbolId.canonical());
+        assertThrows(IllegalArgumentException.class,
+                () -> SymbolIdParser.parse("source-file://shop/_root/src/main/java/com/acme/../Foo.java"));
+    }
+
+    @Test
     void normalizesWindowsPathsWithoutLeakingAbsoluteWorkspace() {
         SymbolId symbolId = SymbolIdNormalizer.javaMethod(
                 SymbolContext.of("shop", "_root", "D:\\workspace\\shop"),

@@ -77,6 +77,62 @@ class BytecodeAnalyzerTest {
                 && call.targetDescriptor().equals("()V")));
     }
 
+    @Test
+    void scansUppercaseJarExtensions() throws IOException {
+        write("src/com/acme/App.java", """
+                package com.acme;
+
+                class App {}
+                """);
+        Path classesDir = Files.createDirectories(tempDir.resolve("classes"));
+        int result = ToolProvider.getSystemJavaCompiler().run(
+                null,
+                null,
+                null,
+                "--release",
+                "17",
+                "-d",
+                classesDir.toString(),
+                tempDir.resolve("src/com/acme/App.java").toString());
+        if (result != 0) {
+            throw new AssertionError("javac failed with exit code " + result);
+        }
+        Path jar = Files.move(jar(classesDir), tempDir.resolve("APP.JAR"));
+
+        BytecodeAnalysisResult analysis = BytecodeAnalyzer.defaults().analyze(List.of(jar));
+
+        assertTrue(analysis.classes().stream().anyMatch(type -> type.qualifiedName().equals("com.acme.App")));
+    }
+
+    @Test
+    void scansJarsWhenDirectoryRootContainsBytecodeArtifacts() throws IOException {
+        write("src/com/acme/App.java", """
+                package com.acme;
+
+                class App {}
+                """);
+        Path classesDir = Files.createDirectories(tempDir.resolve("classes"));
+        int result = ToolProvider.getSystemJavaCompiler().run(
+                null,
+                null,
+                null,
+                "--release",
+                "17",
+                "-d",
+                classesDir.toString(),
+                tempDir.resolve("src/com/acme/App.java").toString());
+        if (result != 0) {
+            throw new AssertionError("javac failed with exit code " + result);
+        }
+        Files.createDirectories(tempDir.resolve("lib"));
+        Files.move(jar(classesDir), tempDir.resolve("lib/app.jar"));
+        deleteDirectory(classesDir);
+
+        BytecodeAnalysisResult analysis = BytecodeAnalyzer.defaults().analyze(List.of(tempDir));
+
+        assertTrue(analysis.classes().stream().anyMatch(type -> type.qualifiedName().equals("com.acme.App")));
+    }
+
     private Path jar(Path classesDir) throws IOException {
         Path jar = tempDir.resolve("app.jar");
         try (JarOutputStream output = new JarOutputStream(Files.newOutputStream(jar));
@@ -89,6 +145,14 @@ class BytecodeAnalyzerTest {
             }
         }
         return jar;
+    }
+
+    private static void deleteDirectory(Path directory) throws IOException {
+        try (Stream<Path> paths = Files.walk(directory)) {
+            for (Path path : paths.sorted((left, right) -> right.compareTo(left)).toList()) {
+                Files.delete(path);
+            }
+        }
     }
 
     private void write(String relativePath, String content) throws IOException {

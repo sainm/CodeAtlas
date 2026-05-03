@@ -30,6 +30,7 @@ public final class FactRecord {
     private final int priority;
     private final SourceType sourceType;
     private final IdentityType identityType;
+    private final List<String> identitySourceRoots;
 
     public FactRecord(
             String factKey,
@@ -102,6 +103,7 @@ public final class FactRecord {
             SourceType sourceType) {
         requireNonBlank(factKey, "factKey");
         List<String> scopedSourceRoots = identitySourceRoots == null ? List.of() : List.copyOf(identitySourceRoots);
+        this.identitySourceRoots = scopedSourceRoots;
         SymbolId sourceIdentity = requireIdentity(sourceIdentityId, "sourceIdentityId", scopedSourceRoots);
         SymbolId targetIdentity = requireIdentity(targetIdentityId, "targetIdentityId", scopedSourceRoots);
         if (relationType == null) {
@@ -333,6 +335,36 @@ public final class FactRecord {
 
     public IdentityType identityType() {
         return identityType;
+    }
+
+    FactRecord visibleInSnapshot(String snapshotId) {
+        requireNonBlank(snapshotId, "snapshotId");
+        if (this.snapshotId.equals(snapshotId)) {
+            return this;
+        }
+        return new FactRecord(
+                identitySourceRoots,
+                factKey,
+                sourceIdentityId,
+                targetIdentityId,
+                relationType,
+                qualifier,
+                projectId,
+                snapshotId,
+                analysisRunId,
+                scopeRunId,
+                analyzerId,
+                scopeKey,
+                relationFamily,
+                schemaVersion,
+                active,
+                validFromSnapshot,
+                validToSnapshot,
+                tombstone,
+                evidenceKey,
+                confidence,
+                priority,
+                sourceType);
     }
 
     @Override

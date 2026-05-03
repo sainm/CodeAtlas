@@ -274,6 +274,58 @@ class FactRecordTest {
     }
 
     @Test
+    void reconstructsFactRecordsWithNullScopedSourceRootsAsDefaultRoots() {
+        Evidence evidence = Evidence.create(
+                "spoon",
+                "src/main/java/com/foo/A.java",
+                "src/main/java/com/foo/A.java",
+                "line:12-14",
+                1,
+                SourceType.SPOON);
+        FactRecord created = FactRecord.create(
+                "method://shop/_root/src/main/java/com.foo.A#a()V",
+                "method://shop/_root/src/main/java/com.foo.B#b()V",
+                "CALLS",
+                "direct",
+                "shop",
+                "snapshot-1",
+                "analysis-1",
+                "scope-1",
+                "spoon",
+                "src/main/java/com/foo/A.java",
+                evidence.evidenceKey(),
+                Confidence.CERTAIN,
+                100,
+                SourceType.SPOON);
+
+        FactRecord reconstructed = new FactRecord(
+                null,
+                created.factKey(),
+                created.sourceIdentityId(),
+                created.targetIdentityId(),
+                created.relationType(),
+                created.qualifier(),
+                created.projectId(),
+                created.snapshotId(),
+                created.analysisRunId(),
+                created.scopeRunId(),
+                created.analyzerId(),
+                created.scopeKey(),
+                created.relationFamily(),
+                created.schemaVersion(),
+                created.active(),
+                created.validFromSnapshot(),
+                created.validToSnapshot(),
+                created.tombstone(),
+                created.evidenceKey(),
+                created.confidence(),
+                created.priority(),
+                created.sourceType());
+
+        assertEquals(created, reconstructed);
+    }
+
+    @Test
     void rejectsAiAssistedFactsOutsideAiCandidateBoundary() {
         Evidence evidence = Evidence.create(
                 "ai",

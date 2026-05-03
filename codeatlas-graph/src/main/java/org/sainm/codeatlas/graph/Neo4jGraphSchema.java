@@ -44,24 +44,24 @@ public final class Neo4jGraphSchema {
     public String mergeNodeCypher(String label) {
         GraphNodeType nodeType = nodeTypes.require(label);
         String property = nodeType.identityProperty();
-        return "MERGE (n:CodeAtlasNode:" + label + " {" + property + ": $" + property + "}) "
-                + "SET n.projectId = $projectId, n.snapshotId = $snapshotId, n.kind = $kind";
+        return "MERGE (n:CodeAtlasNode:" + label + " {" + property + ": $" + property + ", snapshotId: $snapshotId}) "
+                + "SET n.projectId = $projectId, n.kind = $kind";
     }
 
     public String findNodeCypher(String label) {
         GraphNodeType nodeType = nodeTypes.require(label);
         String property = nodeType.identityProperty();
-        return "MATCH (n:CodeAtlasNode:" + label + " {" + property + ": $" + property + "}) "
-                + "WHERE n.projectId = $projectId AND n.snapshotId = $snapshotId RETURN n";
+        return "MATCH (n:CodeAtlasNode:" + label + " {" + property + ": $" + property + ", snapshotId: $snapshotId}) "
+                + "WHERE n.projectId = $projectId RETURN n";
     }
 
     private static List<Neo4jIdentityConstraint> buildIdentityConstraints(GraphNodeTypeRegistry registry) {
         List<Neo4jIdentityConstraint> constraints = new ArrayList<>();
         for (GraphNodeType nodeType : registry.all()) {
             constraints.add(new Neo4jIdentityConstraint(
-                    "codeatlas_" + toSnakeCase(nodeType.label()) + "_" + toSnakeCase(nodeType.identityProperty()),
+                    "codeatlas_" + toSnakeCase(nodeType.label()) + "_" + toSnakeCase(nodeType.identityProperty()) + "_snapshot_id",
                     nodeType.label(),
-                    nodeType.identityProperty()));
+                    List.of(nodeType.identityProperty(), "snapshotId")));
         }
         return List.copyOf(constraints);
     }

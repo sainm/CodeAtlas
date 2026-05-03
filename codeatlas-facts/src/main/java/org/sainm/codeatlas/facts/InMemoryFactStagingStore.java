@@ -76,7 +76,8 @@ public final class InMemoryFactStagingStore {
         List<FactRecord> activeFacts = mergeActiveFacts(
                 activeFacts(committed.analysisRun().projectId()),
                 committed.scopeRuns(),
-                committed.facts());
+                committed.facts(),
+                committed.analysisRun().snapshotId());
         activeFactsByProject.put(committed.analysisRun().projectId(), activeFacts);
         stagedBatches.remove(analysisRunId);
         requestCacheRebuild(committed, activeFacts.size());
@@ -118,7 +119,8 @@ public final class InMemoryFactStagingStore {
     private static List<FactRecord> mergeActiveFacts(
             List<FactRecord> currentFacts,
             List<ScopeRun> committedScopes,
-            List<FactRecord> committedFacts) {
+            List<FactRecord> committedFacts,
+            String committedSnapshotId) {
         Set<OwnerTuple> touchedOwners = new HashSet<>();
         Set<ScopeOwner> openIdentityScopes = new HashSet<>();
         for (ScopeRun scopeRun : committedScopes) {
@@ -147,7 +149,7 @@ public final class InMemoryFactStagingStore {
             if (touchedOwners.contains(OwnerTuple.from(fact)) && !committedFactKeys.contains(fact.factKey())) {
                 continue;
             }
-            merged.put(fact.factKey(), fact);
+            merged.put(fact.factKey(), fact.visibleInSnapshot(committedSnapshotId));
         }
         for (FactRecord fact : committedFacts) {
             merged.put(fact.factKey(), fact);

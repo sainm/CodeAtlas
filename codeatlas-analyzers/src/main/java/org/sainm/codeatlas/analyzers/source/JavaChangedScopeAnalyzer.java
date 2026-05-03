@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Optional;
 
 import org.sainm.codeatlas.analyzers.workspace.FileInventoryEntry;
+import org.sainm.codeatlas.analyzers.workspace.FileCapabilityLevel;
 import org.sainm.codeatlas.analyzers.workspace.GitDiffSummary;
 import org.sainm.codeatlas.analyzers.workspace.WorkspaceInventory;
 
@@ -37,6 +38,9 @@ public final class JavaChangedScopeAnalyzer {
         List<String> analyzedPaths = new ArrayList<>();
         int cacheHits = 0;
         for (FileInventoryEntry entry : inventory.entries()) {
+            if (entry.level() == FileCapabilityLevel.L5_SKIPPED) {
+                continue;
+            }
             if (!isChangedJavaFile(entry.relativePath(), normalizedDiff)) {
                 continue;
             }

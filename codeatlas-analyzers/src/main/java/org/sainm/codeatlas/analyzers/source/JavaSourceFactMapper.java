@@ -1,9 +1,11 @@
 package org.sainm.codeatlas.analyzers.source;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import org.sainm.codeatlas.facts.Confidence;
 import org.sainm.codeatlas.facts.Evidence;
@@ -30,19 +32,20 @@ public final class JavaSourceFactMapper {
             throw new IllegalArgumentException("context is required");
         }
         List<FactRecord> facts = new ArrayList<>();
+        Set<String> factKeys = new HashSet<>();
         Map<String, Evidence> evidenceByKey = new LinkedHashMap<>();
         Confidence confidence = result.noClasspathFallbackUsed() ? Confidence.LIKELY : Confidence.CERTAIN;
         for (JavaClassInfo classInfo : result.classes()) {
-            addFact(facts, evidenceByKey, context, sourceFileId(context, classInfo.location().relativePath()),
+            addFact(facts, factKeys, evidenceByKey, context, sourceFileId(context, classInfo.location().relativePath()),
                     classId(context, classInfo.qualifiedName()), "DECLARES", "class", classInfo.location(), confidence);
         }
         for (JavaMethodInfo method : result.methods()) {
-            addFact(facts, evidenceByKey, context, classId(context, method.ownerQualifiedName()),
+            addFact(facts, factKeys, evidenceByKey, context, classId(context, method.ownerQualifiedName()),
                     methodId(context, method.ownerQualifiedName(), method.simpleName(), method.signature()),
                     "DECLARES", "method", method.location(), confidence);
         }
         for (JavaFieldInfo field : result.fields()) {
-            addFact(facts, evidenceByKey, context, classId(context, field.ownerQualifiedName()),
+            addFact(facts, factKeys, evidenceByKey, context, classId(context, field.ownerQualifiedName()),
                     fieldId(context, field.ownerQualifiedName(), field.simpleName(), field.typeDescriptor()),
                     "DECLARES", "field", field.location(), confidence);
         }
@@ -57,7 +60,7 @@ public final class JavaSourceFactMapper {
             if (sourceMethodId.isBlank()) {
                 continue;
             }
-            addFact(facts, evidenceByKey, context, sourceMethodId,
+            addFact(facts, factKeys, evidenceByKey, context, sourceMethodId,
                     methodId(context, invocation.targetQualifiedName(), invocation.targetSimpleName(), invocation.targetSignature()),
                     "CALLS", "direct", invocation.location(), confidence);
         }
@@ -80,6 +83,7 @@ public final class JavaSourceFactMapper {
 
     private static void addFact(
             List<FactRecord> facts,
+            Set<String> factKeys,
             Map<String, Evidence> evidenceByKey,
             JavaSourceFactContext context,
             String sourceIdentityId,
@@ -95,8 +99,7 @@ public final class JavaSourceFactMapper {
                 "line:" + location.line(),
                 1,
                 SourceType.SPOON);
-        evidenceByKey.putIfAbsent(evidence.evidenceKey(), evidence);
-        facts.add(FactRecord.create(
+        FactRecord fact = FactRecord.create(
                 List.of(context.sourceRootKey()),
                 sourceIdentityId,
                 targetIdentityId,
@@ -111,7 +114,12 @@ public final class JavaSourceFactMapper {
                 evidence.evidenceKey(),
                 confidence,
                 100,
-                SourceType.SPOON));
+                SourceType.SPOON);
+        if (!factKeys.add(fact.factKey())) {
+            return;
+        }
+        evidenceByKey.putIfAbsent(evidence.evidenceKey(), evidence);
+        facts.add(fact);
     }
 
     private static String sourceFileId(JavaSourceFactContext context, String relativePath) {

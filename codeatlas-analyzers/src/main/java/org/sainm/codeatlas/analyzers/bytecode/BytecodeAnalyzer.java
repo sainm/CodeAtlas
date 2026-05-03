@@ -7,6 +7,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 import java.util.jar.JarEntry;
 import java.util.jar.JarInputStream;
 import java.util.stream.Stream;
@@ -33,11 +34,12 @@ public final class BytecodeAnalyzer {
         }
         MutableResult result = new MutableResult();
         for (Path root : roots) {
+            String lowerRoot = root.toString().toLowerCase(Locale.ROOT);
             if (Files.isDirectory(root)) {
                 scanDirectory(root, result);
-            } else if (root.toString().endsWith(".jar")) {
+            } else if (lowerRoot.endsWith(".jar")) {
                 scanJar(root, result);
-            } else if (root.toString().endsWith(".class")) {
+            } else if (lowerRoot.endsWith(".class")) {
                 try (InputStream input = Files.newInputStream(root)) {
                     scanClass(input, root.toString(), result);
                 }
@@ -48,12 +50,24 @@ public final class BytecodeAnalyzer {
 
     private static void scanDirectory(Path root, MutableResult result) throws IOException {
         try (Stream<Path> paths = Files.walk(root)) {
-            for (Path classFile : paths.filter(path -> path.toString().endsWith(".class")).toList()) {
-                try (InputStream input = Files.newInputStream(classFile)) {
-                    scanClass(input, root.relativize(classFile).toString(), result);
+            for (Path bytecodeFile : paths.filter(Files::isRegularFile)
+                    .filter(BytecodeAnalyzer::isBytecodeFile)
+                    .toList()) {
+                String lowerPath = bytecodeFile.toString().toLowerCase(Locale.ROOT);
+                if (lowerPath.endsWith(".jar")) {
+                    scanJar(bytecodeFile, result);
+                } else {
+                    try (InputStream input = Files.newInputStream(bytecodeFile)) {
+                        scanClass(input, root.relativize(bytecodeFile).toString(), result);
+                    }
                 }
             }
         }
+    }
+
+    private static boolean isBytecodeFile(Path path) {
+        String lowerPath = path.toString().toLowerCase(Locale.ROOT);
+        return lowerPath.endsWith(".class") || lowerPath.endsWith(".jar");
     }
 
     private static void scanJar(Path jar, MutableResult result) throws IOException {

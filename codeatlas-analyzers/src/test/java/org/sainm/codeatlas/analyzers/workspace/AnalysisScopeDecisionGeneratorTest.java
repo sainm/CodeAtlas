@@ -70,6 +70,32 @@ class AnalysisScopeDecisionGeneratorTest {
         assertAudit(decision, "web", AnalysisScopeDisposition.DEGRADED);
     }
 
+    @Test
+    void sharedLibrarySelectionOverridesDefaultReadyProjectInclusion() throws IOException {
+        write("lib/build.gradle", "plugins { id 'java' }\n");
+        write("lib/src/main/java/Library.java", "class Library {}\n");
+
+        ImportReviewReport report = generateReport();
+        AnalysisScopeDecision decision = AnalysisScopeDecisionGenerator.defaults().confirm(
+                report,
+                new AnalysisScopeDecisionRequest(
+                        List.of(),
+                        List.of(),
+                        List.of("lib"),
+                        List.of(),
+                        List.of(),
+                        List.of(),
+                        List.of(),
+                        List.of(),
+                        List.of()));
+
+        assertEquals(ProjectReviewStatus.READY, report.requireProject("lib").status());
+        assertAudit(decision, "lib", AnalysisScopeDisposition.SHARED_LIBRARY);
+        assertTrue(decision.auditEntries().stream()
+                .noneMatch(entry -> entry.scopePath().equals("lib")
+                        && entry.disposition() == AnalysisScopeDisposition.INCLUDED));
+    }
+
     private ImportReviewReport generateReport() throws IOException {
         WorkspaceInventory inventory = WorkspaceInventoryScanner.defaults()
                 .scan(ImportRequest.localFolder("ws-scope", tempDir, ImportMode.ASSISTED_IMPORT_REVIEW));

@@ -1,6 +1,7 @@
 package org.sainm.codeatlas.analyzers.workspace;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
@@ -114,6 +115,42 @@ class WorkspaceLayoutDetectorTest {
         WorkspaceLayoutProfile profile = detect();
 
         assertTrue(profile.candidates().isEmpty());
+    }
+
+    @Test
+    void detectsBytecodeOnlyClasspathCandidates() throws IOException {
+        write("lib/app.jar", new byte[] {1, 2, 3});
+
+        WorkspaceLayoutProfile profile = detect();
+
+        assertEquals(ProjectLayoutType.UNKNOWN_LEGACY, profile.requireCandidate(".").layoutType());
+        assertTrue(profile.requireCandidate(".").classpathCandidates().contains("lib/app.jar"));
+    }
+
+    @Test
+    void detectsProjectRootFromCompiledBytecodeOutputs() throws IOException {
+        write("app/target/classes/com/acme/App.class", new byte[] {1, 2, 3});
+        write("gradle-app/build/classes/java/main/com/acme/App.class", new byte[] {1, 2, 3});
+        write("jar-app/target/app.jar", new byte[] {1, 2, 3});
+
+        WorkspaceLayoutProfile profile = detect();
+
+        assertTrue(profile.requireCandidate("app").classpathCandidates()
+                .contains("app/target/classes/com/acme/App.class"));
+        assertTrue(profile.requireCandidate("gradle-app").classpathCandidates()
+                .contains("gradle-app/build/classes/java/main/com/acme/App.class"));
+        assertTrue(profile.requireCandidate("jar-app").classpathCandidates()
+                .contains("jar-app/target/app.jar"));
+    }
+
+    @Test
+    void doesNotDetectSourceRootsFromSkippedSourceFiles() throws IOException {
+        write("app/src/main/java/Broken.java", new byte[] {(byte) 0xc3, 0x28});
+
+        WorkspaceLayoutProfile profile = detect();
+
+        assertFalse(profile.candidates().stream()
+                .anyMatch(candidate -> candidate.rootPath().equals("app")));
     }
 
     private WorkspaceLayoutProfile detect() throws IOException {
