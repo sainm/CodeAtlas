@@ -27,13 +27,13 @@ public final class JavaSymbolOriginMerger {
         Map<String, OriginFlags> flagsByKey = new LinkedHashMap<>();
         source.classes().forEach(type -> markSource(flagsByKey, JavaMergedSymbolKind.CLASS, type.qualifiedName()));
         source.methods().forEach(method -> markSource(flagsByKey, JavaMergedSymbolKind.METHOD,
-                method.ownerQualifiedName() + "#" + method.simpleName()));
+                method.ownerQualifiedName() + "#" + method.simpleName() + method.signature()));
         source.fields().forEach(field -> markSource(flagsByKey, JavaMergedSymbolKind.FIELD,
                 field.ownerQualifiedName() + "#" + field.simpleName()));
 
         bytecode.classes().forEach(type -> markJvm(flagsByKey, JavaMergedSymbolKind.CLASS, type.qualifiedName()));
         bytecode.methods().forEach(method -> markJvm(flagsByKey, JavaMergedSymbolKind.METHOD,
-                method.ownerQualifiedName() + "#" + method.simpleName()));
+                method.ownerQualifiedName() + "#" + method.simpleName() + method.descriptor()));
         bytecode.fields().forEach(field -> markJvm(flagsByKey, JavaMergedSymbolKind.FIELD,
                 field.ownerQualifiedName() + "#" + field.simpleName()));
 

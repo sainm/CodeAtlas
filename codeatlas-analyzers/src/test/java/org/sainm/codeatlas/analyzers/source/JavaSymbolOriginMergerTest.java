@@ -20,8 +20,8 @@ class JavaSymbolOriginMergerTest {
                         new JavaClassInfo("com.acme.Shared", "Shared", List.of(), location()),
                         new JavaClassInfo("com.acme.SourceOnly", "SourceOnly", List.of(), location())),
                 List.of(
-                        new JavaMethodInfo("com.acme.Shared", "run", "run()", "void", List.of(), location()),
-                        new JavaMethodInfo("com.acme.SourceOnly", "source", "source()", "void", List.of(), location())),
+                        new JavaMethodInfo("com.acme.Shared", "run", "()V", "void", List.of(), location()),
+                        new JavaMethodInfo("com.acme.SourceOnly", "source", "()V", "void", List.of(), location())),
                 List.of(new JavaFieldInfo("com.acme.Shared", "name", "java.lang.String", List.of(), location())),
                 List.of(),
                 List.of());
@@ -40,10 +40,35 @@ class JavaSymbolOriginMergerTest {
         assertMerged(result, JavaMergedSymbolKind.CLASS, "com.acme.Shared", false, false);
         assertMerged(result, JavaMergedSymbolKind.CLASS, "com.acme.SourceOnly", true, false);
         assertMerged(result, JavaMergedSymbolKind.CLASS, "com.acme.JarOnly", false, true);
-        assertMerged(result, JavaMergedSymbolKind.METHOD, "com.acme.Shared#run", false, false);
-        assertMerged(result, JavaMergedSymbolKind.METHOD, "com.acme.SourceOnly#source", true, false);
-        assertMerged(result, JavaMergedSymbolKind.METHOD, "com.acme.JarOnly#jar", false, true);
+        assertMerged(result, JavaMergedSymbolKind.METHOD, "com.acme.Shared#run()V", false, false);
+        assertMerged(result, JavaMergedSymbolKind.METHOD, "com.acme.SourceOnly#source()V", true, false);
+        assertMerged(result, JavaMergedSymbolKind.METHOD, "com.acme.JarOnly#jar()V", false, true);
         assertMerged(result, JavaMergedSymbolKind.FIELD, "com.acme.Shared#name", false, false);
+    }
+
+    @Test
+    void preservesOverloadedMethodsWhenMergingOrigins() {
+        JavaSourceAnalysisResult source = new JavaSourceAnalysisResult(
+                false,
+                List.of(new JavaClassInfo("com.acme.Overloaded", "Overloaded", List.of(), location())),
+                List.of(
+                        new JavaMethodInfo("com.acme.Overloaded", "run", "(Ljava/lang/String;)V", "void", List.of(), location()),
+                        new JavaMethodInfo("com.acme.Overloaded", "run", "(I)V", "void", List.of(), location())),
+                List.of(),
+                List.of(),
+                List.of());
+        BytecodeAnalysisResult bytecode = new BytecodeAnalysisResult(
+                List.of(new BytecodeClassInfo("com.acme.Overloaded", "java.lang.Object", List.of(), List.of(), "app.jar")),
+                List.of(
+                        new BytecodeMethodInfo("com.acme.Overloaded", "run", "(Ljava/lang/String;)V", List.of(), "app.jar"),
+                        new BytecodeMethodInfo("com.acme.Overloaded", "run", "(I)V", List.of(), "app.jar")),
+                List.of(),
+                List.of());
+
+        JavaSymbolOriginMergeResult result = JavaSymbolOriginMerger.defaults().merge(source, bytecode);
+
+        assertMerged(result, JavaMergedSymbolKind.METHOD, "com.acme.Overloaded#run(Ljava/lang/String;)V", false, false);
+        assertMerged(result, JavaMergedSymbolKind.METHOD, "com.acme.Overloaded#run(I)V", false, false);
     }
 
     private static void assertMerged(

@@ -58,6 +58,32 @@ class DirectImportGateTest {
         assertTrue(decision.hasBlockingIssue("UNSAFE_ARCHIVE"));
     }
 
+    @Test
+    void blocksDirectImportWhenWorkspaceHasNoAnalyzableJavaContent() throws IOException {
+        write("docs/readme.md", "# notes\n");
+
+        GateFixture fixture = fixture(ImportRequest.localFolder("ws-docs", tempDir, ImportMode.DIRECT_IMPORT));
+
+        ImportGateDecision decision = DirectImportGate.defaults()
+                .evaluate(fixture.request(), fixture.inventory(), fixture.report());
+
+        assertFalse(decision.allowed());
+        assertTrue(decision.hasBlockingIssue("NO_JAVA_CONTENT"));
+    }
+
+    @Test
+    void blocksDirectImportWhenWorkspaceOnlyHasBuildMetadata() throws IOException {
+        write("pom.xml", "<project />\n");
+
+        GateFixture fixture = fixture(ImportRequest.localFolder("ws-build-only", tempDir, ImportMode.DIRECT_IMPORT));
+
+        ImportGateDecision decision = DirectImportGate.defaults()
+                .evaluate(fixture.request(), fixture.inventory(), fixture.report());
+
+        assertFalse(decision.allowed());
+        assertTrue(decision.hasBlockingIssue("NO_JAVA_CONTENT"));
+    }
+
     private GateFixture fixture(ImportRequest request) throws IOException {
         WorkspaceInventory inventory = WorkspaceInventoryScanner.defaults().scan(request);
         WorkspaceLayoutProfile layoutProfile = WorkspaceLayoutDetector.defaults().detect(inventory);

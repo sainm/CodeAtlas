@@ -13,6 +13,7 @@ import spoon.reflect.declaration.CtAnnotation;
 import spoon.reflect.declaration.CtField;
 import spoon.reflect.declaration.CtMethod;
 import spoon.reflect.declaration.CtType;
+import spoon.reflect.reference.CtExecutableReference;
 import spoon.reflect.reference.CtTypeReference;
 import spoon.reflect.visitor.filter.TypeFilter;
 
@@ -84,7 +85,9 @@ public final class JavaSourceAnalyzer {
                 methods.add(new JavaMethodInfo(
                         type.getQualifiedName(),
                         method.getSimpleName(),
-                        method.getSignature(),
+                        JavaDescriptor.methodDescriptor(method.getParameters().stream()
+                                .map(parameter -> parameter.getType())
+                                .toList(), method.getType()),
                         typeName(method.getType()),
                         annotations(method),
                         location(sourceRoot, method.getPosition())));
@@ -93,12 +96,16 @@ public final class JavaSourceAnalyzer {
         for (CtInvocation<?> invocation : model.getElements(new TypeFilter<>(CtInvocation.class))) {
             CtMethod<?> ownerMethod = invocation.getParent(CtMethod.class);
             CtType<?> ownerType = invocation.getParent(CtType.class);
+            CtExecutableReference<?> executable = invocation.getExecutable();
             invocations.add(new JavaInvocationInfo(
                     ownerType == null ? "" : ownerType.getQualifiedName(),
                     ownerMethod == null ? "" : ownerMethod.getSimpleName(),
-                    typeName(invocation.getExecutable().getDeclaringType()),
-                    invocation.getExecutable().getSimpleName(),
-                    invocation.getExecutable().getSignature(),
+                    ownerMethod == null ? "" : JavaDescriptor.methodDescriptor(ownerMethod.getParameters().stream()
+                            .map(parameter -> parameter.getType())
+                            .toList(), ownerMethod.getType()),
+                    typeName(executable.getDeclaringType()),
+                    executable.getSimpleName(),
+                    JavaDescriptor.methodDescriptor(executable.getParameters(), executable.getType()),
                     location(sourceRoot, invocation.getPosition())));
         }
         return new JavaSourceAnalysisResult(

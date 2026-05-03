@@ -61,13 +61,52 @@ class JavaSourceFactMapperTest {
         assertFact(batch, "DECLARES", "source-file://shop/_root/src/main/java/com/acme/App.java",
                 "class://shop/_root/src/main/java/com.acme.App");
         assertFact(batch, "DECLARES", "class://shop/_root/src/main/java/com.acme.App",
-                "method://shop/_root/src/main/java/com.acme.App#run(java.lang.String)");
+                "method://shop/_root/src/main/java/com.acme.App#run(Ljava/lang/String;)V");
         assertFact(batch, "DECLARES", "class://shop/_root/src/main/java/com.acme.App",
                 "field://shop/_root/src/main/java/com.acme.App#service");
-        assertFact(batch, "CALLS", "method://shop/_root/src/main/java/com.acme.App#run(java.lang.String)",
-                "method://shop/_root/src/main/java/com.acme.Service#save(java.lang.String)");
-        assertFact(batch, "CALLS", "method://shop/_root/src/main/java/com.acme.App#run(java.lang.String)",
-                "method://shop/_root/src/main/java/com.acme.App#helper()");
+        assertFact(batch, "CALLS", "method://shop/_root/src/main/java/com.acme.App#run(Ljava/lang/String;)V",
+                "method://shop/_root/src/main/java/com.acme.Service#save(Ljava/lang/String;)V");
+        assertFact(batch, "CALLS", "method://shop/_root/src/main/java/com.acme.App#run(Ljava/lang/String;)V",
+                "method://shop/_root/src/main/java/com.acme.App#helper()V");
+    }
+
+    @Test
+    void mapsCallsFromTheCorrectOverloadedOwnerMethod() throws IOException {
+        write("src/main/java/com/acme/App.java", """
+                package com.acme;
+
+                class App {
+                    void run(String input) {
+                        target(input);
+                    }
+
+                    void run(int input) {
+                        target(input);
+                    }
+
+                    void target(String input) {}
+                    void target(int input) {}
+                }
+                """);
+        JavaSourceAnalysisResult result = JavaSourceAnalyzer.defaults().analyze(
+                tempDir,
+                List.of(tempDir.resolve("src/main/java/com/acme/App.java")));
+
+        JavaSourceFactBatch batch = JavaSourceFactMapper.defaults().map(
+                result,
+                new JavaSourceFactContext(
+                        "shop",
+                        "_root",
+                        "src/main/java",
+                        "snapshot-1",
+                        "analysis-1",
+                        "scope-1",
+                        "src/main/java"));
+
+        assertFact(batch, "CALLS", "method://shop/_root/src/main/java/com.acme.App#run(Ljava/lang/String;)V",
+                "method://shop/_root/src/main/java/com.acme.App#target(Ljava/lang/String;)V");
+        assertFact(batch, "CALLS", "method://shop/_root/src/main/java/com.acme.App#run(I)V",
+                "method://shop/_root/src/main/java/com.acme.App#target(I)V");
     }
 
     private static void assertFact(
@@ -75,7 +114,9 @@ class JavaSourceFactMapperTest {
             String relationName,
             String sourceIdentityId,
             String targetIdentityId) {
-        assertTrue(batch.facts().stream().anyMatch(fact -> matches(fact, relationName, sourceIdentityId, targetIdentityId)));
+        assertTrue(batch.facts().stream().anyMatch(fact -> matches(fact, relationName, sourceIdentityId, targetIdentityId)),
+                () -> "Missing " + relationName + " fact from " + sourceIdentityId + " to " + targetIdentityId
+                        + " in " + batch.facts());
     }
 
     private static boolean matches(

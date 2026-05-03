@@ -25,6 +25,10 @@ public final class AnalysisPlanner {
                 ? new ExistingSnapshotSummary("", List.of())
                 : snapshot;
         Set<String> includedProjects = new HashSet<>(report.analysisScopeDecision().includedProjectRoots());
+        report.analysisScopeDecision().auditEntries().stream()
+                .filter(entry -> entry.disposition() == AnalysisScopeDisposition.INCLUDED)
+                .map(AnalysisScopeAuditEntry::scopePath)
+                .forEach(includedProjects::add);
         List<AnalyzerTask> tasks = new ArrayList<>();
         for (RecommendedAnalysisScope scope : report.recommendedAnalysisScopes()) {
             if (!includedProjects.contains(scope.projectRoot())) {

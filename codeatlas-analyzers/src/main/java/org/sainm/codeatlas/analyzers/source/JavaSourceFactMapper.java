@@ -37,7 +37,8 @@ public final class JavaSourceFactMapper {
         }
         for (JavaMethodInfo method : result.methods()) {
             addFact(facts, evidenceByKey, context, classId(context, method.ownerQualifiedName()),
-                    methodId(context, method.ownerQualifiedName(), method.signature()), "DECLARES", "method", method.location());
+                    methodId(context, method.ownerQualifiedName(), method.simpleName(), method.signature()),
+                    "DECLARES", "method", method.location());
         }
         for (JavaFieldInfo field : result.fields()) {
             addFact(facts, evidenceByKey, context, classId(context, field.ownerQualifiedName()),
@@ -55,7 +56,7 @@ public final class JavaSourceFactMapper {
                 continue;
             }
             addFact(facts, evidenceByKey, context, sourceMethodId,
-                    methodId(context, invocation.targetQualifiedName(), invocation.targetSignature()),
+                    methodId(context, invocation.targetQualifiedName(), invocation.targetSimpleName(), invocation.targetSignature()),
                     "CALLS", "direct", invocation.location());
         }
         return new JavaSourceFactBatch(facts, List.copyOf(evidenceByKey.values()));
@@ -67,9 +68,11 @@ public final class JavaSourceFactMapper {
             JavaInvocationInfo invocation) {
         return result.methods().stream()
                 .filter(method -> method.ownerQualifiedName().equals(invocation.ownerQualifiedName())
-                        && method.simpleName().equals(invocation.ownerMethodName()))
+                        && method.simpleName().equals(invocation.ownerMethodName())
+                        && (invocation.ownerMethodSignature().isBlank()
+                                || method.signature().equals(invocation.ownerMethodSignature())))
                 .findFirst()
-                .map(method -> methodId(context, method.ownerQualifiedName(), method.signature()))
+                .map(method -> methodId(context, method.ownerQualifiedName(), method.simpleName(), method.signature()))
                 .orElse("");
     }
 
@@ -119,9 +122,13 @@ public final class JavaSourceFactMapper {
                 + context.sourceRootKey() + "/" + qualifiedName;
     }
 
-    private static String methodId(JavaSourceFactContext context, String ownerQualifiedName, String signature) {
+    private static String methodId(
+            JavaSourceFactContext context,
+            String ownerQualifiedName,
+            String methodName,
+            String signature) {
         return "method://" + context.projectId() + "/" + context.moduleKey() + "/"
-                + context.sourceRootKey() + "/" + ownerQualifiedName + "#" + signature;
+                + context.sourceRootKey() + "/" + ownerQualifiedName + "#" + methodName + signature;
     }
 
     private static String fieldId(JavaSourceFactContext context, String ownerQualifiedName, String fieldName) {

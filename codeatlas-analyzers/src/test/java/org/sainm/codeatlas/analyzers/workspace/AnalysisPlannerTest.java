@@ -89,6 +89,26 @@ class AnalysisPlannerTest {
         assertFalse(graph.hasTask("java-source", "app"));
     }
 
+    @Test
+    void plansReadyProjectsThatWereImplicitlyIncludedByDefaultConfirmation() throws IOException {
+        write("app/build.gradle", "plugins { id 'java' }\n");
+        write("app/src/main/java/App.java", "class App {}\n");
+        ImportReviewReport report = generateReport();
+        AnalysisScopeDecision decision = AnalysisScopeDecisionGenerator.defaults()
+                .confirm(report, AnalysisScopeDecisionRequest.empty());
+
+        AnalyzerTaskGraph graph = AnalysisPlanner.defaults().plan(
+                report.withAnalysisScopeDecision(decision),
+                new GitDiffSummary(List.of("app/src/main/java/App.java")),
+                new ExistingSnapshotSummary("snap-1", List.of()));
+
+        assertTrue(decision.includedProjectRoots().isEmpty());
+        assertTrue(decision.auditEntries().stream()
+                .anyMatch(entry -> entry.scopePath().equals("app")
+                        && entry.disposition() == AnalysisScopeDisposition.INCLUDED));
+        assertTrue(graph.hasTask("java-source", "app"));
+    }
+
     private ImportReviewReport generateReport() throws IOException {
         WorkspaceInventory inventory = WorkspaceInventoryScanner.defaults()
                 .scan(ImportRequest.localFolder("ws-plan", tempDir, ImportMode.ASSISTED_IMPORT_REVIEW));

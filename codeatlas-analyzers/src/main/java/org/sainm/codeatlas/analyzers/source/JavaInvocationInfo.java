@@ -3,6 +3,7 @@ package org.sainm.codeatlas.analyzers.source;
 public record JavaInvocationInfo(
         String ownerQualifiedName,
         String ownerMethodName,
+        String ownerMethodSignature,
         String targetQualifiedName,
         String targetSimpleName,
         String targetSignature,
@@ -10,6 +11,7 @@ public record JavaInvocationInfo(
     public JavaInvocationInfo {
         ownerQualifiedName = ownerQualifiedName == null ? "" : ownerQualifiedName;
         ownerMethodName = ownerMethodName == null ? "" : ownerMethodName;
+        ownerMethodSignature = ownerMethodSignature == null ? "" : ownerMethodSignature;
         targetQualifiedName = targetQualifiedName == null ? "" : targetQualifiedName;
         JavaClassInfo.requireNonBlank(targetSimpleName, "targetSimpleName");
         targetSignature = targetSignature == null ? "" : targetSignature;
@@ -21,9 +23,19 @@ public record JavaInvocationInfo(
     public JavaInvocationInfo(
             String ownerQualifiedName,
             String ownerMethodName,
+            String targetQualifiedName,
             String targetSimpleName,
             String targetSignature,
             SourceLocation location) {
-        this(ownerQualifiedName, ownerMethodName, "", targetSimpleName, targetSignature, location);
+        this(ownerQualifiedName, ownerMethodName, "", targetQualifiedName, targetSimpleName, targetSignature, location);
+    }
+
+    public JavaInvocationInfo(
+            String ownerQualifiedName,
+            String ownerMethodName,
+            String targetSimpleName,
+            String targetSignature,
+            SourceLocation location) {
+        this(ownerQualifiedName, ownerMethodName, "", "", targetSimpleName, targetSignature, location);
     }
 }

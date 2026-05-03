@@ -74,8 +74,7 @@ public final class DirectImportGate {
 
     private static void addWorkspaceShapeIssues(ImportReviewReport report, List<ImportGateIssue> issues) {
         boolean hasJava = report.capabilityCoverage().contains(CapabilityArea.JAVA_SOURCE)
-                || report.capabilityCoverage().contains(CapabilityArea.JSP_WEB)
-                || report.capabilityCoverage().contains(CapabilityArea.BUILD_SYSTEM);
+                || report.capabilityCoverage().contains(CapabilityArea.JSP_WEB);
         boolean hasBoundaryOnly = report.capabilityCoverage().contains(CapabilityArea.C_NATIVE)
                 || report.capabilityCoverage().contains(CapabilityArea.COBOL)
                 || report.capabilityCoverage().contains(CapabilityArea.JCL);
@@ -84,6 +83,11 @@ public final class DirectImportGate {
                     "NON_JAVA_WORKSPACE",
                     "",
                     "workspace appears to be non-Java and requires assisted import review"));
+        } else if (!hasJava) {
+            issues.add(ImportGateIssue.blocking(
+                    "NO_JAVA_CONTENT",
+                    "",
+                    "workspace has no analyzable Java content for direct import"));
         }
         for (ProjectReviewCandidate project : report.projects()) {
             if (project.status() == ProjectReviewStatus.READY
