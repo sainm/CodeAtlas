@@ -30,35 +30,35 @@
 ## 2. 图谱模型和身份标识
 
 - [ ] 定义核心节点：Project、Module、SourceFile、Class、Method、Field、JspPage、JspInclude、JspTag、JspExpression、JspScriptlet、HtmlPage、HtmlForm、HtmlInput、HtmlLink、ScriptResource、DomEventHandler、ClientRequest、JspForm、JspInput、ApiEndpoint、ActionPath、EntryPoint、Schedule、CronTrigger、MessageQueue、MessageTopic、DomainEvent、MessageListener、BatchJob、CliCommand、ShellScript、ExternalCommand、SqlStatement、SqlParameter、DbSchema、DbTable、DbColumn、ConfigKey、ReportDefinition、ReportField、FeatureSeed、FeatureScope、ChangeItem、SavedQuery、WatchSubscription、ReviewComment、PolicyViolation、ExportArtifact、NativeLibrary、BoundarySymbol。
-- [ ] 定义 MVP 关系：DECLARES、CALLS、ROUTES_TO、SUBMITS_TO、BINDS_TO、READS_TABLE、WRITES_TABLE、INCLUDES、FORWARDS_TO、READS_PARAM、WRITES_PARAM、PASSES_PARAM、USES_CONFIG、USES_TAGLIB、RENDERS_INPUT、READS_MODEL_ATTR、READS_REQUEST_PARAM、READS_SESSION_ATTR、WRITES_MODEL_ATTR、WRITES_REQUEST_ATTR、WRITES_SESSION_ATTR、READS_FIELD、WRITES_FIELD、CONTAINS、LOADS_SCRIPT、NAVIGATES_TO、HANDLES_DOM_EVENT、CALLS_HTTP、INVOKES、SCHEDULES、TRIGGERS、PUBLISHES_TO、CONSUMES_FROM、HAS_PARAM、CALLS_COMMAND、READS_COLUMN、WRITES_COLUMN、HAS_VARIANT、GUARDED_BY、MAPS_TO_COLUMN、MATCHES、WATCHES、REQUIRES_CHANGE、SUGGESTS_REVIEW、REQUIRES_TEST、EXPORTS_SYMBOL、REFERENCES_SYMBOL。
-- [ ] 定义边界和增强关系：CALLS_NATIVE、HAS_NATIVE_BOUNDARY、AUTO_BINDS_TO、INTERCEPTS、CONFIGURES_PROPERTY、SUMMARIZES、COMMENTS_ON、VIOLATES_POLICY、SUPPRESSED_BY、EXPORTED_AS、REFLECTS_TO。
+- [x] 定义 MVP 关系：DECLARES、CALLS、ROUTES_TO、SUBMITS_TO、BINDS_TO、READS_TABLE、WRITES_TABLE、INCLUDES、FORWARDS_TO、READS_PARAM、WRITES_PARAM、PASSES_PARAM、USES_CONFIG、USES_TAGLIB、RENDERS_INPUT、READS_MODEL_ATTR、READS_REQUEST_PARAM、READS_SESSION_ATTR、WRITES_MODEL_ATTR、WRITES_REQUEST_ATTR、WRITES_SESSION_ATTR、READS_FIELD、WRITES_FIELD、CONTAINS、LOADS_SCRIPT、NAVIGATES_TO、HANDLES_DOM_EVENT、CALLS_HTTP、INVOKES、SCHEDULES、TRIGGERS、PUBLISHES_TO、CONSUMES_FROM、HAS_PARAM、CALLS_COMMAND、READS_COLUMN、WRITES_COLUMN、HAS_VARIANT、GUARDED_BY、MAPS_TO_COLUMN、MATCHES、WATCHES、REQUIRES_CHANGE、SUGGESTS_REVIEW、REQUIRES_TEST、EXPORTS_SYMBOL、REFERENCES_SYMBOL。
+- [x] 定义边界和增强关系：CALLS_NATIVE、HAS_NATIVE_BOUNDARY、AUTO_BINDS_TO、INTERCEPTS、CONFIGURES_PROPERTY、SUMMARIZES、COMMENTS_ON、VIOLATES_POLICY、SUPPRESSED_BY、EXPORTED_AS、REFLECTS_TO。
 - [ ] 实现 Neo4j constraints 和 indexes。
 - [x] 实现 SymbolKind registry。
 - [x] 实现 SymbolId parser 和 normalizer。
 - [x] 实现 Java method SymbolId，使用 erased JVM descriptor。
-- [ ] 实现 JSP/XML/SQL/report identities，使用 source root 和相对路径。
+- [x] 实现 JSP/XML/SQL/report identities，使用 source root 和相对路径。
 - [proto] 实现 Flow Identity 和 Artifact Identity 契约。
-- [ ] 实现 provisional symbol 处理。
-- [ ] 实现 resolved symbol 的 alias merge 或 redirect。
+- [x] 实现 provisional symbol 处理。
+- [x] 实现 resolved symbol 的 alias merge 或 redirect。
 - [x] 增加 SymbolId round-trip 测试。
 - [x] 增加非法 SymbolId validation 测试。
 
 ## 3. Fact、Evidence、Snapshot 和提交语义
 
-- [ ] 定义 FactRecord 契约。
-- [ ] 定义 Evidence 契约和 evidence key。
-- [ ] 定义 Materialized Edge 契约。
-- [ ] 定义 confidence 等级：CERTAIN、LIKELY、POSSIBLE、UNKNOWN。
-- [ ] 定义 sourceType 和 analyzer source metadata。
-- [ ] 实现 AnalysisRun 和 ScopeRun 状态机：PLANNED、RUNNING、STAGED、COMMITTED、FAILED、ROLLED_BACK。
-- [ ] 实现 staging store。
-- [ ] 确保 staging facts 不参与 current active queries。
-- [ ] 实现 active view commit。
-- [ ] 实现 rollback，并保留 previous active facts。
-- [ ] 实现基于 analyzer 和 scope 的 tombstone ownership。
-- [ ] 实现 commit 后 cache rebuild 触发。
-- [ ] 增加测试：失败 analysis 不暴露半写入 facts。
-- [ ] 增加测试：tombstoned relations 不出现在 current reports。
+- [x] 定义 FactRecord 契约。
+- [x] 定义 Evidence 契约和 evidence key。
+- [x] 定义 Materialized Edge 契约。
+- [x] 定义 confidence 等级：CERTAIN、LIKELY、POSSIBLE、UNKNOWN。
+- [x] 定义 sourceType 和 analyzer source metadata。
+- [x] 实现 AnalysisRun 和 ScopeRun 状态机：PLANNED、RUNNING、STAGED、COMMITTED、FAILED、ROLLED_BACK。
+- [x] 实现 staging store。
+- [x] 确保 staging facts 不参与 current active queries。
+- [x] 实现 active view commit。
+- [x] 实现 rollback，并保留 previous active facts。
+- [x] 实现基于 analyzer 和 scope 的 tombstone ownership。
+- [x] 实现 commit 后 cache rebuild 触发。
+- [x] 增加测试：失败 analysis 不暴露半写入 facts。
+- [x] 增加测试：tombstoned relations 不出现在 current reports。
 
 ## 4. 导入审查和 Workspace Profiling
 

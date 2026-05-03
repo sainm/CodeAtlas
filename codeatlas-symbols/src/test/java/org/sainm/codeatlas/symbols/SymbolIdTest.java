@@ -2,6 +2,7 @@ package org.sainm.codeatlas.symbols;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -68,6 +69,188 @@ class SymbolIdTest {
 
         assertEquals("method://shop/_root/src/test/java/com.foo.OrderServiceTest#cancelsOrders()V",
                 symbolId.canonical());
+    }
+
+    @Test
+    void modelsProvisionalJavaMethodDescriptorUntilResolved() {
+        ProvisionalSymbol provisional = SymbolIdNormalizer.provisionalJavaMethod(
+                SymbolContext.of("shop", "_root", "D:\\workspace\\shop"),
+                List.of("src/main/java"),
+                "D:\\workspace\\shop\\src\\main\\java\\com\\foo\\OrderService.java",
+                "com.foo.OrderService",
+                "cancelOrder",
+                "cancelOrder(OrderRequest request)");
+        SymbolId resolved = SymbolIdNormalizer.javaMethod(
+                SymbolContext.of("shop", "_root", "D:\\workspace\\shop"),
+                "D:\\workspace\\shop\\src\\main\\java\\com\\foo\\OrderService.java",
+                "com.foo.OrderService",
+                "cancelOrder",
+                "(Lcom/foo/OrderRequest;)V");
+
+        assertEquals(DescriptorStatus.UNRESOLVED, provisional.descriptorStatus());
+        assertFalse(provisional.allowsCertainFacts());
+        assertEquals("method", provisional.symbolId().kind().kind());
+        assertEquals("src/main/java", provisional.symbolId().sourceRootKey());
+        assertEquals("com.foo.OrderService", provisional.symbolId().ownerPath());
+        assertFalse(provisional.symbolId().canonical().contains("OrderRequest request"));
+        assertEquals(resolved, provisional.withCanonicalReplacement(resolved).canonicalReplacement().orElseThrow());
+    }
+
+    @Test
+    void buildsResolvedSymbolRedirectInsideTheSameIdentityContext() {
+        ProvisionalSymbol provisional = SymbolIdNormalizer.provisionalJavaMethod(
+                SymbolContext.of("shop", "_root", "D:\\workspace\\shop"),
+                List.of("src/main/java"),
+                "D:\\workspace\\shop\\src\\main\\java\\com\\foo\\OrderService.java",
+                "com.foo.OrderService",
+                "cancelOrder",
+                "cancelOrder(OrderRequest request)");
+        SymbolId resolved = SymbolIdNormalizer.javaMethod(
+                SymbolContext.of("shop", "_root", "D:\\workspace\\shop"),
+                "D:\\workspace\\shop\\src\\main\\java\\com\\foo\\OrderService.java",
+                "com.foo.OrderService",
+                "cancelOrder",
+                "(Lcom/foo/OrderRequest;)V");
+        SymbolId otherProject = SymbolIdParser.parse(
+                "method://billing/_root/src/main/java/com.foo.OrderService#cancelOrder(Lcom/foo/OrderRequest;)V");
+        SymbolId otherKind = SymbolIdParser.parse("class://shop/_root/src/main/java/com.foo.OrderService");
+        SymbolId otherOwner = SymbolIdNormalizer.javaMethod(
+                SymbolContext.of("shop", "_root", "D:\\workspace\\shop"),
+                "D:\\workspace\\shop\\src\\main\\java\\com\\foo\\CustomerService.java",
+                "com.foo.CustomerService",
+                "cancelOrder",
+                "(Lcom/foo/OrderRequest;)V");
+        SymbolId otherMethod = SymbolIdNormalizer.javaMethod(
+                SymbolContext.of("shop", "_root", "D:\\workspace\\shop"),
+                "D:\\workspace\\shop\\src\\main\\java\\com\\foo\\OrderService.java",
+                "com.foo.OrderService",
+                "archiveOrder",
+                "(Lcom/foo/OrderRequest;)V");
+        SymbolId otherOverload = SymbolIdNormalizer.javaMethod(
+                SymbolContext.of("shop", "_root", "D:\\workspace\\shop"),
+                "D:\\workspace\\shop\\src\\main\\java\\com\\foo\\OrderService.java",
+                "com.foo.OrderService",
+                "cancelOrder",
+                "(Ljava/lang/String;)V");
+        SymbolKind field = SymbolKindRegistry.defaults().require(DefaultSymbolKind.FIELD.kind());
+        SymbolId stringField = new SymbolId(
+                field,
+                "shop",
+                "_root",
+                "src/main/java",
+                "com.foo.OrderService",
+                "status:Ljava/lang/String;");
+        SymbolId intField = new SymbolId(
+                field,
+                "shop",
+                "_root",
+                "src/main/java",
+                "com.foo.OrderService",
+                "status:I");
+
+        ResolvedSymbolRedirect redirect = ResolvedSymbolRedirect.from(provisional, resolved, "MERGED_ALIAS");
+
+        assertEquals(provisional.symbolId(), redirect.from());
+        assertEquals(resolved, redirect.to());
+        assertEquals(AliasMergeStatus.REDIRECT, redirect.status());
+        assertEquals("MERGED_ALIAS", redirect.evidenceKey());
+        assertTrue(redirect.redirects(provisional.symbolId()));
+        assertEquals(resolved, redirect.resolve(provisional.symbolId()));
+        assertEquals(resolved, redirect.resolve(resolved));
+        ResolvedSymbolRedirect conflict = new ResolvedSymbolRedirect(
+                provisional.symbolId(),
+                resolved,
+                AliasMergeStatus.CONFLICT,
+                "CONFLICT_EVIDENCE");
+        assertFalse(conflict.redirects(provisional.symbolId()));
+        assertEquals(provisional.symbolId(), conflict.resolve(provisional.symbolId()));
+        assertThrows(IllegalArgumentException.class, () -> provisional.withCanonicalReplacement(otherProject));
+        assertThrows(IllegalArgumentException.class,
+                () -> ResolvedSymbolRedirect.from(provisional, otherProject, "MERGED_ALIAS"));
+        assertThrows(IllegalArgumentException.class,
+                () -> ResolvedSymbolRedirect.from(provisional, otherKind, "MERGED_ALIAS"));
+        assertThrows(IllegalArgumentException.class,
+                () -> ResolvedSymbolRedirect.from(provisional, otherOwner, "MERGED_ALIAS"));
+        assertThrows(IllegalArgumentException.class,
+                () -> ResolvedSymbolRedirect.from(provisional, otherMethod, "MERGED_ALIAS"));
+        assertThrows(IllegalArgumentException.class,
+                () -> new ResolvedSymbolRedirect(resolved, provisional.symbolId(), AliasMergeStatus.REDIRECT, "MERGED_ALIAS"));
+        assertThrows(IllegalArgumentException.class,
+                () -> new ResolvedSymbolRedirect(resolved, otherOverload, AliasMergeStatus.REDIRECT, "MERGED_ALIAS"));
+        assertThrows(IllegalArgumentException.class,
+                () -> new ResolvedSymbolRedirect(stringField, intField, AliasMergeStatus.REDIRECT, "MERGED_ALIAS"));
+    }
+
+    @Test
+    void normalizesJspHtmlSqlAndReportIdentitiesFromSourceRoots() {
+        SymbolContext context = SymbolContext.of("shop", "_root", "D:\\workspace\\shop");
+        List<String> sourceRoots = List.of("src/main/webapp", "src/main/resources", "reports");
+
+        assertEquals("jsp-page://shop/_root/src/main/webapp/WEB-INF/jsp/order/edit.jsp",
+                SymbolIdNormalizer.jspPage(
+                        context,
+                        sourceRoots,
+                        "D:\\workspace\\shop\\src\\main\\webapp\\WEB-INF\\jsp\\order\\edit.jsp").canonical());
+        assertEquals("jsp-form://shop/_root/src/main/webapp/WEB-INF/jsp/order/edit.jsp#form[save:post:12:0]",
+                SymbolIdNormalizer.jspForm(
+                        context,
+                        sourceRoots,
+                        "D:\\workspace\\shop\\src\\main\\webapp\\WEB-INF\\jsp\\order\\edit.jsp",
+                        "save:post:12:0").canonical());
+        assertEquals(
+                "jsp-input://shop/_root/src/main/webapp/WEB-INF/jsp/order/edit.jsp#form[save:post:12:0]:input[orderId:hidden:13:0]",
+                SymbolIdNormalizer.jspInput(
+                        context,
+                        sourceRoots,
+                        "D:\\workspace\\shop\\src\\main\\webapp\\WEB-INF\\jsp\\order\\edit.jsp",
+                        "save:post:12:0",
+                        "orderId:hidden:13:0").canonical());
+        assertEquals("html-form://shop/_root/src/main/webapp/order/new.html#form[save:post:9:0]",
+                SymbolIdNormalizer.htmlForm(
+                        context,
+                        sourceRoots,
+                        "D:\\workspace\\shop\\src\\main\\webapp\\order\\new.html",
+                        "save:post:9:0").canonical());
+        assertEquals("script-resource://shop/_root/src/main/webapp/assets/order.js",
+                SymbolIdNormalizer.scriptResource(
+                        context,
+                        sourceRoots,
+                        "D:\\workspace\\shop\\src\\main\\webapp\\assets\\order.js").canonical());
+        assertEquals(
+                "client-request://shop/_root/src/main/webapp/assets/order.js#request[fetch:POST:4fd1a2:21:0]",
+                SymbolIdNormalizer.clientRequest(
+                        context,
+                        sourceRoots,
+                        "D:\\workspace\\shop\\src\\main\\webapp\\assets\\order.js",
+                        "fetch",
+                        "POST",
+                        "4fd1a2",
+                        21,
+                        0).canonical());
+        assertEquals(
+                "config-key://shop/_root/src/main/resources/struts-config.xml#/struts-config/action-mappings/action[@path='/user/save']",
+                SymbolIdNormalizer.configKey(
+                        context,
+                        sourceRoots,
+                        "D:\\workspace\\shop\\src\\main\\resources\\struts-config.xml",
+                        "/struts-config/action-mappings/action[@path='/user/save']").canonical());
+        assertEquals("sql-statement://shop/_root/src/main/resources/com/foo/OrderMapper.xml#com.foo.OrderMapper.selectById",
+                SymbolIdNormalizer.sqlStatement(
+                        context,
+                        sourceRoots,
+                        "D:\\workspace\\shop\\src\\main\\resources\\com\\foo\\OrderMapper.xml",
+                        "com.foo.OrderMapper.selectById").canonical());
+        assertEquals("report-definition://shop/_root/reports/order/detail.svf",
+                SymbolIdNormalizer.reportDefinition(
+                        context,
+                        sourceRoots,
+                        "D:\\workspace\\shop\\reports\\order\\detail.svf").canonical());
+        assertEquals("report-field://shop/_root/reports/order/detail.svf#order_id",
+                SymbolIdNormalizer.reportField(
+                        context,
+                        sourceRoots,
+                        "D:\\workspace\\shop\\reports\\order\\detail.svf",
+                        "order_id").canonical());
     }
 
     @Test

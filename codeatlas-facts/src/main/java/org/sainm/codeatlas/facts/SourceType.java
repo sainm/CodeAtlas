@@ -1,0 +1,33 @@
+package org.sainm.codeatlas.facts;
+
+public enum SourceType {
+    SPOON,
+    IMPACT_FLOW,
+    METHOD_SUMMARY_FLOW,
+    ASM,
+    CLASSGRAPH,
+    PROGUARDCORE,
+    JASPER,
+    JSP_SMAP,
+    JSP_TOKEN,
+    HTML_TOKEN,
+    JS_STATIC,
+    JAVAPARSER_FAST,
+    SPRING,
+    STRUTS,
+    XML,
+    SQL,
+    JPA,
+    MYBATIS_DYNAMIC,
+    REFLECTION,
+    BOUNDARY_SYMBOL,
+    SHELL,
+    GIT,
+    JOERN,
+    TABBY,
+    WALA,
+    SOOTUP_HEROS,
+    TAI_E,
+    AI_ASSISTED,
+    USER_CONFIRMATION
+}
