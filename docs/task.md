@@ -91,18 +91,18 @@
 
 ## 6. Java Source 和 Bytecode 分析
 
-- [ ] 集成 Spoon 作为 primary Java source analyzer。
-- [ ] 实现 no-classpath fallback，并明确 confidence downgrade。
-- [ ] 提取 classes、methods、fields、annotations、source locations 和 direct method invocations。
-- [ ] 输出 Method -CALLS-> Method direct call facts。
-- [ ] 输出 class/member DECLARES facts。
-- [ ] 实现 changed-scope Java analysis。
-- [ ] 实现基于 file hash 的 Spoon incremental cache。
-- [ ] 确保 cache 不持久化完整 CtElement 或 AST objects。
-- [ ] 集成 ASM/ClassGraph/ProGuardCORE bytecode scanning。
-- [ ] 提取 jar classes、methods、fields、annotations、inheritance 和 bytecode method calls。
-- [ ] 合并 source 和 JVM origins，同时保留 sourceOnly/jvmOnly flags。
-- [ ] 增加 source-only、jar-only、source+jvm symbol merging 测试。
+- [x] 集成 Spoon 作为 primary Java source analyzer。
+- [x] 实现 no-classpath fallback，并明确 confidence downgrade。
+- [x] 提取 classes、methods、fields、annotations、source locations 和 direct method invocations。
+- [x] 输出 Method -CALLS-> Method direct call facts。
+- [x] 输出 class/member DECLARES facts。
+- [x] 实现 changed-scope Java analysis。
+- [x] 实现基于 file hash 的 Spoon incremental cache。
+- [x] 确保 cache 不持久化完整 CtElement 或 AST objects。
+- [x] 集成 ASM/ClassGraph/ProGuardCORE bytecode scanning。
+- [x] 提取 jar classes、methods、fields、annotations、inheritance 和 bytecode method calls。
+- [x] 合并 source 和 JVM origins，同时保留 sourceOnly/jvmOnly flags。
+- [x] 增加 source-only、jar-only、source+jvm symbol merging 测试。
 
 ## 7. Spring、Struts1、JSP、HTML/JS 和 Seasar2
 

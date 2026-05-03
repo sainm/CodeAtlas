@@ -1,0 +1,161 @@
+package org.sainm.codeatlas.analyzers.source;
+
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
+
+import spoon.Launcher;
+import spoon.reflect.CtModel;
+import spoon.reflect.code.CtInvocation;
+import spoon.reflect.cu.SourcePosition;
+import spoon.reflect.declaration.CtAnnotation;
+import spoon.reflect.declaration.CtField;
+import spoon.reflect.declaration.CtMethod;
+import spoon.reflect.declaration.CtType;
+import spoon.reflect.reference.CtTypeReference;
+import spoon.reflect.visitor.filter.TypeFilter;
+
+public final class JavaSourceAnalyzer {
+    private JavaSourceAnalyzer() {
+    }
+
+    public static JavaSourceAnalyzer defaults() {
+        return new JavaSourceAnalyzer();
+    }
+
+    public JavaSourceAnalysisResult analyze(Path sourceRoot, List<Path> sourceFiles) {
+        if (sourceRoot == null) {
+            throw new IllegalArgumentException("sourceRoot is required");
+        }
+        if (sourceFiles == null || sourceFiles.isEmpty()) {
+            return new JavaSourceAnalysisResult(false, List.of(), List.of(), List.of(), List.of(), List.of());
+        }
+        try {
+            return extract(sourceRoot, buildModel(sourceFiles, false), false, List.of());
+        } catch (RuntimeException exception) {
+            List<JavaAnalysisDiagnostic> diagnostics = List.of(new JavaAnalysisDiagnostic(
+                    "NO_CLASSPATH_FALLBACK",
+                    exception.getMessage()));
+            return extract(sourceRoot, buildModel(sourceFiles, true), true, diagnostics);
+        }
+    }
+
+    private static CtModel buildModel(List<Path> sourceFiles, boolean noClasspath) {
+        Launcher launcher = new Launcher();
+        launcher.getEnvironment().setNoClasspath(noClasspath);
+        launcher.getEnvironment().setComplianceLevel(17);
+        launcher.getEnvironment().setCommentEnabled(false);
+        launcher.getEnvironment().setIgnoreDuplicateDeclarations(true);
+        for (Path sourceFile : sourceFiles) {
+            launcher.addInputResource(sourceFile.toString());
+        }
+        launcher.buildModel();
+        return launcher.getModel();
+    }
+
+    private static JavaSourceAnalysisResult extract(
+            Path sourceRoot,
+            CtModel model,
+            boolean noClasspathFallbackUsed,
+            List<JavaAnalysisDiagnostic> diagnostics) {
+        List<JavaClassInfo> classes = new ArrayList<>();
+        List<JavaMethodInfo> methods = new ArrayList<>();
+        List<JavaFieldInfo> fields = new ArrayList<>();
+        List<JavaInvocationInfo> invocations = new ArrayList<>();
+        for (CtType<?> type : model.getElements(new TypeFilter<>(CtType.class))) {
+            if (type.isShadow()) {
+                continue;
+            }
+            classes.add(new JavaClassInfo(
+                    type.getQualifiedName(),
+                    type.getSimpleName(),
+                    annotations(type),
+                    location(sourceRoot, type.getPosition())));
+            for (CtField<?> field : type.getFields()) {
+                fields.add(new JavaFieldInfo(
+                        type.getQualifiedName(),
+                        field.getSimpleName(),
+                        typeName(field.getType()),
+                        annotations(field),
+                        location(sourceRoot, field.getPosition())));
+            }
+            for (CtMethod<?> method : type.getMethods()) {
+                methods.add(new JavaMethodInfo(
+                        type.getQualifiedName(),
+                        method.getSimpleName(),
+                        method.getSignature(),
+                        typeName(method.getType()),
+                        annotations(method),
+                        location(sourceRoot, method.getPosition())));
+            }
+        }
+        for (CtInvocation<?> invocation : model.getElements(new TypeFilter<>(CtInvocation.class))) {
+            CtMethod<?> ownerMethod = invocation.getParent(CtMethod.class);
+            CtType<?> ownerType = invocation.getParent(CtType.class);
+            invocations.add(new JavaInvocationInfo(
+                    ownerType == null ? "" : ownerType.getQualifiedName(),
+                    ownerMethod == null ? "" : ownerMethod.getSimpleName(),
+                    typeName(invocation.getExecutable().getDeclaringType()),
+                    invocation.getExecutable().getSimpleName(),
+                    invocation.getExecutable().getSignature(),
+                    location(sourceRoot, invocation.getPosition())));
+        }
+        return new JavaSourceAnalysisResult(
+                noClasspathFallbackUsed,
+                sortedClasses(classes),
+                sortedMethods(methods),
+                sortedFields(fields),
+                sortedInvocations(invocations),
+                diagnostics);
+    }
+
+    private static List<String> annotations(spoon.reflect.declaration.CtElement element) {
+        List<String> result = new ArrayList<>();
+        for (CtAnnotation<?> annotation : element.getAnnotations()) {
+            result.add(annotation.getAnnotationType().getQualifiedName());
+        }
+        return result;
+    }
+
+    private static String typeName(CtTypeReference<?> type) {
+        return type == null ? "" : type.getQualifiedName();
+    }
+
+    private static SourceLocation location(Path sourceRoot, SourcePosition position) {
+        if (position == null || !position.isValidPosition() || position.getFile() == null) {
+            return new SourceLocation("", 0, 0);
+        }
+        Path file = position.getFile().toPath();
+        String relativePath = sourceRoot.toAbsolutePath().normalize().relativize(file.toAbsolutePath().normalize()).toString();
+        return new SourceLocation(relativePath, position.getLine(), position.getColumn());
+    }
+
+    private static List<JavaClassInfo> sortedClasses(List<JavaClassInfo> classes) {
+        return classes.stream()
+                .sorted(Comparator.comparing(JavaClassInfo::qualifiedName))
+                .toList();
+    }
+
+    private static List<JavaMethodInfo> sortedMethods(List<JavaMethodInfo> methods) {
+        return methods.stream()
+                .sorted(Comparator.comparing(JavaMethodInfo::ownerQualifiedName)
+                        .thenComparing(JavaMethodInfo::signature))
+                .toList();
+    }
+
+    private static List<JavaFieldInfo> sortedFields(List<JavaFieldInfo> fields) {
+        return fields.stream()
+                .sorted(Comparator.comparing(JavaFieldInfo::ownerQualifiedName)
+                        .thenComparing(JavaFieldInfo::simpleName))
+                .toList();
+    }
+
+    private static List<JavaInvocationInfo> sortedInvocations(List<JavaInvocationInfo> invocations) {
+        return invocations.stream()
+                .sorted(Comparator.comparing(JavaInvocationInfo::ownerQualifiedName)
+                        .thenComparing(JavaInvocationInfo::ownerMethodName)
+                        .thenComparing(JavaInvocationInfo::targetSignature))
+                .toList();
+    }
+}

@@ -1,3 +1,5 @@
 dependencies {
     api project(':codeatlas-facts')
+    implementation 'fr.inria.gforge.spoon:spoon-core:11.3.0'
+    implementation 'org.ow2.asm:asm:9.9.1'
 }
