@@ -89,6 +89,32 @@ class JavaSourceAnalyzerTest {
                 .anyMatch(invocation -> invocation.targetSimpleName().equals("execute")));
     }
 
+    @Test
+    void emitsErasedJvmDescriptorsForGenericMethodsAndFields() throws IOException {
+        write("src/main/java/com/acme/Box.java", """
+                package com.acme;
+
+                class Box<T> {
+                    private T value;
+
+                    void set(T value) {
+                        this.value = value;
+                    }
+                }
+                """);
+
+        JavaSourceAnalysisResult result = JavaSourceAnalyzer.defaults().analyze(
+                tempDir,
+                List.of(tempDir.resolve("src/main/java/com/acme/Box.java")));
+
+        assertTrue(result.methods().stream().anyMatch(method -> method.ownerQualifiedName().equals("com.acme.Box")
+                && method.simpleName().equals("set")
+                && method.signature().equals("(Ljava/lang/Object;)V")));
+        assertTrue(result.fields().stream().anyMatch(field -> field.ownerQualifiedName().equals("com.acme.Box")
+                && field.simpleName().equals("value")
+                && field.typeDescriptor().equals("Ljava/lang/Object;")));
+    }
+
     private void write(String relativePath, String content) throws IOException {
         Path file = tempDir.resolve(relativePath);
         Files.createDirectories(file.getParent());

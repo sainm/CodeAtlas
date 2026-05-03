@@ -31,18 +31,20 @@ public final class JavaSourceFactMapper {
         }
         List<FactRecord> facts = new ArrayList<>();
         Map<String, Evidence> evidenceByKey = new LinkedHashMap<>();
+        Confidence confidence = result.noClasspathFallbackUsed() ? Confidence.LIKELY : Confidence.CERTAIN;
         for (JavaClassInfo classInfo : result.classes()) {
             addFact(facts, evidenceByKey, context, sourceFileId(context, classInfo.location().relativePath()),
-                    classId(context, classInfo.qualifiedName()), "DECLARES", "class", classInfo.location());
+                    classId(context, classInfo.qualifiedName()), "DECLARES", "class", classInfo.location(), confidence);
         }
         for (JavaMethodInfo method : result.methods()) {
             addFact(facts, evidenceByKey, context, classId(context, method.ownerQualifiedName()),
                     methodId(context, method.ownerQualifiedName(), method.simpleName(), method.signature()),
-                    "DECLARES", "method", method.location());
+                    "DECLARES", "method", method.location(), confidence);
         }
         for (JavaFieldInfo field : result.fields()) {
             addFact(facts, evidenceByKey, context, classId(context, field.ownerQualifiedName()),
-                    fieldId(context, field.ownerQualifiedName(), field.simpleName()), "DECLARES", "field", field.location());
+                    fieldId(context, field.ownerQualifiedName(), field.simpleName(), field.typeDescriptor()),
+                    "DECLARES", "field", field.location(), confidence);
         }
         for (JavaInvocationInfo invocation : result.directInvocations()) {
             if (invocation.ownerQualifiedName().isBlank()
@@ -57,7 +59,7 @@ public final class JavaSourceFactMapper {
             }
             addFact(facts, evidenceByKey, context, sourceMethodId,
                     methodId(context, invocation.targetQualifiedName(), invocation.targetSimpleName(), invocation.targetSignature()),
-                    "CALLS", "direct", invocation.location());
+                    "CALLS", "direct", invocation.location(), confidence);
         }
         return new JavaSourceFactBatch(facts, List.copyOf(evidenceByKey.values()));
     }
@@ -84,7 +86,8 @@ public final class JavaSourceFactMapper {
             String targetIdentityId,
             String relationName,
             String qualifier,
-            SourceLocation location) {
+            SourceLocation location,
+            Confidence confidence) {
         Evidence evidence = Evidence.create(
                 ANALYZER_ID,
                 context.scopeKey(),
@@ -106,7 +109,7 @@ public final class JavaSourceFactMapper {
                 ANALYZER_ID,
                 context.scopeKey(),
                 evidence.evidenceKey(),
-                Confidence.CERTAIN,
+                confidence,
                 100,
                 SourceType.SPOON));
     }
@@ -131,9 +134,13 @@ public final class JavaSourceFactMapper {
                 + context.sourceRootKey() + "/" + ownerQualifiedName + "#" + methodName + signature;
     }
 
-    private static String fieldId(JavaSourceFactContext context, String ownerQualifiedName, String fieldName) {
+    private static String fieldId(
+            JavaSourceFactContext context,
+            String ownerQualifiedName,
+            String fieldName,
+            String typeDescriptor) {
         return "field://" + context.projectId() + "/" + context.moduleKey() + "/"
-                + context.sourceRootKey() + "/" + ownerQualifiedName + "#" + fieldName;
+                + context.sourceRootKey() + "/" + ownerQualifiedName + "#" + fieldName + ":" + typeDescriptor;
     }
 
     private static String stripSourceRoot(String sourceRootKey, String relativePath) {

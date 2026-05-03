@@ -78,6 +78,7 @@ public final class JavaSourceAnalyzer {
                         type.getQualifiedName(),
                         field.getSimpleName(),
                         typeName(field.getType()),
+                        JavaDescriptor.typeDescriptor(field.getType()),
                         annotations(field),
                         location(sourceRoot, field.getPosition())));
             }

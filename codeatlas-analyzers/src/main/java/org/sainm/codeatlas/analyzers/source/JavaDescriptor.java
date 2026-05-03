@@ -2,6 +2,7 @@ package org.sainm.codeatlas.analyzers.source;
 
 import java.util.List;
 
+import spoon.reflect.reference.CtTypeParameterReference;
 import spoon.reflect.reference.CtTypeReference;
 
 final class JavaDescriptor {
@@ -21,6 +22,12 @@ final class JavaDescriptor {
     static String typeDescriptor(CtTypeReference<?> type) {
         if (type == null) {
             return "V";
+        }
+        if (type instanceof CtTypeParameterReference typeParameter) {
+            CtTypeReference<?> boundingType = typeParameter.getBoundingType();
+            return typeParameter.isDefaultBoundingType() || boundingType == null
+                    ? "Ljava/lang/Object;"
+                    : typeDescriptor(boundingType);
         }
         String qualifiedName = type.getQualifiedName();
         if (qualifiedName == null || qualifiedName.isBlank()) {

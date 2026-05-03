@@ -11,6 +11,7 @@ import java.util.List;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.sainm.codeatlas.facts.Confidence;
 import org.sainm.codeatlas.facts.FactRecord;
 
 class JavaSourceFactMapperTest {
@@ -63,7 +64,7 @@ class JavaSourceFactMapperTest {
         assertFact(batch, "DECLARES", "class://shop/_root/src/main/java/com.acme.App",
                 "method://shop/_root/src/main/java/com.acme.App#run(Ljava/lang/String;)V");
         assertFact(batch, "DECLARES", "class://shop/_root/src/main/java/com.acme.App",
-                "field://shop/_root/src/main/java/com.acme.App#service");
+                "field://shop/_root/src/main/java/com.acme.App#service:Lcom/acme/Service;");
         assertFact(batch, "CALLS", "method://shop/_root/src/main/java/com.acme.App#run(Ljava/lang/String;)V",
                 "method://shop/_root/src/main/java/com.acme.Service#save(Ljava/lang/String;)V");
         assertFact(batch, "CALLS", "method://shop/_root/src/main/java/com.acme.App#run(Ljava/lang/String;)V",
@@ -107,6 +108,38 @@ class JavaSourceFactMapperTest {
                 "method://shop/_root/src/main/java/com.acme.App#target(Ljava/lang/String;)V");
         assertFact(batch, "CALLS", "method://shop/_root/src/main/java/com.acme.App#run(I)V",
                 "method://shop/_root/src/main/java/com.acme.App#target(I)V");
+    }
+
+    @Test
+    void downgradesFactsWhenSourceAnalysisUsedNoClasspathFallback() throws IOException {
+        write("src/main/java/com/acme/Broken.java", """
+                package com.acme;
+
+                import missing.ExternalService;
+
+                class Broken {
+                    void call(ExternalService service) {
+                        service.execute();
+                    }
+                }
+                """);
+        JavaSourceAnalysisResult result = JavaSourceAnalyzer.defaults().analyze(
+                tempDir,
+                List.of(tempDir.resolve("src/main/java/com/acme/Broken.java")));
+
+        JavaSourceFactBatch batch = JavaSourceFactMapper.defaults().map(
+                result,
+                new JavaSourceFactContext(
+                        "shop",
+                        "_root",
+                        "src/main/java",
+                        "snapshot-1",
+                        "analysis-1",
+                        "scope-1",
+                        "src/main/java"));
+
+        assertFalse(batch.facts().isEmpty());
+        assertTrue(batch.facts().stream().allMatch(fact -> fact.confidence() == Confidence.LIKELY));
     }
 
     private static void assertFact(
