@@ -96,9 +96,14 @@ class JavaSourceAnalyzerTest {
 
                 class Box<T> {
                     private T value;
+                    private T[] values;
 
                     void set(T value) {
                         this.value = value;
+                    }
+
+                    void setAll(T[] values) {
+                        this.values = values;
                     }
                 }
                 """);
@@ -113,6 +118,12 @@ class JavaSourceAnalyzerTest {
         assertTrue(result.fields().stream().anyMatch(field -> field.ownerQualifiedName().equals("com.acme.Box")
                 && field.simpleName().equals("value")
                 && field.typeDescriptor().equals("Ljava/lang/Object;")));
+        assertTrue(result.methods().stream().anyMatch(method -> method.ownerQualifiedName().equals("com.acme.Box")
+                && method.simpleName().equals("setAll")
+                && method.signature().equals("([Ljava/lang/Object;)V")));
+        assertTrue(result.fields().stream().anyMatch(field -> field.ownerQualifiedName().equals("com.acme.Box")
+                && field.simpleName().equals("values")
+                && field.typeDescriptor().equals("[Ljava/lang/Object;")));
     }
 
     private void write(String relativePath, String content) throws IOException {

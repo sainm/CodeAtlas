@@ -134,7 +134,13 @@ public final class BytecodeAnalyzer {
 
                 @Override
                 public void visitEnd() {
-                    result.fields.add(new BytecodeFieldInfo(className, name, descriptorClassName(descriptor), annotations, originPath));
+                    result.fields.add(new BytecodeFieldInfo(
+                            className,
+                            name,
+                            descriptorClassName(descriptor),
+                            descriptor,
+                            annotations,
+                            originPath));
                 }
             };
         }

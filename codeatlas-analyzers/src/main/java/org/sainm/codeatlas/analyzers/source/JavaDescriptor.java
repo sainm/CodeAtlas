@@ -2,6 +2,7 @@ package org.sainm.codeatlas.analyzers.source;
 
 import java.util.List;
 
+import spoon.reflect.reference.CtArrayTypeReference;
 import spoon.reflect.reference.CtTypeParameterReference;
 import spoon.reflect.reference.CtTypeReference;
 
@@ -22,6 +23,10 @@ final class JavaDescriptor {
     static String typeDescriptor(CtTypeReference<?> type) {
         if (type == null) {
             return "V";
+        }
+        if (type instanceof CtArrayTypeReference<?> arrayType) {
+            return "[".repeat(arrayType.getDimensionCount())
+                    + typeDescriptor(arrayType.getArrayType());
         }
         if (type instanceof CtTypeParameterReference typeParameter) {
             CtTypeReference<?> boundingType = typeParameter.getBoundingType();

@@ -22,7 +22,7 @@ class JavaSymbolOriginMergerTest {
                 List.of(
                         new JavaMethodInfo("com.acme.Shared", "run", "()V", "void", List.of(), location()),
                         new JavaMethodInfo("com.acme.SourceOnly", "source", "()V", "void", List.of(), location())),
-                List.of(new JavaFieldInfo("com.acme.Shared", "name", "java.lang.String", List.of(), location())),
+                List.of(new JavaFieldInfo("com.acme.Shared", "name", "java.lang.String", "Ljava/lang/String;", List.of(), location())),
                 List.of(),
                 List.of());
         BytecodeAnalysisResult bytecode = new BytecodeAnalysisResult(
@@ -32,7 +32,7 @@ class JavaSymbolOriginMergerTest {
                 List.of(
                         new BytecodeMethodInfo("com.acme.Shared", "run", "()V", List.of(), "app.jar"),
                         new BytecodeMethodInfo("com.acme.JarOnly", "jar", "()V", List.of(), "app.jar")),
-                List.of(new BytecodeFieldInfo("com.acme.Shared", "name", "java.lang.String", List.of(), "app.jar")),
+                List.of(new BytecodeFieldInfo("com.acme.Shared", "name", "java.lang.String", "Ljava/lang/String;", List.of(), "app.jar")),
                 List.of());
 
         JavaSymbolOriginMergeResult result = JavaSymbolOriginMerger.defaults().merge(source, bytecode);
@@ -43,7 +43,7 @@ class JavaSymbolOriginMergerTest {
         assertMerged(result, JavaMergedSymbolKind.METHOD, "com.acme.Shared#run()V", false, false);
         assertMerged(result, JavaMergedSymbolKind.METHOD, "com.acme.SourceOnly#source()V", true, false);
         assertMerged(result, JavaMergedSymbolKind.METHOD, "com.acme.JarOnly#jar()V", false, true);
-        assertMerged(result, JavaMergedSymbolKind.FIELD, "com.acme.Shared#name", false, false);
+        assertMerged(result, JavaMergedSymbolKind.FIELD, "com.acme.Shared#name:Ljava/lang/String;", false, false);
     }
 
     @Test
@@ -69,6 +69,27 @@ class JavaSymbolOriginMergerTest {
 
         assertMerged(result, JavaMergedSymbolKind.METHOD, "com.acme.Overloaded#run(Ljava/lang/String;)V", false, false);
         assertMerged(result, JavaMergedSymbolKind.METHOD, "com.acme.Overloaded#run(I)V", false, false);
+    }
+
+    @Test
+    void preservesFieldTypeChangesWhenMergingOrigins() {
+        JavaSourceAnalysisResult source = new JavaSourceAnalysisResult(
+                false,
+                List.of(new JavaClassInfo("com.acme.ChangedField", "ChangedField", List.of(), location())),
+                List.of(),
+                List.of(new JavaFieldInfo("com.acme.ChangedField", "value", "java.lang.String", "Ljava/lang/String;", List.of(), location())),
+                List.of(),
+                List.of());
+        BytecodeAnalysisResult bytecode = new BytecodeAnalysisResult(
+                List.of(new BytecodeClassInfo("com.acme.ChangedField", "java.lang.Object", List.of(), List.of(), "app.jar")),
+                List.of(),
+                List.of(new BytecodeFieldInfo("com.acme.ChangedField", "value", "int", "I", List.of(), "app.jar")),
+                List.of());
+
+        JavaSymbolOriginMergeResult result = JavaSymbolOriginMerger.defaults().merge(source, bytecode);
+
+        assertMerged(result, JavaMergedSymbolKind.FIELD, "com.acme.ChangedField#value:Ljava/lang/String;", true, false);
+        assertMerged(result, JavaMergedSymbolKind.FIELD, "com.acme.ChangedField#value:I", false, true);
     }
 
     private static void assertMerged(
