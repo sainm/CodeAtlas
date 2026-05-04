@@ -40,6 +40,7 @@ public final class GraphNodeTypeRegistry {
         builder.flow("JspInput", "jsp-input", GraphNodeLayer.IMPACT_FLOW);
         builder.symbol("ApiEndpoint", "api-endpoint", GraphNodeLayer.FRAMEWORK_SEMANTICS);
         builder.symbol("ActionPath", "action-path", GraphNodeLayer.FRAMEWORK_SEMANTICS);
+        builder.symbol("DiconComponent", "dicon-component", GraphNodeLayer.FRAMEWORK_SEMANTICS);
         builder.symbol("EntryPoint", "entrypoint", GraphNodeLayer.IMPACT_FLOW);
         builder.flow("ParamSlot", "param-slot", GraphNodeLayer.IMPACT_FLOW);
         builder.flow("ReturnSlot", "return-slot", GraphNodeLayer.IMPACT_FLOW);

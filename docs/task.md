@@ -127,9 +127,9 @@
 - [x] 输出 ClientRequest -CALLS_HTTP/SUBMITS_TO-> ApiEndpoint/ActionPath。
 - [ ] 建模 EntryPoint，并为 Spring/Struts/JSP/HTML/JS、batch、main、scheduler、message、shell 入口保留统一入口抽象。
 - [x] 禁止在没有 AST-backed evidence 时推断 dynamic JavaScript URL。
-- [ ] 解析 Seasar2 dicon components、includes、properties、aspects、interceptors 和 naming candidates。
-- [ ] MVP 中 Seasar2 facts 只作为 POSSIBLE discovery/candidate 输出。
-- [ ] 增加 Spring MVC、Struts1/JSP、Tiles、Validator、DynaActionForm、tag files、fallback JSP parsing、Seasar2 discovery 测试。
+- [x] 解析 Seasar2 dicon components、includes、properties、aspects、interceptors 和 naming candidates。
+- [x] MVP 中 Seasar2 facts 只作为 POSSIBLE discovery/candidate 输出。
+- [x] 增加 Spring MVC、Struts1/JSP、Tiles、Validator、DynaActionForm、tag files、fallback JSP parsing、Seasar2 discovery 测试。
 
 ## 8. SQL、数据库和字段级数据影响
 

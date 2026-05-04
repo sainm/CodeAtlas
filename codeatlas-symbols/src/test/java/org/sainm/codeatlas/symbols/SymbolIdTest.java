@@ -291,6 +291,10 @@ class SymbolIdTest {
                 SymbolIdParser.parse("api-endpoint://shop/_root/src/main/java/GET:/").canonical());
         assertEquals("api-endpoint://shop/_root/_api/POST:/orders",
                 SymbolIdParser.parse("api-endpoint://shop/_root/_api/POST:/orders").canonical());
+        assertEquals("dicon-component://shop/_root/WEB-INF/app.dicon#component[userService]",
+                SymbolIdParser.withSourceRoots(List.of("WEB-INF"))
+                        .parseId("dicon-component://shop/_root/WEB-INF/app.dicon#component[userService]")
+                        .canonical());
     }
 
     @Test

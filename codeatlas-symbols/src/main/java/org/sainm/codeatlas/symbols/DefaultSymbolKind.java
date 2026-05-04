@@ -22,6 +22,7 @@ public enum DefaultSymbolKind {
     JSP_FORM("jsp-form", IdentityType.SYMBOL_ID),
     API_ENDPOINT("api-endpoint", IdentityType.SYMBOL_ID),
     ACTION_PATH("action-path", IdentityType.SYMBOL_ID),
+    DICON_COMPONENT("dicon-component", IdentityType.SYMBOL_ID),
     ENTRYPOINT("entrypoint", IdentityType.SYMBOL_ID),
     SCHEDULE("schedule", IdentityType.SYMBOL_ID),
     CRON_TRIGGER("cron-trigger", IdentityType.SYMBOL_ID),
@@ -121,7 +122,7 @@ public enum DefaultSymbolKind {
             return true;
         }
         return switch (this) {
-            case METHOD, FIELD, JSP_FORM, JSP_TAG, JSP_EXPRESSION, JSP_SCRIPTLET,
+            case METHOD, FIELD, JSP_FORM, JSP_TAG, JSP_EXPRESSION, JSP_SCRIPTLET, DICON_COMPONENT,
                     HTML_FORM, HTML_LINK, CLIENT_REQUEST, CONFIG_KEY, SQL_STATEMENT, SQL_VARIANT,
                     DB_COLUMN, DB_INDEX, DB_CONSTRAINT, REPORT_DEFINITION, REPORT_FIELD,
                     SYNTHETIC_SYMBOL -> true;

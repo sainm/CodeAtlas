@@ -38,6 +38,7 @@ class GraphNodeTypeRegistryTest {
                 "JspInput",
                 "ApiEndpoint",
                 "ActionPath",
+                "DiconComponent",
                 "EntryPoint",
                 "ParamSlot",
                 "ReturnSlot",
