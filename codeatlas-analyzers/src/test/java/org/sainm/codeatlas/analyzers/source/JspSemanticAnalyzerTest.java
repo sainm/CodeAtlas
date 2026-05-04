@@ -402,6 +402,11 @@ class JspSemanticAnalyzerTest {
         assertFalse(org.apache.jasper.JspC.compile);
         assertFalse(org.apache.jasper.JspC.validateXml);
         assertTrue(result.diagnostics().stream()
+                .anyMatch(diagnostic -> diagnostic.code().equals("JASPER_RUNTIME_PROFILE")
+                        && diagnostic.message().contains("profile=TOMCAT_10_JAKARTA")
+                        && diagnostic.message().contains("servlet=jakarta")
+                        && diagnostic.message().contains("jsp=jakarta")));
+        assertTrue(result.diagnostics().stream()
                 .anyMatch(diagnostic -> diagnostic.code().equals("JASPER_SEMANTIC_PARSE_USED")));
         assertTrue(result.forms().stream().anyMatch(form -> form.action().equals("/user/save.do")));
     }
