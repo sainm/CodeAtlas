@@ -112,7 +112,7 @@
 - [x] 输出 ActionPath -ROUTES_TO-> Method。
 - [x] 在有静态 evidence 时输出 method-to-forward 和 JSP/action navigation facts。
 - [x] 从 web.xml、servlet version、page encodings、TLD、WEB-INF/lib jars、tag files、classpath candidates 和 web roots 构建 WebAppContext。
-- [ ] 使用 Jasper 作为 preferred JSP semantic parser。
+- [x] 使用 Jasper 作为 preferred JSP semantic parser。
 - [x] 在 Jasper 或 context 不完整时使用 tolerant parser fallback。
 - [x] 提取 JSP directive、taglib、include、forward、form、input、select、textarea、EL、scriptlet request parameter reads/writes 和 tag actions。
 - [x] 输出 JspForm -SUBMITS_TO-> ApiEndpoint/ActionPath。

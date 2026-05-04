@@ -49,13 +49,9 @@ public final class JspSemanticAnalyzer {
         }
 
         List<JavaAnalysisDiagnostic> diagnostics = new ArrayList<>();
-        JspParserMode parserMode = JspParserMode.TOKEN_FALLBACK;
-        boolean hasJasper = jasperAvailable();
-        diagnostics.add(new JavaAnalysisDiagnostic(
-                hasJasper ? "JASPER_NOT_INVOKED_TOKEN_FALLBACK" : "JASPER_UNAVAILABLE_TOKEN_FALLBACK",
-                hasJasper
-                        ? "Jasper is available but this analyzer currently uses the tolerant token fallback"
-                        : "org.apache.jasper.JspC is not available on analyzer classpath"));
+        JspParseAttempt parseAttempt = JasperJspPrecompiler.defaults().precompile(webRoot, jspFiles);
+        JspParserMode parserMode = parseAttempt.parserMode();
+        diagnostics.addAll(parseAttempt.diagnostics());
 
         List<JspDirectiveInfo> directives = new ArrayList<>();
         List<JspTaglibInfo> taglibs = new ArrayList<>();
@@ -659,15 +655,6 @@ public final class JspSemanticAnalyzer {
             result.putIfAbsent(name.toLowerCase(Locale.ROOT), value);
         }
         return result;
-    }
-
-    private static boolean jasperAvailable() {
-        try {
-            Class.forName("org.apache.jasper.JspC");
-            return true;
-        } catch (ClassNotFoundException exception) {
-            return false;
-        }
     }
 
     private static JspAnalysisResult emptyResult(JspParserMode parserMode) {

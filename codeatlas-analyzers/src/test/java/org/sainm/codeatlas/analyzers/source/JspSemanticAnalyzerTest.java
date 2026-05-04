@@ -10,12 +10,18 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 class JspSemanticAnalyzerTest {
     @TempDir
     Path tempDir;
+
+    @BeforeEach
+    void resetJasperStub() {
+        org.apache.jasper.JspC.reset();
+    }
 
     @Test
     void fallsBackToTolerantParserAndExtractsJspPageSemantics() throws IOException {
@@ -39,7 +45,7 @@ class JspSemanticAnalyzerTest {
                 tempDir.resolve("src/main/webapp"),
                 List.of(tempDir.resolve("src/main/webapp/WEB-INF/jsp/user/edit.jsp")));
 
-        assertEquals(JspParserMode.TOKEN_FALLBACK, result.parserMode());
+        assertEquals(JspParserMode.JASPER, result.parserMode());
         assertFalse(result.diagnostics().isEmpty());
         assertTrue(result.directives().stream().anyMatch(directive -> directive.name().equals("page")
                 && directive.attributes().get("pageEncoding").equals("UTF-8")));
@@ -379,7 +385,30 @@ class JspSemanticAnalyzerTest {
     }
 
     @Test
-    void reportsTokenFallbackEvenWhenJasperClassIsPresent() throws IOException {
+    void invokesJasperBeforeExtractingFallbackSemantics() throws IOException {
+        write("src/main/webapp/WEB-INF/jsp/user/simple.jsp", """
+                <form action="/user/save.do"><input name="userId"></form>
+                """);
+
+        JspAnalysisResult result = JspSemanticAnalyzer.defaults().analyze(
+                tempDir.resolve("src/main/webapp"),
+                List.of(tempDir.resolve("src/main/webapp/WEB-INF/jsp/user/simple.jsp")));
+
+        assertEquals(JspParserMode.JASPER, result.parserMode());
+        assertEquals(1, org.apache.jasper.JspC.executeCalls);
+        assertEquals(tempDir.resolve("src/main/webapp").toString(), org.apache.jasper.JspC.uriroot);
+        assertEquals("WEB-INF/jsp/user/simple.jsp", org.apache.jasper.JspC.jspFiles);
+        assertFalse(org.apache.jasper.JspC.outputDir.isBlank());
+        assertFalse(org.apache.jasper.JspC.compile);
+        assertFalse(org.apache.jasper.JspC.validateXml);
+        assertTrue(result.diagnostics().stream()
+                .anyMatch(diagnostic -> diagnostic.code().equals("JASPER_SEMANTIC_PARSE_USED")));
+        assertTrue(result.forms().stream().anyMatch(form -> form.action().equals("/user/save.do")));
+    }
+
+    @Test
+    void fallsBackWhenJasperInvocationFails() throws IOException {
+        org.apache.jasper.JspC.executionFailure = new NoClassDefFoundError("jakarta/servlet/ServletContext");
         write("src/main/webapp/WEB-INF/jsp/user/simple.jsp", """
                 <form action="/user/save.do"><input name="userId"></form>
                 """);
@@ -390,7 +419,9 @@ class JspSemanticAnalyzerTest {
 
         assertEquals(JspParserMode.TOKEN_FALLBACK, result.parserMode());
         assertTrue(result.diagnostics().stream()
-                .anyMatch(diagnostic -> diagnostic.code().equals("JASPER_NOT_INVOKED_TOKEN_FALLBACK")));
+                .anyMatch(diagnostic -> diagnostic.code().equals("JASPER_INVOKE_FAILED_TOKEN_FALLBACK")
+                        && diagnostic.message().contains("jakarta/servlet/ServletContext")));
+        assertTrue(result.forms().stream().anyMatch(form -> form.action().equals("/user/save.do")));
     }
 
     private void write(String relativePath, String content) throws IOException {
