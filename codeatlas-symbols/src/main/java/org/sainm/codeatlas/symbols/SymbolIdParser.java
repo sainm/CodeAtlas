@@ -5,6 +5,7 @@ import java.util.Comparator;
 import java.util.List;
 
 public final class SymbolIdParser {
+    private static final String API_ENDPOINT_SOURCE_ROOT = "_api";
     private static final SymbolIdParser DEFAULT = new SymbolIdParser(
             SymbolKindRegistry.defaults(),
             List.of(
@@ -17,10 +18,12 @@ public final class SymbolIdParser {
 
     private final SymbolKindRegistry registry;
     private final List<String> sourceRoots;
+    private final List<String> apiEndpointSourceRoots;
 
     private SymbolIdParser(SymbolKindRegistry registry, List<String> sourceRoots) {
         this.registry = registry;
         this.sourceRoots = normalizeSourceRoots(sourceRoots);
+        this.apiEndpointSourceRoots = apiEndpointSourceRoots(this.sourceRoots);
     }
 
     public static SymbolId parse(String raw) {
@@ -54,9 +57,10 @@ public final class SymbolIdParser {
             throw new IllegalArgumentException("Symbol id kind does not allow a raw fragment: " + raw);
         }
 
-        validateRelative(kind, path, raw);
+        validateRelativeBasics(path, raw);
         String[] parts = path.split("/", -1);
         if (kindName.equals(DefaultSymbolKind.DATASOURCE.kind())) {
+            validateSchemeLikeSeparators(kind, path, null, raw);
             if (parts.length != 2) {
                 throw new IllegalArgumentException("Datasource symbol id must contain project and datasource key: " + raw);
             }
@@ -72,6 +76,7 @@ public final class SymbolIdParser {
         String projectKey = requireSegment(parts[0], "projectKey", raw);
         String moduleKey = requireSegment(parts[1], "moduleKey", raw);
         ParsedOwner owner = parseOwner(kind, parts, raw);
+        validateSchemeLikeSeparators(kind, path, owner, raw);
         return new SymbolId(kind, projectKey, moduleKey, owner.sourceRootKey(), owner.ownerPath(), fragment);
     }
 
@@ -85,12 +90,15 @@ public final class SymbolIdParser {
             return new ParsedOwner("", requireSegment(remainder, "artifact path", raw));
         }
 
-        for (String sourceRoot : sourceRoots) {
+        for (String sourceRoot : sourceRootsFor(kind)) {
             if (remainder.equals(sourceRoot)) {
+                if (isScopeOnlyFlow(kind)) {
+                    continue;
+                }
                 throw new IllegalArgumentException("Symbol id is missing owner path after source root: " + raw);
             }
             if (remainder.startsWith(sourceRoot + "/")) {
-                return new ParsedOwner(sourceRoot, requireOwnerPath(remainder.substring(sourceRoot.length() + 1), raw));
+                return new ParsedOwner(sourceRoot, requireOwnerPath(kind, remainder.substring(sourceRoot.length() + 1), raw));
             }
         }
 
@@ -105,15 +113,20 @@ public final class SymbolIdParser {
         if (slash <= 0 || slash == remainder.length() - 1) {
             throw new IllegalArgumentException("Symbol id has invalid source root and owner path: " + raw);
         }
-        return new ParsedOwner(remainder.substring(0, slash), requireOwnerPath(remainder.substring(slash + 1), raw));
+        return new ParsedOwner(remainder.substring(0, slash), requireOwnerPath(kind, remainder.substring(slash + 1), raw));
     }
 
-    private static String requireOwnerPath(String ownerPath, String raw) {
+    private static String requireOwnerPath(SymbolKind kind, String ownerPath, String raw) {
         requireSegment(ownerPath, "owner path", raw);
-        if (ownerPath.startsWith("/") || ownerPath.endsWith("/") || ownerPath.contains("//")) {
+        if (ownerPath.startsWith("/") || ownerPath.contains("//")
+                || (ownerPath.endsWith("/") && !isApiRootEndpoint(kind, ownerPath))) {
             throw new IllegalArgumentException("Symbol id owner path must be normalized and relative: " + raw);
         }
         return ownerPath;
+    }
+
+    private static boolean isApiRootEndpoint(SymbolKind kind, String ownerPath) {
+        return kind.kind().equals(DefaultSymbolKind.API_ENDPOINT.kind()) && ownerPath.endsWith(":/");
     }
 
     private static ParsedPath parsePath(SymbolKind kind, String rest) {
@@ -156,6 +169,22 @@ public final class SymbolIdParser {
                 .orElse(false);
     }
 
+    private List<String> sourceRootsFor(SymbolKind kind) {
+        if (kind.kind().equals(DefaultSymbolKind.API_ENDPOINT.kind())) {
+            return apiEndpointSourceRoots;
+        }
+        return sourceRoots;
+    }
+
+    private static List<String> apiEndpointSourceRoots(List<String> sourceRoots) {
+        List<String> result = new ArrayList<>(sourceRoots);
+        if (!result.contains(API_ENDPOINT_SOURCE_ROOT)) {
+            result.add(API_ENDPOINT_SOURCE_ROOT);
+            result.sort(Comparator.comparingInt(String::length).reversed());
+        }
+        return List.copyOf(result);
+    }
+
     private static List<String> normalizeSourceRoots(List<String> sourceRoots) {
         if (sourceRoots == null || sourceRoots.isEmpty()) {
             throw new IllegalArgumentException("sourceRoots are required");
@@ -190,10 +219,28 @@ public final class SymbolIdParser {
         return builder.toString();
     }
 
-    private static void validateRelative(SymbolKind kind, String path, String raw) {
-        boolean containsSchemeLikeSeparator = path.contains(":/")
-                && !(kind.kind().equals(DefaultSymbolKind.API_ENDPOINT.kind()) && hasOnlyEndpointMethodSeparators(path));
-        if (path.isBlank() || path.startsWith("/") || containsSchemeLikeSeparator || hasTraversalSegment(path)) {
+    private static void validateRelativeBasics(String path, String raw) {
+        if (path.isBlank() || path.startsWith("/") || hasTraversalSegment(path)) {
+            throw new IllegalArgumentException("Symbol id path must be logical and relative: " + raw);
+        }
+    }
+
+    private static void validateSchemeLikeSeparators(
+            SymbolKind kind,
+            String path,
+            ParsedOwner owner,
+            String raw) {
+        if (!kind.kind().equals(DefaultSymbolKind.API_ENDPOINT.kind())) {
+            if (path.contains(":/")) {
+                throw new IllegalArgumentException("Symbol id path must be logical and relative: " + raw);
+            }
+            return;
+        }
+        if (owner == null || !isValidApiEndpointOwnerPath(owner.ownerPath())) {
+            throw new IllegalArgumentException("API endpoint symbol id must contain an HTTP method owner path: " + raw);
+        }
+        int ownerStart = path.length() - owner.ownerPath().length();
+        if (ownerStart < 0 || path.substring(0, ownerStart).contains(":/")) {
             throw new IllegalArgumentException("Symbol id path must be logical and relative: " + raw);
         }
     }
@@ -207,17 +254,11 @@ public final class SymbolIdParser {
         return false;
     }
 
-    private static boolean hasOnlyEndpointMethodSeparators(String path) {
-        int index = path.indexOf(":/");
-        while (index >= 0) {
-            int segmentStart = path.lastIndexOf('/', index - 1) + 1;
-            String token = path.substring(segmentStart, index);
-            if (!isHttpMethod(token)) {
-                return false;
-            }
-            index = path.indexOf(":/", index + 2);
-        }
-        return true;
+    private static boolean isValidApiEndpointOwnerPath(String ownerPath) {
+        int separator = ownerPath.indexOf(":/");
+        return separator > 0
+                && ownerPath.indexOf(":/", separator + 2) < 0
+                && isHttpMethod(ownerPath.substring(0, separator));
     }
 
     private static boolean isHttpMethod(String token) {

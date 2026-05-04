@@ -27,7 +27,7 @@ public record SymbolId(
             throw new IllegalArgumentException("fragment is not allowed for kind " + kind.kind());
         }
         requireNormalizedSourceRootKey(sourceRootKey);
-        requireNormalizedOwnerPath(ownerPath);
+        requireNormalizedOwnerPath(kind, ownerPath);
         requireCanonicalSafe(projectKey, "projectKey", false);
         requireCanonicalSafe(moduleKey, "moduleKey", false);
         requireCanonicalSafe(sourceRootKey, "sourceRootKey", false);
@@ -113,11 +113,26 @@ public record SymbolId(
         }
     }
 
-    private static void requireNormalizedOwnerPath(String ownerPath) {
+    private static void requireNormalizedOwnerPath(SymbolKind kind, String ownerPath) {
         if (!ownerPath.isBlank()
-                && (ownerPath.startsWith("/") || ownerPath.endsWith("/") || ownerPath.contains("//"))) {
+                && (ownerPath.startsWith("/") || ownerPath.contains("//")
+                        || (ownerPath.endsWith("/") && !isApiRootEndpoint(kind, ownerPath)))) {
             throw new IllegalArgumentException("ownerPath must be normalized and relative");
         }
+    }
+
+    private static boolean isApiRootEndpoint(SymbolKind kind, String ownerPath) {
+        if (!kind.kind().equals(DefaultSymbolKind.API_ENDPOINT.kind()) || !ownerPath.endsWith(":/")) {
+            return false;
+        }
+        return isHttpMethod(ownerPath.substring(0, ownerPath.length() - 2));
+    }
+
+    private static boolean isHttpMethod(String token) {
+        return switch (token) {
+            case "GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS", "TRACE" -> true;
+            default -> false;
+        };
     }
 
     private static void requireCanonicalSafe(String value, String name, boolean allowRawHash) {

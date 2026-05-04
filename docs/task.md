@@ -106,27 +106,27 @@
 
 ## 7. Spring、Struts1、JSP、HTML/JS 和 Seasar2
 
-- [ ] 解析 Spring Controller、RestController、RequestMapping variants、Service 和 injection hints。
-- [ ] 输出 ApiEndpoint -ROUTES_TO-> Method。
-- [ ] 解析 Struts1 struts-config modules、actions、forms、forwards、exceptions、message resources、plugins、Tiles、Validator、controller config、DynaActionForm、DispatchAction、LookupDispatchAction。
-- [ ] 输出 ActionPath -ROUTES_TO-> Method。
-- [ ] 在有静态 evidence 时输出 method-to-forward 和 JSP/action navigation facts。
-- [ ] 从 web.xml、servlet version、page encodings、TLD、WEB-INF/lib jars、tag files、classpath candidates 和 web roots 构建 WebAppContext。
+- [x] 解析 Spring Controller、RestController、RequestMapping variants、Service 和 injection hints。
+- [x] 输出 ApiEndpoint -ROUTES_TO-> Method。
+- [x] 解析 Struts1 struts-config modules、actions、forms、forwards、exceptions、message resources、plugins、Tiles、Validator、controller config、DynaActionForm、DispatchAction、LookupDispatchAction。
+- [x] 输出 ActionPath -ROUTES_TO-> Method。
+- [x] 在有静态 evidence 时输出 method-to-forward 和 JSP/action navigation facts。
+- [x] 从 web.xml、servlet version、page encodings、TLD、WEB-INF/lib jars、tag files、classpath candidates 和 web roots 构建 WebAppContext。
 - [ ] 使用 Jasper 作为 preferred JSP semantic parser。
-- [ ] 在 Jasper 或 context 不完整时使用 tolerant parser fallback。
-- [ ] 提取 JSP directive、taglib、include、forward、form、input、select、textarea、EL、scriptlet request parameter reads/writes 和 tag actions。
-- [ ] 输出 JspForm -SUBMITS_TO-> ApiEndpoint/ActionPath。
-- [ ] 输出 JSP input 和 request parameter facts。
-- [ ] 实现 HTML static forms、static links、static client request candidates 和 resource references。
-- [ ] 输出 HtmlPage/JspPage -CONTAINS-> HtmlForm/HtmlInput/HtmlLink/ScriptResource。
-- [ ] 输出 HtmlPage/JspPage -LOADS_SCRIPT-> ScriptResource。
-- [ ] 输出 HtmlForm -RENDERS_INPUT-> HtmlInput。
-- [ ] 输出 HtmlInput/JspInput -BINDS_TO-> RequestParameter/FormField/ParamSlot。
-- [ ] 输出 HtmlLink -NAVIGATES_TO-> HtmlPage/ApiEndpoint/ActionPath。
-- [ ] 输出 DomEventHandler -SUBMITS_TO/CALLS_HTTP/NAVIGATES_TO-> ClientRequest/ApiEndpoint/ActionPath。
-- [ ] 输出 ClientRequest -CALLS_HTTP/SUBMITS_TO-> ApiEndpoint/ActionPath。
+- [x] 在 Jasper 或 context 不完整时使用 tolerant parser fallback。
+- [x] 提取 JSP directive、taglib、include、forward、form、input、select、textarea、EL、scriptlet request parameter reads/writes 和 tag actions。
+- [x] 输出 JspForm -SUBMITS_TO-> ApiEndpoint/ActionPath。
+- [x] 输出 JSP input 和 request parameter facts。
+- [x] 实现 HTML static forms、static links、static client request candidates 和 resource references。
+- [x] 输出 HtmlPage/JspPage -CONTAINS-> HtmlForm/HtmlInput/HtmlLink/ScriptResource。
+- [x] 输出 HtmlPage/JspPage -LOADS_SCRIPT-> ScriptResource。
+- [x] 输出 HtmlForm -RENDERS_INPUT-> HtmlInput。
+- [x] 输出 HtmlInput/JspInput -BINDS_TO-> RequestParameter/FormField/ParamSlot。
+- [x] 输出 HtmlLink -NAVIGATES_TO-> HtmlPage/ApiEndpoint/ActionPath。
+- [x] 输出 DomEventHandler -SUBMITS_TO/CALLS_HTTP/NAVIGATES_TO-> ClientRequest/ApiEndpoint/ActionPath。
+- [x] 输出 ClientRequest -CALLS_HTTP/SUBMITS_TO-> ApiEndpoint/ActionPath。
 - [ ] 建模 EntryPoint，并为 Spring/Struts/JSP/HTML/JS、batch、main、scheduler、message、shell 入口保留统一入口抽象。
-- [ ] 禁止在没有 AST-backed evidence 时推断 dynamic JavaScript URL。
+- [x] 禁止在没有 AST-backed evidence 时推断 dynamic JavaScript URL。
 - [ ] 解析 Seasar2 dicon components、includes、properties、aspects、interceptors 和 naming candidates。
 - [ ] MVP 中 Seasar2 facts 只作为 POSSIBLE discovery/candidate 输出。
 - [ ] 增加 Spring MVC、Struts1/JSP、Tiles、Validator、DynaActionForm、tag files、fallback JSP parsing、Seasar2 discovery 测试。

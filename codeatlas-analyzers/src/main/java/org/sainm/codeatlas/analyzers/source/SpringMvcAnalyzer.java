@@ -22,6 +22,9 @@ import spoon.reflect.reference.CtTypeReference;
 import spoon.reflect.visitor.filter.TypeFilter;
 
 public final class SpringMvcAnalyzer {
+    private static final List<String> ALL_HTTP_METHODS = List.of(
+            "GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "TRACE");
+
     private SpringMvcAnalyzer() {
     }
 
@@ -97,9 +100,14 @@ public final class SpringMvcAnalyzer {
             return;
         }
         List<String> classPaths = mappingPaths(type.getAnnotations());
+        List<String> classMethods = mappingHttpMethods(type.getAnnotations());
         for (CtMethod<?> method : type.getMethods()) {
             Mapping methodMapping = methodMapping(method.getAnnotations());
             if (methodMapping == null) {
+                continue;
+            }
+            List<String> httpMethods = effectiveHttpMethods(classMethods, methodMapping.httpMethods());
+            if (httpMethods.isEmpty()) {
                 continue;
             }
             routes.add(new SpringRouteInfo(
@@ -108,7 +116,7 @@ public final class SpringMvcAnalyzer {
                     JavaDescriptor.methodDescriptor(method.getParameters().stream()
                             .map(CtParameter::getType)
                             .toList(), method.getType()),
-                    methodMapping.httpMethods(),
+                    httpMethods,
                     combinePaths(classPaths, methodMapping.paths()),
                     location(sourceRoot, method.getPosition())));
         }
@@ -222,14 +230,36 @@ public final class SpringMvcAnalyzer {
                     return new Mapping(List.of("PATCH"), paths);
                 }
                 case "RequestMapping" -> {
-                    List<String> methods = requestMethods(annotation);
-                    return new Mapping(methods.isEmpty() ? List.of("ANY") : methods, paths);
+                    return new Mapping(requestMethods(annotation), paths);
                 }
                 default -> {
                 }
             }
         }
         return null;
+    }
+
+    private static List<String> mappingHttpMethods(List<CtAnnotation<?>> annotations) {
+        for (CtAnnotation<?> annotation : annotations) {
+            if (simpleAnnotationName(annotation).equals("RequestMapping")) {
+                return requestMethods(annotation);
+            }
+        }
+        return List.of();
+    }
+
+    private static List<String> effectiveHttpMethods(List<String> classMethods, List<String> methodMethods) {
+        if (classMethods.isEmpty()) {
+            return methodMethods.isEmpty() ? ALL_HTTP_METHODS : methodMethods;
+        }
+        if (methodMethods.isEmpty()) {
+            return classMethods;
+        }
+        List<String> result = new ArrayList<>(classMethods);
+        result.addAll(methodMethods);
+        return result.stream()
+                .distinct()
+                .toList();
     }
 
     private static List<String> requestMethods(CtAnnotation<?> annotation) {
@@ -320,10 +350,43 @@ public final class SpringMvcAnalyzer {
             return List.of();
         }
         List<String> result = new ArrayList<>();
-        for (String item : value.split(",")) {
-            result.add(item.trim());
+        StringBuilder item = new StringBuilder();
+        char quote = 0;
+        boolean escaped = false;
+        for (int index = 0; index < value.length(); index++) {
+            char current = value.charAt(index);
+            if (quote != 0) {
+                item.append(current);
+                if (escaped) {
+                    escaped = false;
+                } else if (current == '\\') {
+                    escaped = true;
+                } else if (current == quote) {
+                    quote = 0;
+                }
+                continue;
+            }
+            if (current == '"' || current == '\'') {
+                quote = current;
+                item.append(current);
+                continue;
+            }
+            if (current == ',') {
+                addAnnotationExpressionPart(result, item);
+                item.setLength(0);
+                continue;
+            }
+            item.append(current);
         }
+        addAnnotationExpressionPart(result, item);
         return result;
+    }
+
+    private static void addAnnotationExpressionPart(List<String> result, StringBuilder item) {
+        String value = item.toString().trim();
+        if (!value.isBlank()) {
+            result.add(value);
+        }
     }
 
     private static String stripQuotes(String value) {

@@ -287,6 +287,10 @@ class SymbolIdTest {
                         .canonical());
         assertEquals("api-endpoint://shop/_root/src/main/java/GET:/orders/{id}",
                 SymbolIdParser.parse("api-endpoint://shop/_root/src/main/java/GET:/orders/{id}").canonical());
+        assertEquals("api-endpoint://shop/_root/src/main/java/GET:/",
+                SymbolIdParser.parse("api-endpoint://shop/_root/src/main/java/GET:/").canonical());
+        assertEquals("api-endpoint://shop/_root/_api/POST:/orders",
+                SymbolIdParser.parse("api-endpoint://shop/_root/_api/POST:/orders").canonical());
     }
 
     @Test
@@ -302,6 +306,8 @@ class SymbolIdTest {
         assertThrows(IllegalArgumentException.class,
                 () -> SymbolIdParser.parse("api-endpoint://shop/_root/GET:/orders"));
         assertThrows(IllegalArgumentException.class,
+                () -> SymbolIdParser.parse("api-endpoint://shop/GET:/_api/POST:/orders"));
+        assertThrows(IllegalArgumentException.class,
                 () -> SymbolIdParser.parse("html-page://shop/_root/src/main/webapp//WEB-INF/jsp/edit.jsp"));
     }
 
@@ -310,6 +316,9 @@ class SymbolIdTest {
         SymbolId paramSlot = SymbolIdParser.parse(
                 "param-slot://shop/_root/src/main/java/com.foo.OrderService#cancelOrder(Ljava/lang/Long;)V:param[0:Ljava/lang/Long;]");
         SymbolId requestParam = SymbolIdParser.parse("request-param://shop/_root/order-form#orderId");
+        SymbolId apiScopedRequestParam = SymbolIdParser.parse("request-param://shop/_root/_api#token");
+        SymbolId parserScopedRequestParam = SymbolIdParser.withSourceRoots(List.of("src/main/webapp", "_api"))
+                .parseId("request-param://shop/_root/_api#token");
         SymbolId sessionAttr = SymbolIdParser.parse("session-attr://shop/_root/http-session#cart");
         SymbolId modelAttr = SymbolIdParser.parse("model-attr://shop/_root/spring-model#order");
         SymbolId featureSeed = SymbolIdParser.parse("feature-seed://shop/run-20260502-001/6f4a9c");
@@ -324,6 +333,11 @@ class SymbolIdTest {
         assertEquals("order-form", requestParam.ownerPath());
         assertEquals("orderId", requestParam.fragment().orElseThrow());
         assertEquals("request-param://shop/_root/order-form#orderId", requestParam.canonical());
+        assertEquals("", apiScopedRequestParam.sourceRootKey());
+        assertEquals("_api", apiScopedRequestParam.ownerPath());
+        assertEquals("token", apiScopedRequestParam.fragment().orElseThrow());
+        assertEquals("request-param://shop/_root/_api#token", apiScopedRequestParam.canonical());
+        assertEquals(apiScopedRequestParam, parserScopedRequestParam);
         assertEquals("session-attr://shop/_root/http-session#cart", sessionAttr.canonical());
         assertEquals("model-attr://shop/_root/spring-model#order", modelAttr.canonical());
         assertEquals(IdentityType.ARTIFACT_ID, featureSeed.identityType());
