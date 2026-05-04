@@ -9,7 +9,19 @@ public record JavaMethodInfo(
         String returnTypeName,
         List<String> annotations,
         List<String> modifiers,
+        boolean hasBody,
         SourceLocation location) {
+    public JavaMethodInfo(
+            String ownerQualifiedName,
+            String simpleName,
+            String signature,
+            String returnTypeName,
+            List<String> annotations,
+            List<String> modifiers,
+            SourceLocation location) {
+        this(ownerQualifiedName, simpleName, signature, returnTypeName, annotations, modifiers, false, location);
+    }
+
     public JavaMethodInfo {
         JavaClassInfo.requireNonBlank(ownerQualifiedName, "ownerQualifiedName");
         JavaClassInfo.requireNonBlank(simpleName, "simpleName");

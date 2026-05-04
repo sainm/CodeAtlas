@@ -11,8 +11,11 @@ import spoon.reflect.code.CtConstructorCall;
 import spoon.reflect.code.CtInvocation;
 import spoon.reflect.cu.SourcePosition;
 import spoon.reflect.declaration.CtAnnotation;
+import spoon.reflect.declaration.CtAnnotationType;
 import spoon.reflect.declaration.CtConstructor;
+import spoon.reflect.declaration.CtEnum;
 import spoon.reflect.declaration.CtField;
+import spoon.reflect.declaration.CtInterface;
 import spoon.reflect.declaration.CtMethod;
 import spoon.reflect.declaration.CtType;
 import spoon.reflect.reference.CtExecutableReference;
@@ -73,6 +76,7 @@ public final class JavaSourceAnalyzer {
             classes.add(new JavaClassInfo(
                     type.getQualifiedName(),
                     type.getSimpleName(),
+                    typeKind(type),
                     annotations(type),
                     location(sourceRoot, type.getPosition())));
             for (CtField<?> field : type.getFields()) {
@@ -94,6 +98,7 @@ public final class JavaSourceAnalyzer {
                         typeName(method.getType()),
                         annotations(method),
                         modifiers(method),
+                        method.getBody() != null,
                         location(sourceRoot, method.getPosition())));
             }
         }
@@ -112,6 +117,7 @@ public final class JavaSourceAnalyzer {
                     "void",
                     annotations(constructor),
                     modifiers(constructor),
+                    true,
                     constructorLocation));
         }
         for (CtInvocation<?> invocation : model.getElements(new TypeFilter<>(CtInvocation.class))) {
@@ -178,6 +184,19 @@ public final class JavaSourceAnalyzer {
             result.add(annotation.getAnnotationType().getQualifiedName());
         }
         return result;
+    }
+
+    private static JavaTypeKind typeKind(CtType<?> type) {
+        if (type instanceof CtAnnotationType<?>) {
+            return JavaTypeKind.ANNOTATION;
+        }
+        if (type instanceof CtEnum<?>) {
+            return JavaTypeKind.ENUM;
+        }
+        if (type instanceof CtInterface<?>) {
+            return JavaTypeKind.INTERFACE;
+        }
+        return JavaTypeKind.CLASS;
     }
 
     private static List<String> modifiers(spoon.reflect.declaration.CtModifiable element) {

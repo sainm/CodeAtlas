@@ -5,11 +5,21 @@ import java.util.List;
 public record JavaClassInfo(
         String qualifiedName,
         String simpleName,
+        JavaTypeKind kind,
         List<String> annotations,
         SourceLocation location) {
+    public JavaClassInfo(
+            String qualifiedName,
+            String simpleName,
+            List<String> annotations,
+            SourceLocation location) {
+        this(qualifiedName, simpleName, JavaTypeKind.CLASS, annotations, location);
+    }
+
     public JavaClassInfo {
         requireNonBlank(qualifiedName, "qualifiedName");
         requireNonBlank(simpleName, "simpleName");
+        kind = kind == null ? JavaTypeKind.CLASS : kind;
         annotations = copySorted(annotations);
         if (location == null) {
             throw new IllegalArgumentException("location is required");

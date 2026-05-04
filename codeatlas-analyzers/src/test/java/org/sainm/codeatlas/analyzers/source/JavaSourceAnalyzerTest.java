@@ -65,6 +65,31 @@ class JavaSourceAnalyzerTest {
     }
 
     @Test
+    void distinguishesJavaTypeKinds() throws IOException {
+        write("src/main/java/com/acme/Types.java", """
+                package com.acme;
+
+                class App {}
+                interface Mapper {}
+                enum Status { ACTIVE }
+                @interface Marker {}
+                """);
+
+        JavaSourceAnalysisResult result = JavaSourceAnalyzer.defaults().analyze(
+                tempDir,
+                List.of(tempDir.resolve("src/main/java/com/acme/Types.java")));
+
+        assertTrue(result.classes().stream().anyMatch(type -> type.qualifiedName().equals("com.acme.App")
+                && type.kind() == JavaTypeKind.CLASS));
+        assertTrue(result.classes().stream().anyMatch(type -> type.qualifiedName().equals("com.acme.Mapper")
+                && type.kind() == JavaTypeKind.INTERFACE));
+        assertTrue(result.classes().stream().anyMatch(type -> type.qualifiedName().equals("com.acme.Status")
+                && type.kind() == JavaTypeKind.ENUM));
+        assertTrue(result.classes().stream().anyMatch(type -> type.qualifiedName().equals("com.acme.Marker")
+                && type.kind() == JavaTypeKind.ANNOTATION));
+    }
+
+    @Test
     void fallsBackToNoClasspathWhenDependenciesAreMissing() throws IOException {
         write("src/main/java/com/acme/Broken.java", """
                 package com.acme;

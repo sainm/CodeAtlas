@@ -127,7 +127,7 @@
 - [x] 输出 HtmlLink -NAVIGATES_TO-> HtmlPage/ApiEndpoint/ActionPath。
 - [x] 输出 DomEventHandler -SUBMITS_TO/CALLS_HTTP/NAVIGATES_TO-> ClientRequest/ApiEndpoint/ActionPath。
 - [x] 输出 ClientRequest -CALLS_HTTP/SUBMITS_TO-> ApiEndpoint/ActionPath。
-- [ ] 建模 EntryPoint，并为 Spring/Struts/JSP/HTML/JS、batch、main、scheduler、message、shell 入口保留统一入口抽象。
+- [x] 建模 EntryPoint，并为 Spring/Struts/JSP/HTML/JS、batch、main、scheduler、message、shell 入口保留统一入口抽象。
 - [x] 禁止在没有 AST-backed evidence 时推断 dynamic JavaScript URL。
 - [x] 解析 Seasar2 dicon components、includes、properties、aspects、interceptors 和 naming candidates。
 - [x] MVP 中 Seasar2 facts 只作为 POSSIBLE discovery/candidate 输出。
@@ -135,14 +135,14 @@
 
 ## 8. SQL、数据库和字段级数据影响
 
-- [ ] 解析 MyBatis mapper interfaces。
-- [ ] 解析 MyBatis XML namespace 和 statement id。
-- [ ] 关联 mapper methods 到 SqlStatement。
-- [ ] 使用 JSqlParser 提取 SQL table。
-- [ ] 为 dynamic SQL 增加 conservative fallback。
-- [ ] 解析 JDBC SQL literals 和简单 constant concatenation。
-- [ ] 输出 SqlStatement -READS_TABLE/WRITES_TABLE-> DbTable。
-- [ ] 输出 JDBC method -> SqlStatement -> DbTable。
+- [x] 解析 MyBatis mapper interfaces。
+- [x] 解析 MyBatis XML namespace 和 statement id。
+- [x] 关联 mapper methods 到 SqlStatement。
+- [x] 使用 JSqlParser 提取 SQL table。
+- [x] 为 dynamic SQL 增加 conservative fallback。
+- [x] 解析 JDBC SQL literals 和简单 constant concatenation。
+- [x] 输出 SqlStatement -READS_TABLE/WRITES_TABLE-> DbTable。
+- [x] 输出 JDBC method -> SqlStatement -> DbTable。
 - [ ] 输出 PreparedStatement parameter binding facts。
 - [ ] 增加 JPA entity table 和 field column mapping。
 - [ ] 增加字段级 MAPS_TO_COLUMN、READS_COLUMN、WRITES_COLUMN。
