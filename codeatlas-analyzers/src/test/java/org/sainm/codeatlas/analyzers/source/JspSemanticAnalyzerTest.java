@@ -9,6 +9,8 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -21,6 +23,42 @@ class JspSemanticAnalyzerTest {
     @BeforeEach
     void resetJasperStub() {
         org.apache.jasper.JspC.reset();
+    }
+
+    @Test
+    void usesWebAppContextToSelectIsolatedJasperProfile() throws IOException {
+        write("src/main/webapp/WEB-INF/jsp/user/simple.jsp", """
+                <form action="/user/save.do">
+                  <input name="userId">
+                </form>
+                """);
+        WebAppContext context = new WebAppContext(
+                tempDir.resolve("src/main/webapp").toString(),
+                tempDir.resolve("src/main/webapp/WEB-INF/web.xml").toString(),
+                "4.0",
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of());
+        JasperProfileClassLoaderFactory factory = JasperProfileClassLoaderFactory.using(Map.of(
+                "TOMCAT_8_9_JAVAX", Set.of(
+                        "org.apache.jasper.JspC",
+                        "javax.servlet.ServletContext",
+                        "javax.servlet.jsp.JspFactory")));
+
+        JspAnalysisResult result = JspSemanticAnalyzer.using(factory).analyze(
+                tempDir.resolve("src/main/webapp"),
+                context,
+                List.of(tempDir.resolve("src/main/webapp/WEB-INF/jsp/user/simple.jsp")));
+
+        assertEquals(JspParserMode.JASPER, result.parserMode());
+        assertEquals(1, org.apache.jasper.JspC.executeCalls);
+        assertTrue(result.diagnostics().stream()
+                .anyMatch(diagnostic -> diagnostic.code().equals("JASPER_ISOLATED_PROFILE_SELECTED")));
     }
 
     @Test

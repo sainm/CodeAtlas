@@ -33,14 +33,32 @@ public final class JspSemanticAnalyzer {
     private static final Pattern SCRIPT_OPEN = Pattern.compile("<script" + TAG_NAME_END + TAG_ATTRIBUTES + ">", Pattern.CASE_INSENSITIVE);
     private static final Pattern SCRIPT_CLOSE = Pattern.compile("</script\\s*>", Pattern.CASE_INSENSITIVE);
 
-    private JspSemanticAnalyzer() {
+    private final JasperJspPrecompiler defaultPrecompiler;
+    private final JasperProfileClassLoaderFactory profileClassLoaderFactory;
+
+    private JspSemanticAnalyzer(
+            JasperJspPrecompiler defaultPrecompiler,
+            JasperProfileClassLoaderFactory profileClassLoaderFactory) {
+        this.defaultPrecompiler = defaultPrecompiler;
+        this.profileClassLoaderFactory = profileClassLoaderFactory;
     }
 
     public static JspSemanticAnalyzer defaults() {
-        return new JspSemanticAnalyzer();
+        return new JspSemanticAnalyzer(JasperJspPrecompiler.defaults(), JasperProfileClassLoaderFactory.defaults());
+    }
+
+    static JspSemanticAnalyzer using(JasperProfileClassLoaderFactory profileClassLoaderFactory) {
+        JasperProfileClassLoaderFactory factory = profileClassLoaderFactory == null
+                ? JasperProfileClassLoaderFactory.defaults()
+                : profileClassLoaderFactory;
+        return new JspSemanticAnalyzer(JasperJspPrecompiler.defaults(), factory);
     }
 
     public JspAnalysisResult analyze(Path webRoot, List<Path> jspFiles) {
+        return analyze(webRoot, null, jspFiles);
+    }
+
+    public JspAnalysisResult analyze(Path webRoot, WebAppContext context, List<Path> jspFiles) {
         if (webRoot == null) {
             throw new IllegalArgumentException("webRoot is required");
         }
@@ -49,7 +67,7 @@ public final class JspSemanticAnalyzer {
         }
 
         List<JavaAnalysisDiagnostic> diagnostics = new ArrayList<>();
-        JspParseAttempt parseAttempt = JasperJspPrecompiler.defaults().precompile(webRoot, jspFiles);
+        JspParseAttempt parseAttempt = precompilerFor(context).precompile(webRoot, jspFiles);
         JspParserMode parserMode = parseAttempt.parserMode();
         diagnostics.addAll(parseAttempt.diagnostics());
 
@@ -91,6 +109,13 @@ public final class JspSemanticAnalyzer {
                 inputs,
                 requestParameters,
                 diagnostics);
+    }
+
+    private JasperJspPrecompiler precompilerFor(WebAppContext context) {
+        if (context == null) {
+            return defaultPrecompiler;
+        }
+        return JasperJspPrecompiler.using(profileClassLoaderFactory, JasperProjectContext.from(context));
     }
 
     private static void parseFallback(
