@@ -54,6 +54,10 @@ class SpringMvcFactMapperTest {
                 "ROUTES_TO",
                 "api-endpoint://shop/_root/_api/GET:/api/orders/{id}",
                 "method://shop/_root/src/main/java/com.acme.web.OrderController#show(Ljava/lang/String;)Ljava/lang/String;");
+        assertFact(batch,
+                "DECLARES_ENTRYPOINT",
+                "api-endpoint://shop/_root/_api/GET:/api/orders/{id}",
+                "entrypoint://shop/_root/_entrypoints/spring/GET/api/orders/{id}");
         assertTrue(batch.facts().stream().allMatch(fact -> fact.confidence() == Confidence.LIKELY));
     }
 
@@ -248,6 +252,10 @@ class SpringMvcFactMapperTest {
                 "ROUTES_TO",
                 "api-endpoint://shop/_root/_api/GET:/api/orders/{id}",
                 "method://shop/_root/src/main/java/com.acme.web.RegexController#show(Ljava/lang/String;)Ljava/lang/String;");
+        assertFact(batch,
+                "DECLARES_ENTRYPOINT",
+                "api-endpoint://shop/_root/_api/GET:/api/orders/{id}",
+                "entrypoint://shop/_root/_entrypoints/spring/GET/api/orders/{id}");
     }
 
     @Test

@@ -85,6 +85,7 @@ class JspSemanticAnalyzerTest {
 
         assertEquals(JspParserMode.JASPER, result.parserMode());
         assertFalse(result.diagnostics().isEmpty());
+        assertTrue(result.pages().stream().anyMatch(page -> page.path().equals("WEB-INF/jsp/user/edit.jsp")));
         assertTrue(result.directives().stream().anyMatch(directive -> directive.name().equals("page")
                 && directive.attributes().get("pageEncoding").equals("UTF-8")));
         assertTrue(result.taglibs().stream().anyMatch(taglib -> taglib.prefix().equals("html")
@@ -497,6 +498,19 @@ class JspSemanticAnalyzerTest {
                 .anyMatch(diagnostic -> diagnostic.code().equals("JASPER_INVOKE_FAILED_TOKEN_FALLBACK")
                         && diagnostic.message().contains("jakarta/servlet/ServletContext")));
         assertTrue(result.forms().stream().anyMatch(form -> form.action().equals("/user/save.do")));
+    }
+
+    @Test
+    void doesNotRecordPagesForUnreadableJspFiles() throws IOException {
+        Path missing = tempDir.resolve("src/main/webapp/WEB-INF/jsp/missing.jsp");
+
+        JspAnalysisResult result = JspSemanticAnalyzer.defaults().analyze(
+                tempDir.resolve("src/main/webapp"),
+                List.of(missing));
+
+        assertTrue(result.diagnostics().stream()
+                .anyMatch(diagnostic -> diagnostic.code().equals("JSP_READ_FAILED")));
+        assertTrue(result.pages().isEmpty());
     }
 
     private void write(String relativePath, String content) throws IOException {

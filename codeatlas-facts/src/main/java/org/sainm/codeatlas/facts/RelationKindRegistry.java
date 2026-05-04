@@ -44,6 +44,7 @@ public final class RelationKindRegistry {
         register(relations, "DECLARES", RelationFamily.STRUCTURE, true);
         register(relations, "CALLS", RelationFamily.CALL, true);
         register(relations, "ROUTES_TO", RelationFamily.CALL, true);
+        register(relations, "DECLARES_ENTRYPOINT", RelationFamily.STRUCTURE, true);
         register(relations, "SUBMITS_TO", RelationFamily.WEB, true);
         register(relations, "BINDS_TO", RelationFamily.DATA, true);
         register(relations, "BINDS_PARAM", RelationFamily.FLOW, true);

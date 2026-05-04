@@ -4,6 +4,7 @@ import java.util.List;
 
 public record JspAnalysisResult(
         JspParserMode parserMode,
+        List<JspPageInfo> pages,
         List<JspDirectiveInfo> directives,
         List<JspTaglibInfo> taglibs,
         List<JspIncludeInfo> includes,
@@ -16,6 +17,7 @@ public record JspAnalysisResult(
         if (parserMode == null) {
             throw new IllegalArgumentException("parserMode is required");
         }
+        pages = List.copyOf(pages == null ? List.of() : pages);
         directives = List.copyOf(directives == null ? List.of() : directives);
         taglibs = List.copyOf(taglibs == null ? List.of() : taglibs);
         includes = List.copyOf(includes == null ? List.of() : includes);

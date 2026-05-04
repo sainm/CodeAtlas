@@ -36,7 +36,11 @@ public final class JspFactMapper {
         List<FactRecord> facts = new ArrayList<>();
         Set<String> factKeys = new HashSet<>();
         Map<String, Evidence> evidenceByKey = new LinkedHashMap<>();
+        for (JspPageInfo page : result.pages()) {
+            addPageEntryPointFact(facts, factKeys, evidenceByKey, context, page.location());
+        }
         for (JspFormInfo form : result.forms()) {
+            addPageEntryPointFact(facts, factKeys, evidenceByKey, context, form.location());
             addContainsFact(facts, factKeys, evidenceByKey, context, form.location(),
                     jspPageId(context, form.location().relativePath()), jspFormId(context, form));
             addFormSubmitFact(facts, factKeys, evidenceByKey, context, form);
@@ -45,21 +49,51 @@ public final class JspFactMapper {
         for (JspInputInfo input : result.inputs()) {
             JspFormInfo ownerForm = ownerForm(input.formKey(), result.forms(), formsByKey);
             if (ownerForm != null) {
+                addPageEntryPointFact(facts, factKeys, evidenceByKey, context, input.location());
                 addContainsFact(facts, factKeys, evidenceByKey, context, input.location(),
                         jspPageId(context, input.location().relativePath()), jspInputId(context, ownerForm, input));
                 addInputBindingFact(facts, factKeys, evidenceByKey, context, ownerForm, input);
             }
         }
         for (JspRequestParameterAccessInfo access : result.requestParameters()) {
+            addPageEntryPointFact(facts, factKeys, evidenceByKey, context, access.location());
             addRequestParameterAccessFact(facts, factKeys, evidenceByKey, context, access);
         }
         for (JspForwardInfo forward : result.forwards()) {
+            addPageEntryPointFact(facts, factKeys, evidenceByKey, context, forward.location());
             addForwardFact(facts, factKeys, evidenceByKey, context, forward);
         }
         for (JspIncludeInfo include : result.includes()) {
+            addPageEntryPointFact(facts, factKeys, evidenceByKey, context, include.location());
             addIncludeFact(facts, factKeys, evidenceByKey, context, include);
         }
         return new JavaSourceFactBatch(facts, List.copyOf(evidenceByKey.values()));
+    }
+
+    private static void addPageEntryPointFact(
+            List<FactRecord> facts,
+            Set<String> factKeys,
+            Map<String, Evidence> evidenceByKey,
+            JavaSourceFactContext context,
+            SourceLocation location) {
+        Evidence evidence = evidence(context, location);
+        FactRecord fact = FactRecord.create(
+                identitySourceRoots(context),
+                jspPageId(context, location.relativePath()),
+                EntryPointIds.jsp(context, localSourcePath(context, location.relativePath())),
+                "DECLARES_ENTRYPOINT",
+                "jsp-page",
+                context.projectId(),
+                context.snapshotId(),
+                context.analysisRunId(),
+                context.scopeRunId(),
+                ANALYZER_ID,
+                context.scopeKey(),
+                evidence.evidenceKey(),
+                Confidence.LIKELY,
+                100,
+                SourceType.JSP_TOKEN);
+        addFact(facts, factKeys, evidenceByKey, evidence, fact);
     }
 
     private static void addContainsFact(
@@ -428,7 +462,19 @@ public final class JspFactMapper {
     }
 
     private static List<String> identitySourceRoots(JavaSourceFactContext context) {
-        return List.of(context.sourceRootKey(), API_ENDPOINT_SOURCE_ROOT);
+        return EntryPointIds.withEntryPointRoot(List.of(context.sourceRootKey(), API_ENDPOINT_SOURCE_ROOT));
+    }
+
+    private static String localSourcePath(JavaSourceFactContext context, String path) {
+        String normalized = stripQueryAndFragment(path).replace('\\', '/');
+        String sourceRoot = context.sourceRootKey().replace('\\', '/');
+        if (normalized.equals(sourceRoot)) {
+            return "";
+        }
+        if (normalized.startsWith(sourceRoot + "/")) {
+            return normalized.substring(sourceRoot.length() + 1);
+        }
+        return normalized;
     }
 
     private static String stripQueryAndFragment(String path) {

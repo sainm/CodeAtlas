@@ -73,6 +73,66 @@ class JavaSourceFactMapperTest {
     }
 
     @Test
+    void mapsJavaMethodsToEntrypointFacts() throws IOException {
+        write("src/main/java/com/acme/App.java", """
+                package com.acme;
+
+                @interface Scheduled { String cron() default ""; }
+                @interface JmsListener { String destination() default ""; }
+
+                class App {
+                    public static void main(String[] args) {}
+
+                    @Scheduled(cron = "0 * * * * *")
+                    void runJob() {}
+
+                    @JmsListener(destination = "orders")
+                    void receive(String event) {}
+
+                    @JmsListener(destination = "priority-orders")
+                    void receive(Integer event) {}
+                }
+
+                class NotMain {
+                    void main(String[] args) {}
+                }
+                """);
+        JavaSourceAnalysisResult result = JavaSourceAnalyzer.defaults().analyze(
+                tempDir,
+                List.of(tempDir.resolve("src/main/java/com/acme/App.java")));
+
+        JavaSourceFactBatch batch = JavaSourceFactMapper.defaults().map(
+                result,
+                new JavaSourceFactContext(
+                        "shop",
+                        "_root",
+                        "src/main/java",
+                        "snapshot-1",
+                        "analysis-1",
+                        "scope-1",
+                        "src/main/java"));
+
+        assertFact(batch,
+                "DECLARES_ENTRYPOINT",
+                "method://shop/_root/src/main/java/com.acme.App#main([Ljava/lang/String;)V",
+                "entrypoint://shop/_root/_entrypoints/main/com.acme.App/main");
+        assertFact(batch,
+                "DECLARES_ENTRYPOINT",
+                "method://shop/_root/src/main/java/com.acme.App#runJob()V",
+                "entrypoint://shop/_root/_entrypoints/scheduler/com.acme.App/runJob");
+        assertFact(batch,
+                "DECLARES_ENTRYPOINT",
+                "method://shop/_root/src/main/java/com.acme.App#receive(Ljava/lang/String;)V",
+                "entrypoint://shop/_root/_entrypoints/message/com.acme.App/receive/(Ljava.lang.String;)V");
+        assertFact(batch,
+                "DECLARES_ENTRYPOINT",
+                "method://shop/_root/src/main/java/com.acme.App#receive(Ljava/lang/Integer;)V",
+                "entrypoint://shop/_root/_entrypoints/message/com.acme.App/receive/(Ljava.lang.Integer;)V");
+        assertFalse(batch.facts().stream().anyMatch(fact -> fact.relationType().name().equals("DECLARES_ENTRYPOINT")
+                && fact.sourceIdentityId().contains("NotMain#main")));
+    }
+
+    @Test
     void mapsCallsFromTheCorrectOverloadedOwnerMethod() throws IOException {
         write("src/main/java/com/acme/App.java", """
                 package com.acme;

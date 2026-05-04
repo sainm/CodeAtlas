@@ -52,6 +52,10 @@ class StrutsConfigFactMapperTest {
                 "action-path://shop/_root/_actions/admin/user/save",
                 "method://shop/_root/src/main/java/com.acme.web.UserSaveAction#execute(Lorg/apache/struts/action/ActionMapping;Lorg/apache/struts/action/ActionForm;Ljavax/servlet/http/HttpServletRequest;Ljavax/servlet/http/HttpServletResponse;)Lorg/apache/struts/action/ActionForward;");
         assertFact(batch,
+                "DECLARES_ENTRYPOINT",
+                "action-path://shop/_root/_actions/admin/user/save",
+                "entrypoint://shop/_root/_entrypoints/struts/admin/user/save");
+        assertFact(batch,
                 "FORWARDS_TO",
                 "method://shop/_root/src/main/java/com.acme.web.UserSaveAction#execute(Lorg/apache/struts/action/ActionMapping;Lorg/apache/struts/action/ActionForm;Ljavax/servlet/http/HttpServletRequest;Ljavax/servlet/http/HttpServletResponse;)Lorg/apache/struts/action/ActionForward;",
                 "jsp-page://shop/_root/src/main/webapp/admin/WEB-INF/jsp/user.jsp");
@@ -200,6 +204,10 @@ class StrutsConfigFactMapperTest {
                 "FORWARDS_TO",
                 "action-path://shop/_root/_actions/help",
                 "jsp-page://shop/_root/src/main/webapp/WEB-INF/jsp/help.jsp");
+        assertFact(batch,
+                "DECLARES_ENTRYPOINT",
+                "action-path://shop/_root/_actions/help",
+                "entrypoint://shop/_root/_entrypoints/struts/help");
     }
 
     @Test

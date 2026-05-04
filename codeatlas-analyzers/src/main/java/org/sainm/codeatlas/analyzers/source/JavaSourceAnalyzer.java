@@ -93,6 +93,7 @@ public final class JavaSourceAnalyzer {
                                 .toList(), method.getType()),
                         typeName(method.getType()),
                         annotations(method),
+                        modifiers(method),
                         location(sourceRoot, method.getPosition())));
             }
         }
@@ -110,6 +111,7 @@ public final class JavaSourceAnalyzer {
                             .toList(), null),
                     "void",
                     annotations(constructor),
+                    modifiers(constructor),
                     constructorLocation));
         }
         for (CtInvocation<?> invocation : model.getElements(new TypeFilter<>(CtInvocation.class))) {
@@ -176,6 +178,12 @@ public final class JavaSourceAnalyzer {
             result.add(annotation.getAnnotationType().getQualifiedName());
         }
         return result;
+    }
+
+    private static List<String> modifiers(spoon.reflect.declaration.CtModifiable element) {
+        return element.getModifiers().stream()
+                .map(modifier -> modifier.name().toLowerCase())
+                .toList();
     }
 
     private static String typeName(CtTypeReference<?> type) {

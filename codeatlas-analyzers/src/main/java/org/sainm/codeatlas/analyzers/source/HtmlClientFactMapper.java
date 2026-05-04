@@ -34,7 +34,11 @@ public final class HtmlClientFactMapper {
         List<FactRecord> facts = new ArrayList<>();
         Set<String> factKeys = new HashSet<>();
         Map<String, Evidence> evidenceByKey = new LinkedHashMap<>();
+        for (HtmlPageInfo page : result.pages()) {
+            addPageEntryPointFact(facts, factKeys, evidenceByKey, context, page.location(), page.path());
+        }
         for (HtmlFormInfo form : result.forms()) {
+            addPageEntryPointFact(facts, factKeys, evidenceByKey, context, form.location(), form.pagePath());
             addContainsFact(facts, factKeys, evidenceByKey, context, form.location(),
                     htmlPageId(context, form.pagePath()), htmlFormId(context, form));
             addSubmitFact(facts, factKeys, evidenceByKey, context, form);
@@ -43,6 +47,7 @@ public final class HtmlClientFactMapper {
         for (HtmlInputInfo input : result.inputs()) {
             HtmlFormInfo ownerForm = ownerForm(input.formKey(), result.forms(), formsByKey);
             if (ownerForm != null) {
+                addPageEntryPointFact(facts, factKeys, evidenceByKey, context, input.location(), input.pagePath());
                 addContainsFact(facts, factKeys, evidenceByKey, context, input.location(),
                         htmlPageId(context, input.pagePath()), htmlInputId(context, ownerForm, input));
                 addRenderFact(facts, factKeys, evidenceByKey, context, ownerForm, input);
@@ -50,22 +55,38 @@ public final class HtmlClientFactMapper {
             }
         }
         for (ScriptResourceInfo script : result.scripts()) {
+            addPageEntryPointFact(facts, factKeys, evidenceByKey, context, script.location(), script.pagePath());
             addContainsFact(facts, factKeys, evidenceByKey, context, script.location(),
                     htmlPageId(context, script.pagePath()), scriptResourceId(context, script.pagePath(), script.src()));
             addLoadScriptFact(facts, factKeys, evidenceByKey, context, script);
         }
         for (HtmlLinkInfo link : result.links()) {
+            addPageEntryPointFact(facts, factKeys, evidenceByKey, context, link.location(), link.pagePath());
             addContainsFact(facts, factKeys, evidenceByKey, context, link.location(),
                     htmlPageId(context, link.pagePath()), htmlLinkId(context, link));
             addNavigationFact(facts, factKeys, evidenceByKey, context, link);
         }
         for (ClientRequestInfo request : result.clientRequests()) {
+            addPageEntryPointFact(facts, factKeys, evidenceByKey, context, request.location(), request.pagePath());
             addClientRequestFact(facts, factKeys, evidenceByKey, context, request);
         }
         for (DomEventHandlerInfo handler : result.domEventHandlers()) {
+            addPageEntryPointFact(facts, factKeys, evidenceByKey, context, handler.location(), handler.pagePath());
             addDomEventFact(facts, factKeys, evidenceByKey, context, handler);
         }
         return new JavaSourceFactBatch(facts, List.copyOf(evidenceByKey.values()));
+    }
+
+    private static void addPageEntryPointFact(
+            List<FactRecord> facts,
+            Set<String> factKeys,
+            Map<String, Evidence> evidenceByKey,
+            JavaSourceFactContext context,
+            SourceLocation location,
+            String pagePath) {
+        addFact(facts, factKeys, evidenceByKey, context, location,
+                htmlPageId(context, pagePath), EntryPointIds.html(context, localSourcePath(context, pagePath)),
+                "DECLARES_ENTRYPOINT", "html-page", Confidence.LIKELY);
     }
 
     private static void addContainsFact(
@@ -415,7 +436,19 @@ public final class HtmlClientFactMapper {
     }
 
     private static List<String> identitySourceRoots(JavaSourceFactContext context) {
-        return List.of(context.sourceRootKey(), API_ENDPOINT_SOURCE_ROOT);
+        return EntryPointIds.withEntryPointRoot(List.of(context.sourceRootKey(), API_ENDPOINT_SOURCE_ROOT));
+    }
+
+    private static String localSourcePath(JavaSourceFactContext context, String path) {
+        String normalized = stripQueryAndFragment(path).replace('\\', '/');
+        String sourceRoot = context.sourceRootKey().replace('\\', '/');
+        if (normalized.equals(sourceRoot)) {
+            return "";
+        }
+        if (normalized.startsWith(sourceRoot + "/")) {
+            return normalized.substring(sourceRoot.length() + 1);
+        }
+        return normalized;
     }
 
     private static String stripQueryAndFragment(String path) {

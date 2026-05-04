@@ -49,6 +49,10 @@ class HtmlClientFactMapperTest {
                 "html-page://shop/_root/src/main/webapp/user/edit.html",
                 "html-form://shop/_root/src/main/webapp/user/edit.html#form[/user/update.do:post:1:0]");
         assertFact(batch,
+                "DECLARES_ENTRYPOINT",
+                "html-page://shop/_root/src/main/webapp/user/edit.html",
+                "entrypoint://shop/_root/_entrypoints/html/user/edit.html");
+        assertFact(batch,
                 "CONTAINS",
                 "html-page://shop/_root/src/main/webapp/user/edit.html",
                 "html-input://shop/_root/src/main/webapp/user/edit.html#form[/user/update.do:post:1:0]:input[userId:text:2:0]");
@@ -84,6 +88,32 @@ class HtmlClientFactMapperTest {
                 "CALLS_HTTP",
                 "client-request://shop/_root/src/main/webapp/user/edit.html#fetch[POST:/api/users:7:0]",
                 "api-endpoint://shop/_root/_api/POST:/api/users");
+    }
+
+    @Test
+    void mapsDiscoveredHtmlPagesToEntrypointFacts() throws IOException {
+        write("src/main/webapp/static/help.html", """
+                <main>Help</main>
+                """);
+        HtmlClientAnalysisResult result = HtmlClientAnalyzer.defaults().analyze(
+                tempDir.resolve("src/main/webapp"),
+                List.of(tempDir.resolve("src/main/webapp/static/help.html")));
+
+        JavaSourceFactBatch batch = HtmlClientFactMapper.defaults().map(
+                result,
+                new JavaSourceFactContext(
+                        "shop",
+                        "_root",
+                        "src/main/webapp",
+                        "snapshot-1",
+                        "analysis-1",
+                        "scope-1",
+                        "src/main/webapp/static/help.html"));
+
+        assertFact(batch,
+                "DECLARES_ENTRYPOINT",
+                "html-page://shop/_root/src/main/webapp/static/help.html",
+                "entrypoint://shop/_root/_entrypoints/html/static/help.html");
     }
 
     @Test

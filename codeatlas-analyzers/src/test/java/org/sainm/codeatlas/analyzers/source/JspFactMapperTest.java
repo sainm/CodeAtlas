@@ -54,9 +54,40 @@ class JspFactMapperTest {
                 "jsp-form://shop/_root/src/main/webapp/WEB-INF/jsp/user/edit.jsp#form[/user/update.do:post:1:0]",
                 "action-path://shop/_root/_actions/user/update");
         assertFact(batch,
+                "DECLARES_ENTRYPOINT",
+                "jsp-page://shop/_root/src/main/webapp/WEB-INF/jsp/user/edit.jsp",
+                "entrypoint://shop/_root/_entrypoints/jsp/WEB-INF/jsp/user/edit.jsp");
+        assertFact(batch,
                 "BINDS_TO",
                 "jsp-input://shop/_root/src/main/webapp/WEB-INF/jsp/user/edit.jsp#form[/user/update.do:post:1:0]:input[userId:text:2:0]",
                 "request-param://shop/_root/src/main/webapp/userId");
+    }
+
+    @Test
+    void mapsDiscoveredJspPagesToEntrypointFacts() throws IOException {
+        write("src/main/webapp/WEB-INF/jsp/help.jsp", """
+                <%@ page pageEncoding="UTF-8" %>
+                <main>Help</main>
+                """);
+        JspAnalysisResult result = JspSemanticAnalyzer.defaults().analyze(
+                tempDir.resolve("src/main/webapp"),
+                List.of(tempDir.resolve("src/main/webapp/WEB-INF/jsp/help.jsp")));
+
+        JavaSourceFactBatch batch = JspFactMapper.defaults().map(
+                result,
+                new JavaSourceFactContext(
+                        "shop",
+                        "_root",
+                        "src/main/webapp",
+                        "snapshot-1",
+                        "analysis-1",
+                        "scope-1",
+                        "src/main/webapp/WEB-INF/jsp/help.jsp"));
+
+        assertFact(batch,
+                "DECLARES_ENTRYPOINT",
+                "jsp-page://shop/_root/src/main/webapp/WEB-INF/jsp/help.jsp",
+                "entrypoint://shop/_root/_entrypoints/jsp/WEB-INF/jsp/help.jsp");
     }
 
     @Test

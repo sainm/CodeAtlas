@@ -81,6 +81,26 @@ public final class SpringMvcFactMapper {
         }
         evidenceByKey.putIfAbsent(evidence.evidenceKey(), evidence);
         facts.add(fact);
+        FactRecord entryPointFact = FactRecord.create(
+                EntryPointIds.withEntryPointRoot(List.of(context.sourceRootKey(), API_ENDPOINT_SOURCE_ROOT)),
+                apiEndpointId(context, httpMethod, path),
+                EntryPointIds.spring(context, httpMethod, normalizedEndpointPath(path)),
+                "DECLARES_ENTRYPOINT",
+                "spring-mvc",
+                context.projectId(),
+                context.snapshotId(),
+                context.analysisRunId(),
+                context.scopeRunId(),
+                ANALYZER_ID,
+                context.scopeKey(),
+                evidence.evidenceKey(),
+                Confidence.LIKELY,
+                100,
+                SourceType.SPRING);
+        if (!factKeys.add(entryPointFact.factKey())) {
+            return;
+        }
+        facts.add(entryPointFact);
     }
 
     private static String apiEndpointId(JavaSourceFactContext context, String httpMethod, String path) {

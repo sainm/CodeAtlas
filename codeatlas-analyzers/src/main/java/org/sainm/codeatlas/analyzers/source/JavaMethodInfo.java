@@ -8,6 +8,7 @@ public record JavaMethodInfo(
         String signature,
         String returnTypeName,
         List<String> annotations,
+        List<String> modifiers,
         SourceLocation location) {
     public JavaMethodInfo {
         JavaClassInfo.requireNonBlank(ownerQualifiedName, "ownerQualifiedName");
@@ -15,6 +16,7 @@ public record JavaMethodInfo(
         JavaClassInfo.requireNonBlank(signature, "signature");
         returnTypeName = returnTypeName == null ? "" : returnTypeName;
         annotations = JavaClassInfo.copySorted(annotations);
+        modifiers = JavaClassInfo.copySorted(modifiers);
         if (location == null) {
             throw new IllegalArgumentException("location is required");
         }

@@ -18,6 +18,7 @@ class RelationKindRegistryTest {
                 "DECLARES",
                 "CALLS",
                 "ROUTES_TO",
+                "DECLARES_ENTRYPOINT",
                 "SUBMITS_TO",
                 "BINDS_TO",
                 "READS_TABLE",

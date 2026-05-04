@@ -80,6 +80,7 @@ public final class JspSemanticAnalyzer {
         JspParserMode parserMode = parseAttempt.parserMode();
         diagnostics.addAll(parseAttempt.diagnostics());
 
+        List<JspPageInfo> pages = new ArrayList<>();
         List<JspDirectiveInfo> directives = new ArrayList<>();
         List<JspTaglibInfo> taglibs = new ArrayList<>();
         List<JspIncludeInfo> includes = new ArrayList<>();
@@ -90,10 +91,15 @@ public final class JspSemanticAnalyzer {
 
         for (Path jspFile : jspFiles) {
             try {
+                String content = Files.readString(jspFile, StandardCharsets.UTF_8);
+                SourceLocation pageLocation = location(webRoot, jspFile, 1);
+                if (!pageLocation.relativePath().isBlank()) {
+                    pages.add(new JspPageInfo(pageLocation.relativePath(), pageLocation));
+                }
                 parseFallback(
                         webRoot,
                         jspFile,
-                        Files.readString(jspFile, StandardCharsets.UTF_8),
+                        content,
                         directives,
                         taglibs,
                         includes,
@@ -110,6 +116,7 @@ public final class JspSemanticAnalyzer {
 
         return new JspAnalysisResult(
                 parserMode,
+                pages,
                 directives,
                 taglibs,
                 includes,
@@ -694,6 +701,7 @@ public final class JspSemanticAnalyzer {
     private static JspAnalysisResult emptyResult(JspParserMode parserMode) {
         return new JspAnalysisResult(
                 parserMode,
+                List.of(),
                 List.of(),
                 List.of(),
                 List.of(),

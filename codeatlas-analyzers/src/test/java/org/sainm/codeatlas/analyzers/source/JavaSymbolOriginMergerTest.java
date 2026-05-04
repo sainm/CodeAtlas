@@ -20,8 +20,8 @@ class JavaSymbolOriginMergerTest {
                         new JavaClassInfo("com.acme.Shared", "Shared", List.of(), location()),
                         new JavaClassInfo("com.acme.SourceOnly", "SourceOnly", List.of(), location())),
                 List.of(
-                        new JavaMethodInfo("com.acme.Shared", "run", "()V", "void", List.of(), location()),
-                        new JavaMethodInfo("com.acme.SourceOnly", "source", "()V", "void", List.of(), location())),
+                        new JavaMethodInfo("com.acme.Shared", "run", "()V", "void", List.of(), List.of(), location()),
+                        new JavaMethodInfo("com.acme.SourceOnly", "source", "()V", "void", List.of(), List.of(), location())),
                 List.of(new JavaFieldInfo("com.acme.Shared", "name", "java.lang.String", "Ljava/lang/String;", List.of(), location())),
                 List.of(),
                 List.of());
@@ -52,8 +52,10 @@ class JavaSymbolOriginMergerTest {
                 false,
                 List.of(new JavaClassInfo("com.acme.Overloaded", "Overloaded", List.of(), location())),
                 List.of(
-                        new JavaMethodInfo("com.acme.Overloaded", "run", "(Ljava/lang/String;)V", "void", List.of(), location()),
-                        new JavaMethodInfo("com.acme.Overloaded", "run", "(I)V", "void", List.of(), location())),
+                        new JavaMethodInfo("com.acme.Overloaded", "run", "(Ljava/lang/String;)V", "void",
+                                List.of(), List.of(), location()),
+                        new JavaMethodInfo("com.acme.Overloaded", "run", "(I)V", "void",
+                                List.of(), List.of(), location())),
                 List.of(),
                 List.of(),
                 List.of());

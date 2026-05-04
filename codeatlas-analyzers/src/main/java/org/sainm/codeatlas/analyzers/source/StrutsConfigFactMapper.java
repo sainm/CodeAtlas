@@ -40,12 +40,49 @@ public final class StrutsConfigFactMapper {
         Set<String> factKeys = new HashSet<>();
         Map<String, Evidence> evidenceByKey = new LinkedHashMap<>();
         for (StrutsActionInfo action : result.actions()) {
+            addActionEntryPointFact(facts, factKeys, evidenceByKey, context, action);
             if (!action.type().isBlank()) {
                 addActionRouteFact(facts, factKeys, evidenceByKey, context, action);
             }
             addActionForwardFacts(facts, factKeys, evidenceByKey, context, action);
         }
         return new JavaSourceFactBatch(facts, List.copyOf(evidenceByKey.values()));
+    }
+
+    private static void addActionEntryPointFact(
+            List<FactRecord> facts,
+            Set<String> factKeys,
+            Map<String, Evidence> evidenceByKey,
+            StrutsConfigFactContext context,
+            StrutsActionInfo action) {
+        Evidence evidence = Evidence.create(
+                ANALYZER_ID,
+                context.scopeKey(),
+                action.location().relativePath(),
+                "line:" + action.location().line(),
+                1,
+                SourceType.STRUTS);
+        FactRecord fact = FactRecord.create(
+                EntryPointIds.withEntryPointRoot(context.identitySourceRoots()),
+                actionPathId(context, action.path()),
+                EntryPointIds.struts(context, normalizedActionPath(action.path())),
+                "DECLARES_ENTRYPOINT",
+                qualifier(action),
+                context.projectId(),
+                context.snapshotId(),
+                context.analysisRunId(),
+                context.scopeRunId(),
+                ANALYZER_ID,
+                context.scopeKey(),
+                evidence.evidenceKey(),
+                actionRouteConfidence(action),
+                100,
+                SourceType.STRUTS);
+        if (!factKeys.add(fact.factKey())) {
+            return;
+        }
+        evidenceByKey.putIfAbsent(evidence.evidenceKey(), evidence);
+        facts.add(fact);
     }
 
     private static void addActionRouteFact(

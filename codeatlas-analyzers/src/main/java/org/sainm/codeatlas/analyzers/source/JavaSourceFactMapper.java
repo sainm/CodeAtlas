@@ -43,6 +43,7 @@ public final class JavaSourceFactMapper {
             addFact(facts, factKeys, evidenceByKey, context, classId(context, method.ownerQualifiedName()),
                     methodId(context, method.ownerQualifiedName(), method.simpleName(), method.signature()),
                     "DECLARES", "method", method.location(), confidence);
+            addMethodEntryPointFacts(facts, factKeys, evidenceByKey, context, method, confidence);
         }
         for (JavaFieldInfo field : result.fields()) {
             addFact(facts, factKeys, evidenceByKey, context, classId(context, field.ownerQualifiedName()),
@@ -67,6 +68,71 @@ public final class JavaSourceFactMapper {
         return new JavaSourceFactBatch(facts, List.copyOf(evidenceByKey.values()));
     }
 
+    private static void addMethodEntryPointFacts(
+            List<FactRecord> facts,
+            Set<String> factKeys,
+            Map<String, Evidence> evidenceByKey,
+            JavaSourceFactContext context,
+            JavaMethodInfo method,
+            Confidence confidence) {
+        String methodId = methodId(context, method.ownerQualifiedName(), method.simpleName(), method.signature());
+        if (isMainMethod(method)) {
+            addEntryPointFact(facts, factKeys, evidenceByKey, context, methodId,
+                    EntryPointIds.main(context, method.ownerQualifiedName()), "java-main", method.location(), confidence);
+        }
+        if (hasAnnotation(method, "Scheduled")) {
+            addEntryPointFact(facts, factKeys, evidenceByKey, context, methodId,
+                    EntryPointIds.scheduler(context, method.ownerQualifiedName(), method.simpleName()),
+                    "spring-scheduled", method.location(), confidence);
+        }
+        if (hasAnyAnnotation(method, List.of("JmsListener", "KafkaListener", "RabbitListener", "MessageMapping"))) {
+            addEntryPointFact(facts, factKeys, evidenceByKey, context, methodId,
+                    EntryPointIds.messageListener(
+                            context, method.ownerQualifiedName(), method.simpleName(), method.signature()),
+                    "message-listener", method.location(), confidence);
+        }
+    }
+
+    private static void addEntryPointFact(
+            List<FactRecord> facts,
+            Set<String> factKeys,
+            Map<String, Evidence> evidenceByKey,
+            JavaSourceFactContext context,
+            String sourceIdentityId,
+            String targetIdentityId,
+            String qualifier,
+            SourceLocation location,
+            Confidence confidence) {
+        Evidence evidence = Evidence.create(
+                ANALYZER_ID,
+                context.scopeKey(),
+                location.relativePath(),
+                "line:" + location.line(),
+                1,
+                SourceType.SPOON);
+        FactRecord fact = FactRecord.create(
+                EntryPointIds.withEntryPointRoot(List.of(context.sourceRootKey())),
+                sourceIdentityId,
+                targetIdentityId,
+                "DECLARES_ENTRYPOINT",
+                qualifier,
+                context.projectId(),
+                context.snapshotId(),
+                context.analysisRunId(),
+                context.scopeRunId(),
+                ANALYZER_ID,
+                context.scopeKey(),
+                evidence.evidenceKey(),
+                confidence,
+                100,
+                SourceType.SPOON);
+        if (!factKeys.add(fact.factKey())) {
+            return;
+        }
+        evidenceByKey.putIfAbsent(evidence.evidenceKey(), evidence);
+        facts.add(fact);
+    }
+
     private static String ownerMethodId(
             JavaSourceAnalysisResult result,
             JavaSourceFactContext context,
@@ -79,6 +145,23 @@ public final class JavaSourceFactMapper {
                 .findFirst()
                 .map(method -> methodId(context, method.ownerQualifiedName(), method.simpleName(), method.signature()))
                 .orElse("");
+    }
+
+    private static boolean isMainMethod(JavaMethodInfo method) {
+        return method.simpleName().equals("main")
+                && method.returnTypeName().equals("void")
+                && method.signature().equals("([Ljava/lang/String;)V")
+                && method.modifiers().contains("public")
+                && method.modifiers().contains("static");
+    }
+
+    private static boolean hasAnyAnnotation(JavaMethodInfo method, List<String> simpleNames) {
+        return simpleNames.stream().anyMatch(simpleName -> hasAnnotation(method, simpleName));
+    }
+
+    private static boolean hasAnnotation(JavaMethodInfo method, String simpleName) {
+        return method.annotations().stream()
+                .anyMatch(annotation -> annotation.equals(simpleName) || annotation.endsWith("." + simpleName));
     }
 
     private static void addFact(
