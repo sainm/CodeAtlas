@@ -3,6 +3,8 @@ package org.sainm.codeatlas.analyzers.source;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.net.URL;
+import java.net.URLClassLoader;
 import java.util.Set;
 
 import org.junit.jupiter.api.Test;
@@ -54,5 +56,24 @@ class JasperRuntimeProbeTest {
                         && diagnostic.message().contains("profile=TOMCAT_8_9_JAVAX")
                         && diagnostic.message().contains("servlet=javax")
                         && diagnostic.message().contains("jsp=javax")));
+    }
+
+    @Test
+    void defaultsFallBackToAnalyzerLoaderWhenThreadContextLoaderCannotSeeJasper() {
+        ClassLoader original = Thread.currentThread().getContextClassLoader();
+        try (URLClassLoader isolatedContextLoader = URLClassLoader.newInstance(
+                new URL[0],
+                ClassLoader.getPlatformClassLoader())) {
+            Thread.currentThread().setContextClassLoader(isolatedContextLoader);
+
+            JasperRuntimeProfile profile = JasperRuntimeProbe.defaults().probe();
+
+            assertTrue(profile.jasperAvailable());
+            assertTrue(profile.canInvokeJasper());
+        } catch (Exception exception) {
+            throw new AssertionError(exception);
+        } finally {
+            Thread.currentThread().setContextClassLoader(original);
+        }
     }
 }

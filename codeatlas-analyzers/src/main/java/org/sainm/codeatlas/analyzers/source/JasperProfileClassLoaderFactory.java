@@ -45,6 +45,13 @@ final class JasperProfileClassLoaderFactory {
                     isolatedDiagnostic(profileName));
         }
         Set<String> profileClasses = availableClassesByProfile.get(profileName);
+        if (profileName.equals("TOKEN_ONLY")) {
+            return JasperRuntimeProbe.using(
+                    className -> false,
+                    List.of(new JavaAnalysisDiagnostic(
+                            "JASPER_TOKEN_ONLY_PROFILE",
+                            "Jasper profile=TOKEN_ONLY; using tolerant token fallback")));
+        }
         if (profileClasses == null || profileClasses.isEmpty()) {
             if (!profileName.equals("TOKEN_ONLY")) {
                 return JasperRuntimeProbe.using(

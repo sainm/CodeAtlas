@@ -117,4 +117,14 @@ class JasperProfileClassLoaderFactoryTest {
         assertTrue(profile.diagnostics().stream()
                 .anyMatch(diagnostic -> diagnostic.code().equals("JASPER_ISOLATED_PROFILE_MISSING")));
     }
+
+    @Test
+    void tokenOnlyContextDoesNotUseCurrentClasspathJasper() {
+        JasperRuntimeProfile profile = JasperProfileClassLoaderFactory.defaults()
+                .probeFor(new JasperProjectContext(""))
+                .probe();
+
+        assertFalse(profile.canInvokeJasper());
+        assertEquals("TOKEN_ONLY", profile.jasperProfile());
+    }
 }
