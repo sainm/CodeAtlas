@@ -8,8 +8,22 @@ record JasperRuntimeProfile(
         boolean javaxServletAvailable,
         boolean jakartaJspAvailable,
         boolean javaxJspAvailable,
+        JasperRuntimeClassResolver classResolver,
         List<JavaAnalysisDiagnostic> diagnostics) {
     JasperRuntimeProfile {
+        if (classResolver == null) {
+            classResolver = new JasperRuntimeClassResolver() {
+                @Override
+                public boolean isAvailable(String className) {
+                    return false;
+                }
+
+                @Override
+                public Class<?> loadClass(String className) throws ClassNotFoundException {
+                    throw new ClassNotFoundException(className);
+                }
+            };
+        }
         diagnostics = diagnostics == null ? List.of() : List.copyOf(diagnostics);
     }
 
@@ -41,6 +55,10 @@ record JasperRuntimeProfile(
 
     String jspNamespace() {
         return namespace(jakartaJspAvailable, javaxJspAvailable);
+    }
+
+    Class<?> loadJspcClass() throws ClassNotFoundException {
+        return classResolver.loadClass(JasperRuntimeProbe.JASPER_JSPC_CLASS);
     }
 
     private static String namespace(boolean jakartaAvailable, boolean javaxAvailable) {

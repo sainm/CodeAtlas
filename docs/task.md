@@ -114,7 +114,7 @@
 - [x] 从 web.xml、servlet version、page encodings、TLD、WEB-INF/lib jars、tag files、classpath candidates 和 web roots 构建 WebAppContext。
 - [x] 使用 Jasper 作为 preferred JSP semantic parser。
 - [x] 增加 Jasper runtime probe，区分 `javax.servlet`/`jakarta.servlet` API namespace 并选择当前 classpath 匹配的 Jasper profile。
-- [ ] 增加 isolated Jasper profile classloader，支持同时携带 `javax.servlet`/`jakarta.servlet` runtime 并按项目上下文选择。
+- [x] 增加 isolated Jasper profile classloader，支持同时携带 `javax.servlet`/`jakarta.servlet` runtime 并按项目上下文选择。
 - [x] 在 Jasper 或 context 不完整时使用 tolerant parser fallback。
 - [x] 提取 JSP directive、taglib、include、forward、form、input、select、textarea、EL、scriptlet request parameter reads/writes 和 tag actions。
 - [x] 输出 JspForm -SUBMITS_TO-> ApiEndpoint/ActionPath。
