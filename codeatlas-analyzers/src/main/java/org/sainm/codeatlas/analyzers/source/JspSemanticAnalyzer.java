@@ -13,6 +13,9 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public final class JspSemanticAnalyzer {
+    public static final String TOMCAT_10_JAKARTA_PROFILE = "TOMCAT_10_JAKARTA";
+    public static final String TOMCAT_8_9_JAVAX_PROFILE = "TOMCAT_8_9_JAVAX";
+
     private static final Pattern DIRECTIVE = Pattern.compile("<%@\\s*([\\w-]+)\\s+([^%]*)%>");
     private static final Pattern ATTRIBUTE = Pattern.compile(
             "([\\w:-]+)\\s*=\\s*(?:\"([^\"]*)\"|'([^']*)'|([^\\s\"'=<>`]+))");
@@ -52,6 +55,12 @@ public final class JspSemanticAnalyzer {
                 ? JasperProfileClassLoaderFactory.defaults()
                 : profileClassLoaderFactory;
         return new JspSemanticAnalyzer(JasperJspPrecompiler.defaults(), factory);
+    }
+
+    public static JspSemanticAnalyzer usingJasperProfileClasspaths(Map<String, List<Path>> classpathByProfile) {
+        return new JspSemanticAnalyzer(
+                JasperJspPrecompiler.defaults(),
+                JasperProfileClassLoaderFactory.usingProfileClasspaths(classpathByProfile));
     }
 
     public JspAnalysisResult analyze(Path webRoot, List<Path> jspFiles) {
