@@ -450,6 +450,38 @@ class JspSemanticAnalyzerTest {
     }
 
     @Test
+    void contextAwareDefaultsKeepMatchingCurrentJasperRuntime() throws IOException {
+        write("src/main/webapp/WEB-INF/jsp/user/simple.jsp", """
+                <form action="/user/save.do"><input name="userId"></form>
+                """);
+        WebAppContext context = new WebAppContext(
+                tempDir.resolve("src/main/webapp").toString(),
+                tempDir.resolve("src/main/webapp/WEB-INF/web.xml").toString(),
+                "5.0",
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of());
+
+        JspAnalysisResult result = JspSemanticAnalyzer.defaults().analyze(
+                tempDir.resolve("src/main/webapp"),
+                context,
+                List.of(tempDir.resolve("src/main/webapp/WEB-INF/jsp/user/simple.jsp")));
+
+        assertEquals(JspParserMode.JASPER, result.parserMode());
+        assertEquals(1, org.apache.jasper.JspC.executeCalls);
+        assertTrue(result.diagnostics().stream()
+                .anyMatch(diagnostic -> diagnostic.code().equals("JASPER_RUNTIME_PROFILE")
+                        && diagnostic.message().contains("profile=TOMCAT_10_JAKARTA")));
+        assertTrue(result.diagnostics().stream()
+                .anyMatch(diagnostic -> diagnostic.code().equals("JASPER_SEMANTIC_PARSE_USED")));
+    }
+
+    @Test
     void fallsBackWhenJasperInvocationFails() throws IOException {
         org.apache.jasper.JspC.executionFailure = new NoClassDefFoundError("jakarta/servlet/ServletContext");
         write("src/main/webapp/WEB-INF/jsp/user/simple.jsp", """

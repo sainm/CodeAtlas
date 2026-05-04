@@ -12,28 +12,31 @@ import java.util.Set;
 final class JasperProfileClassLoaderFactory {
     private final Map<String, Set<String>> availableClassesByProfile;
     private final Map<String, List<Path>> classpathByProfile;
+    private final boolean allowCurrentRuntimeFallback;
 
     private JasperProfileClassLoaderFactory(
             Map<String, Set<String>> availableClassesByProfile,
-            Map<String, List<Path>> classpathByProfile) {
+            Map<String, List<Path>> classpathByProfile,
+            boolean allowCurrentRuntimeFallback) {
         this.availableClassesByProfile = availableClassesByProfile == null
                 ? Map.of()
                 : Map.copyOf(availableClassesByProfile);
         this.classpathByProfile = classpathByProfile == null
                 ? Map.of()
                 : Map.copyOf(classpathByProfile);
+        this.allowCurrentRuntimeFallback = allowCurrentRuntimeFallback;
     }
 
     static JasperProfileClassLoaderFactory defaults() {
-        return new JasperProfileClassLoaderFactory(Map.of(), Map.of());
+        return new JasperProfileClassLoaderFactory(Map.of(), Map.of(), true);
     }
 
     static JasperProfileClassLoaderFactory using(Map<String, Set<String>> availableClassesByProfile) {
-        return new JasperProfileClassLoaderFactory(availableClassesByProfile, Map.of());
+        return new JasperProfileClassLoaderFactory(availableClassesByProfile, Map.of(), false);
     }
 
     static JasperProfileClassLoaderFactory usingProfileClasspaths(Map<String, List<Path>> classpathByProfile) {
-        return new JasperProfileClassLoaderFactory(Map.of(), classpathByProfile);
+        return new JasperProfileClassLoaderFactory(Map.of(), classpathByProfile, false);
     }
 
     JasperRuntimeProbe probeFor(JasperProjectContext context) {
@@ -54,11 +57,12 @@ final class JasperProfileClassLoaderFactory {
         }
         if (profileClasses == null || profileClasses.isEmpty()) {
             if (!profileName.equals("TOKEN_ONLY")) {
+                if (allowCurrentRuntimeFallback) {
+                    return currentRuntimeProbeFor(profileName);
+                }
                 return JasperRuntimeProbe.using(
                         className -> false,
-                        List.of(new JavaAnalysisDiagnostic(
-                                "JASPER_ISOLATED_PROFILE_MISSING",
-                                "Jasper isolated profile=" + profileName + " is not configured; using TOKEN_ONLY")));
+                        missingProfileDiagnostic(profileName));
             }
             return JasperRuntimeProbe.defaults();
         }
@@ -67,10 +71,27 @@ final class JasperProfileClassLoaderFactory {
                 isolatedDiagnostic(profileName));
     }
 
+    private static JasperRuntimeProbe currentRuntimeProbeFor(String profileName) {
+        JasperRuntimeProbe currentRuntimeProbe = JasperRuntimeProbe.defaults();
+        JasperRuntimeProfile currentRuntimeProfile = currentRuntimeProbe.probe();
+        if (profileName.equals(currentRuntimeProfile.jasperProfile())) {
+            return currentRuntimeProbe;
+        }
+        return JasperRuntimeProbe.using(
+                className -> false,
+                missingProfileDiagnostic(profileName));
+    }
+
     private static List<JavaAnalysisDiagnostic> isolatedDiagnostic(String profileName) {
         return List.of(new JavaAnalysisDiagnostic(
                 "JASPER_ISOLATED_PROFILE_SELECTED",
                 "Selected Jasper profile=" + profileName + ", classloader=isolated"));
+    }
+
+    private static List<JavaAnalysisDiagnostic> missingProfileDiagnostic(String profileName) {
+        return List.of(new JavaAnalysisDiagnostic(
+                "JASPER_ISOLATED_PROFILE_MISSING",
+                "Jasper isolated profile=" + profileName + " is not configured; using TOKEN_ONLY"));
     }
 
     private static ClassLoader classLoader(List<Path> classpath) {
