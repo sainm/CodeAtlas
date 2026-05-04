@@ -1,5 +1,6 @@
 package org.sainm.codeatlas.analyzers.source;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Predicate;
 
@@ -11,22 +12,87 @@ final class JasperRuntimeProbe {
     private static final String JAVAX_JSP_FACTORY_CLASS = "javax.servlet.jsp.JspFactory";
 
     private final Predicate<String> classAvailable;
+    private final JasperRuntimeClassResolver classResolver;
+    private final List<JavaAnalysisDiagnostic> diagnostics;
 
-    private JasperRuntimeProbe(Predicate<String> classAvailable) {
+    private JasperRuntimeProbe(
+            Predicate<String> classAvailable,
+            JasperRuntimeClassResolver classResolver,
+            List<JavaAnalysisDiagnostic> diagnostics) {
         this.classAvailable = classAvailable;
+        this.classResolver = classResolver;
+        this.diagnostics = diagnostics == null ? List.of() : List.copyOf(diagnostics);
     }
 
     static JasperRuntimeProbe defaults() {
-        ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
-        if (classLoader == null) {
-            classLoader = JasperRuntimeProbe.class.getClassLoader();
+        List<ClassLoader> classLoaders = new ArrayList<>();
+        ClassLoader contextClassLoader = Thread.currentThread().getContextClassLoader();
+        if (contextClassLoader != null) {
+            classLoaders.add(contextClassLoader);
         }
-        ClassLoader probeClassLoader = classLoader;
-        return using(className -> classAvailable(probeClassLoader, className));
+        ClassLoader analyzerClassLoader = JasperRuntimeProbe.class.getClassLoader();
+        if (analyzerClassLoader != null && !classLoaders.contains(analyzerClassLoader)) {
+            classLoaders.add(analyzerClassLoader);
+        }
+        if (classLoaders.isEmpty()) {
+            classLoaders.add(ClassLoader.getPlatformClassLoader());
+        }
+        return usingClassLoaders(classLoaders, List.of());
     }
 
     static JasperRuntimeProbe using(Predicate<String> classAvailable) {
-        return new JasperRuntimeProbe(classAvailable == null ? className -> false : classAvailable);
+        return using(classAvailable, List.of());
+    }
+
+    static JasperRuntimeProbe using(Predicate<String> classAvailable, List<JavaAnalysisDiagnostic> diagnostics) {
+        Predicate<String> availability = classAvailable == null ? className -> false : classAvailable;
+        return new JasperRuntimeProbe(
+                availability,
+                new JasperRuntimeClassResolver() {
+                    @Override
+                    public boolean isAvailable(String className) {
+                        return availability.test(className);
+                    }
+
+                    @Override
+                    public Class<?> loadClass(String className) throws ClassNotFoundException {
+                        return Class.forName(className);
+                    }
+                },
+                diagnostics);
+    }
+
+    static JasperRuntimeProbe usingClassLoader(ClassLoader classLoader, List<JavaAnalysisDiagnostic> diagnostics) {
+        ClassLoader runtimeClassLoader = classLoader == null
+                ? JasperRuntimeProbe.class.getClassLoader()
+                : classLoader;
+        return usingClassLoaders(List.of(runtimeClassLoader), diagnostics);
+    }
+
+    private static JasperRuntimeProbe usingClassLoaders(
+            List<ClassLoader> classLoaders,
+            List<JavaAnalysisDiagnostic> diagnostics) {
+        List<ClassLoader> runtimeClassLoaders = List.copyOf(classLoaders);
+        JasperRuntimeClassResolver resolver = new JasperRuntimeClassResolver() {
+            @Override
+            public boolean isAvailable(String className) {
+                return runtimeClassLoaders.stream().anyMatch(classLoader -> classAvailable(classLoader, className));
+            }
+
+            @Override
+            public Class<?> loadClass(String className) throws ClassNotFoundException {
+                ClassNotFoundException lastException = null;
+                for (ClassLoader classLoader : runtimeClassLoaders) {
+                    try {
+                        return Class.forName(className, true, classLoader);
+                    } catch (ClassNotFoundException exception) {
+                        lastException = exception;
+                    }
+                }
+                throw lastException == null ? new ClassNotFoundException(className) : lastException;
+            }
+        };
+        return new JasperRuntimeProbe(resolver::isAvailable, resolver, diagnostics);
     }
 
     JasperRuntimeProfile probe() {
@@ -41,6 +107,7 @@ final class JasperRuntimeProbe {
                 javaxServletAvailable,
                 jakartaJspAvailable,
                 javaxJspAvailable,
+                classResolver,
                 List.of());
         return new JasperRuntimeProfile(
                 jasperAvailable,
@@ -48,7 +115,14 @@ final class JasperRuntimeProbe {
                 javaxServletAvailable,
                 jakartaJspAvailable,
                 javaxJspAvailable,
-                List.of(runtimeDiagnostic(profile)));
+                classResolver,
+                diagnostics(profile));
+    }
+
+    private List<JavaAnalysisDiagnostic> diagnostics(JasperRuntimeProfile profile) {
+        List<JavaAnalysisDiagnostic> result = new java.util.ArrayList<>(diagnostics);
+        result.add(runtimeDiagnostic(profile));
+        return result;
     }
 
     private static JavaAnalysisDiagnostic runtimeDiagnostic(JasperRuntimeProfile profile) {

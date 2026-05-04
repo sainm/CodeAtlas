@@ -1317,6 +1317,7 @@ Jasper 选择规则：
 
 - MVP 可以先通过 Jasper `JspC` adapter 作为 preferred pre-parse 入口；当 `javax.servlet`/`jakarta.servlet` API namespace 或 JSP/Servlet 依赖不匹配导致 class loading、linkage 或执行失败时，必须记录诊断并降级到 tolerant token fallback，不得中断 JSP 事实提取。
 - 后续增强必须加入 Jasper runtime probe，显式识别 `javax.servlet` 与 `jakarta.servlet` 可用性、JSP/Servlet API 版本和可用 Jasper profile。MVP 可以先选择当前 analyzer classpath 中匹配的 Jasper profile；真正同时携带多套 `javax`/`jakarta` runtime 时，必须通过 isolated Jasper profile classloader 按项目上下文选择。
+- Isolated Jasper profile classloader 由 analyzer 配置提供 profile classpath，按 `WebAppContext` 推断出的项目 API namespace 选择 `TOMCAT_10_JAKARTA` 或 `TOMCAT_8_9_JAVAX`；未配置或无法链接时必须记录诊断并回退到当前 classpath probe 或 `TOKEN_ONLY`。
 - 默认按 `servletApiNamespace + jspSpecVersion + container family` 选择最接近的 isolated Jasper profile。
 - `javax.servlet` 老工程不得用 Tomcat 10/Jakarta profile 强行解析；profile 不匹配时先尝试 legacy javax profile，再降级到 `TOKEN_ONLY`。
 - Resin/WebLogic/WebSphere 等 vendor profile 只做兼容解析。vendor 特有 tag、classloader 行为或容器扩展无法确认时，必须记录 diagnostics，不得伪装成 Tomcat 确定语义。

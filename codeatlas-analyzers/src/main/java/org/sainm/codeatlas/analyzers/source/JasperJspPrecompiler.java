@@ -23,6 +23,15 @@ final class JasperJspPrecompiler {
         return new JasperJspPrecompiler(runtimeProbe == null ? JasperRuntimeProbe.defaults() : runtimeProbe);
     }
 
+    static JasperJspPrecompiler using(
+            JasperProfileClassLoaderFactory profileClassLoaderFactory,
+            JasperProjectContext projectContext) {
+        JasperProfileClassLoaderFactory factory = profileClassLoaderFactory == null
+                ? JasperProfileClassLoaderFactory.defaults()
+                : profileClassLoaderFactory;
+        return using(factory.probeFor(projectContext));
+    }
+
     JspParseAttempt precompile(Path webRoot, List<Path> jspFiles) {
         JasperRuntimeProfile runtimeProfile = runtimeProbe.probe();
         List<JavaAnalysisDiagnostic> diagnostics = new ArrayList<>(runtimeProfile.diagnostics());
@@ -41,7 +50,7 @@ final class JasperJspPrecompiler {
         }
         Class<?> jspcClass;
         try {
-            jspcClass = Class.forName(JasperRuntimeProbe.JASPER_JSPC_CLASS);
+            jspcClass = runtimeProfile.loadJspcClass();
         } catch (ClassNotFoundException | LinkageError exception) {
             diagnostics.add(new JavaAnalysisDiagnostic(
                     "JASPER_UNAVAILABLE_TOKEN_FALLBACK",
