@@ -61,7 +61,7 @@ class MyBatisMapperFactMapperTest {
                         "shop",
                         "_root",
                         "src/main/java",
-                        "src/main/resources",
+                        "src/main/resources/",
                         "snapshot-1",
                         "analysis-1",
                         "scope-1",

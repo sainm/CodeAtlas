@@ -2,6 +2,7 @@ package org.sainm.codeatlas.analyzers.source;
 
 import java.io.IOException;
 import java.io.StringReader;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -23,6 +24,18 @@ import org.xml.sax.InputSource;
 import org.xml.sax.SAXException;
 
 public final class MyBatisXmlAnalyzer {
+    private static final Set<String> DYNAMIC_SQL_TAGS = Set.of(
+            "if",
+            "choose",
+            "when",
+            "otherwise",
+            "trim",
+            "where",
+            "set",
+            "foreach",
+            "bind",
+            "script");
+
     private MyBatisXmlAnalyzer() {
     }
 
@@ -76,16 +89,19 @@ public final class MyBatisXmlAnalyzer {
         }
         mappers.add(new MyBatisXmlMapperInfo(path, namespace, location));
         for (Element child : directChildren(root)) {
-            MyBatisStatementKind kind = statementKind(child.getTagName());
+            String tagName = child.getTagName();
+            MyBatisStatementKind kind = statementKind(tagName);
             String id = attr(child, "id");
             if (kind != null && !id.isBlank()) {
+                SourceLocation statementLocation = statementLocation(sourceRoot, mapperFile, tagName, id, location);
                 statements.add(new MyBatisXmlStatementInfo(
                         path,
                         namespace,
                         id,
                         kind,
                         sqlText(child, namespace, sqlFragments),
-                        location));
+                        containsDynamicSql(child, namespace, sqlFragments, new HashSet<>()),
+                        statementLocation));
             }
         }
     }
@@ -158,7 +174,6 @@ public final class MyBatisXmlAnalyzer {
                 if (id.isBlank()) {
                     continue;
                 }
-                fragments.putIfAbsent(id, child);
                 fragments.put(namespace + "." + id, child);
             }
         }
@@ -190,20 +205,52 @@ public final class MyBatisXmlAnalyzer {
         }
         if (node instanceof Element element && element.getTagName().equals("include")) {
             String refid = attr(element, "refid");
-            Element fragment = sqlFragments.get(fragmentKey(namespace, refid));
-            if (fragment == null) {
-                fragment = sqlFragments.get(refid);
-            }
-            if (fragment == null || !expandingRefIds.add(refid)) {
+            String key = fragmentKey(namespace, refid);
+            Element fragment = sqlFragments.get(key);
+            if (fragment == null || !expandingRefIds.add(key)) {
                 return "";
             }
             try {
                 return rawChildrenText(fragment, namespace, sqlFragments, expandingRefIds);
             } finally {
-                expandingRefIds.remove(refid);
+                expandingRefIds.remove(key);
             }
         }
         return rawChildrenText(node, namespace, sqlFragments, expandingRefIds);
+    }
+
+    private static boolean containsDynamicSql(
+            Node node,
+            String namespace,
+            Map<String, Element> sqlFragments,
+            Set<String> expandingRefIds) {
+        if (node == null) {
+            return false;
+        }
+        if (node instanceof Element element) {
+            String tagName = element.getTagName().toLowerCase(Locale.ROOT);
+            if (DYNAMIC_SQL_TAGS.contains(tagName)) {
+                return true;
+            }
+            if (tagName.equals("include")) {
+                String key = fragmentKey(namespace, attr(element, "refid"));
+                Element fragment = sqlFragments.get(key);
+                if (fragment == null || !expandingRefIds.add(key)) {
+                    return false;
+                }
+                try {
+                    return containsDynamicSql(fragment, namespace, sqlFragments, expandingRefIds);
+                } finally {
+                    expandingRefIds.remove(key);
+                }
+            }
+        }
+        for (Node child = node.getFirstChild(); child != null; child = child.getNextSibling()) {
+            if (containsDynamicSql(child, namespace, sqlFragments, expandingRefIds)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static String rawChildrenText(
@@ -230,6 +277,39 @@ public final class MyBatisXmlAnalyzer {
                 .relativize(file.toAbsolutePath().normalize())
                 .toString()
                 .replace('\\', '/');
+    }
+
+    private static SourceLocation statementLocation(
+            Path sourceRoot,
+            Path mapperFile,
+            String tagName,
+            String id,
+            SourceLocation fallback) {
+        try {
+            List<String> lines = Files.readAllLines(mapperFile);
+            String path = relativePath(sourceRoot, mapperFile);
+            String tagPrefix = "<" + tagName;
+            String doubleQuotedId = "id=\"" + id + "\"";
+            String singleQuotedId = "id='" + id + "'";
+            for (int lineIndex = 0; lineIndex < lines.size(); lineIndex++) {
+                String line = lines.get(lineIndex);
+                int tagColumn = line.indexOf(tagPrefix);
+                if (tagColumn >= 0) {
+                    StringBuilder startTag = new StringBuilder(line.substring(tagColumn));
+                    for (int tagLineIndex = lineIndex + 1;
+                            startTag.indexOf(">") < 0 && tagLineIndex < lines.size();
+                            tagLineIndex++) {
+                        startTag.append('\n').append(lines.get(tagLineIndex));
+                    }
+                    if (startTag.indexOf(doubleQuotedId) >= 0 || startTag.indexOf(singleQuotedId) >= 0) {
+                        return new SourceLocation(path, lineIndex + 1, tagColumn + 1);
+                    }
+                }
+            }
+        } catch (IOException ignored) {
+            // Fall back to the mapper location when source text is unavailable.
+        }
+        return fallback;
     }
 
     private record ParsedMapperFile(Path mapperFile, Element root) {

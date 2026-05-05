@@ -18,14 +18,25 @@ public record MyBatisFactContext(
         requireNonBlank(analysisRunId, "analysisRunId");
         requireNonBlank(scopeRunId, "scopeRunId");
         requireNonBlank(scopeKey, "scopeKey");
-        javaSourceRootKey = javaSourceRootKey.replace('\\', '/');
-        resourceSourceRootKey = resourceSourceRootKey.replace('\\', '/');
-        scopeKey = scopeKey.replace('\\', '/');
+        javaSourceRootKey = trimSlashes(javaSourceRootKey);
+        resourceSourceRootKey = trimSlashes(resourceSourceRootKey);
+        scopeKey = trimSlashes(scopeKey);
     }
 
     private static void requireNonBlank(String value, String name) {
         if (value == null || value.isBlank()) {
             throw new IllegalArgumentException(name + " is required");
         }
+    }
+
+    private static String trimSlashes(String value) {
+        String normalized = value.replace('\\', '/');
+        while (normalized.startsWith("/")) {
+            normalized = normalized.substring(1);
+        }
+        while (normalized.endsWith("/")) {
+            normalized = normalized.substring(0, normalized.length() - 1);
+        }
+        return normalized;
     }
 }

@@ -15,6 +15,7 @@ import spoon.reflect.code.CtExpression;
 import spoon.reflect.code.CtInvocation;
 import spoon.reflect.code.CtLiteral;
 import spoon.reflect.code.CtLocalVariable;
+import spoon.reflect.code.CtVariableAccess;
 import spoon.reflect.code.CtVariableRead;
 import spoon.reflect.cu.SourcePosition;
 import spoon.reflect.declaration.CtConstructor;
@@ -88,12 +89,14 @@ public final class JdbcSqlAnalyzer {
             SourceLocation location = location(sourceRoot, invocation.getPosition());
             String ownerName = ownerMethod != null ? ownerMethod.getSimpleName() : "<init>";
             String ownerSignature = ownerSignature(ownerMethod, ownerConstructor);
+            List<JdbcSqlParameterBindingInfo> parameters = parameterBindings(sourceRoot, invocation);
             statements.add(new JdbcSqlStatementInfo(
                     statementId(ownerType, ownerName, ownerSignature, location),
                     ownerType.getQualifiedName(),
                     ownerName,
                     ownerSignature,
                     sql,
+                    parameters,
                     location));
         }
         return new JdbcSqlAnalysisResult(statements, List.of());
@@ -111,6 +114,56 @@ public final class JdbcSqlAnalyzer {
             return typeNames.contains("java.sql.Connection");
         }
         return typeNames.stream().anyMatch(JdbcSqlAnalyzer::isJdbcStatementType);
+    }
+
+    private static List<JdbcSqlParameterBindingInfo> parameterBindings(Path sourceRoot, CtInvocation<?> prepareInvocation) {
+        CtLocalVariable<?> statementVariable = prepareInvocation.getParent(CtLocalVariable.class);
+        if (statementVariable == null || statementVariable.getDefaultExpression() != prepareInvocation) {
+            return List.of();
+        }
+        String statementVariableName = statementVariable.getSimpleName();
+        CtMethod<?> method = prepareInvocation.getParent(CtMethod.class);
+        CtConstructor<?> constructor = method == null ? prepareInvocation.getParent(CtConstructor.class) : null;
+        spoon.reflect.declaration.CtElement bodyOwner = method == null ? constructor : method;
+        if (bodyOwner == null) {
+            return List.of();
+        }
+
+        List<JdbcSqlParameterBindingInfo> bindings = new ArrayList<>();
+        for (CtInvocation<?> invocation : bodyOwner.getElements(new TypeFilter<>(CtInvocation.class))) {
+            if (!isParameterBindingInvocation(invocation, statementVariableName)) {
+                continue;
+            }
+            Integer index = parameterIndex(invocation.getArguments().get(0));
+            if (index == null) {
+                continue;
+            }
+            SourceLocation location = location(sourceRoot, invocation.getPosition());
+            bindings.add(new JdbcSqlParameterBindingInfo(
+                    index,
+                    invocation.getExecutable().getSimpleName(),
+                    location));
+        }
+        return bindings;
+    }
+
+    private static boolean isParameterBindingInvocation(CtInvocation<?> invocation, String statementVariableName) {
+        String methodName = invocation.getExecutable().getSimpleName();
+        if (!methodName.startsWith("set") || invocation.getArguments().size() < 2) {
+            return false;
+        }
+        if (!(invocation.getTarget() instanceof CtVariableAccess<?> target)) {
+            return false;
+        }
+        return target.getVariable() != null && statementVariableName.equals(target.getVariable().getSimpleName());
+    }
+
+    private static Integer parameterIndex(CtExpression<?> expression) {
+        if (expression instanceof CtLiteral<?> literal && literal.getValue() instanceof Number number) {
+            int value = number.intValue();
+            return value > 0 ? value : null;
+        }
+        return null;
     }
 
     private static boolean isJdbcStatementType(String typeName) {

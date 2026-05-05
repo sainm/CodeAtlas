@@ -77,6 +77,46 @@ public final class JdbcSqlFactMapper {
         }
         evidenceByKey.putIfAbsent(evidence.evidenceKey(), evidence);
         facts.add(fact);
+        for (JdbcSqlParameterBindingInfo parameter : statement.parameters()) {
+            addParameterFact(facts, factKeys, evidenceByKey, context, statement, parameter);
+        }
+    }
+
+    private static void addParameterFact(
+            List<FactRecord> facts,
+            Set<String> factKeys,
+            Map<String, Evidence> evidenceByKey,
+            JdbcSqlFactContext context,
+            JdbcSqlStatementInfo statement,
+            JdbcSqlParameterBindingInfo parameter) {
+        Evidence evidence = Evidence.create(
+                ANALYZER_ID,
+                context.scopeKey(),
+                parameter.location().relativePath(),
+                "line:" + parameter.location().line(),
+                1,
+                SourceType.SQL);
+        FactRecord fact = FactRecord.create(
+                List.of(context.javaSourceRootKey()),
+                sqlStatementId(context, statement),
+                sqlParameterId(context, statement, parameter),
+                "HAS_PARAM",
+                parameter.binderMethodName(),
+                context.projectId(),
+                context.snapshotId(),
+                context.analysisRunId(),
+                context.scopeRunId(),
+                ANALYZER_ID,
+                context.scopeKey(),
+                evidence.evidenceKey(),
+                Confidence.CERTAIN,
+                100,
+                SourceType.SQL);
+        if (!factKeys.add(fact.factKey())) {
+            return;
+        }
+        evidenceByKey.putIfAbsent(evidence.evidenceKey(), evidence);
+        facts.add(fact);
     }
 
     private static String methodId(JdbcSqlFactContext context, JdbcSqlStatementInfo statement) {
@@ -89,6 +129,15 @@ public final class JdbcSqlFactMapper {
         return "sql-statement://" + context.projectId() + "/" + context.moduleKey() + "/"
                 + context.javaSourceRootKey() + "/" + stripSourceRoot(context.javaSourceRootKey(), statement.location().relativePath())
                 + "#" + statement.statementId();
+    }
+
+    private static String sqlParameterId(
+            JdbcSqlFactContext context,
+            JdbcSqlStatementInfo statement,
+            JdbcSqlParameterBindingInfo parameter) {
+        return "sql-param://" + context.projectId() + "/" + context.moduleKey() + "/"
+                + context.javaSourceRootKey() + "/" + stripSourceRoot(context.javaSourceRootKey(), statement.location().relativePath())
+                + "#" + statement.statementId() + ":param[" + parameter.index() + "]";
     }
 
     private static String stripSourceRoot(String sourceRoot, String path) {

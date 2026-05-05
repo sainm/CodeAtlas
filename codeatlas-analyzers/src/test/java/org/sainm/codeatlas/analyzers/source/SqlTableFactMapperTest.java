@@ -15,6 +15,9 @@ class SqlTableFactMapperTest {
                 List.of(
                         new SqlTableAccessInfo("com.acme.UserMapper.find", "users", SqlTableAccessKind.READ, location),
                         new SqlTableAccessInfo("com.acme.UserMapper.update", "users", SqlTableAccessKind.WRITE, true, location)),
+                List.of(
+                        new SqlColumnAccessInfo("com.acme.UserMapper.find", "users", "id", SqlTableAccessKind.READ, location),
+                        new SqlColumnAccessInfo("com.acme.UserMapper.update", "users", "name", SqlTableAccessKind.WRITE, location)),
                 List.of());
 
         JavaSourceFactBatch batch = SqlTableFactMapper.defaults().map(
@@ -40,6 +43,16 @@ class SqlTableFactMapperTest {
                 "sql-statement://shop/_root/src/main/resources/com/acme/UserMapper.xml#com.acme.UserMapper.update",
                 "db-table://shop/mainDs/public/users",
                 Confidence.POSSIBLE);
+        assertFact(batch,
+                "READS_COLUMN",
+                "sql-statement://shop/_root/src/main/resources/com/acme/UserMapper.xml#com.acme.UserMapper.find",
+                "db-column://shop/mainDs/public/users#id",
+                Confidence.CERTAIN);
+        assertFact(batch,
+                "WRITES_COLUMN",
+                "sql-statement://shop/_root/src/main/resources/com/acme/UserMapper.xml#com.acme.UserMapper.update",
+                "db-column://shop/mainDs/public/users#name",
+                Confidence.CERTAIN);
     }
 
     private static void assertFact(

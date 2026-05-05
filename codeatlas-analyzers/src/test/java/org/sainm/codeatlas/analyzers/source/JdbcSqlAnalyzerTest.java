@@ -123,6 +123,39 @@ class JdbcSqlAnalyzerTest {
         assertTrue(result.statements().isEmpty());
     }
 
+    @Test
+    void extractsPreparedStatementParameterBindings() throws IOException {
+        write("src/main/java/com/acme/UserRepository.java", """
+                package com.acme;
+
+                import java.sql.Connection;
+                import java.sql.PreparedStatement;
+                import java.sql.SQLException;
+
+                class UserRepository {
+                    void load(Connection connection, String name) throws SQLException {
+                        PreparedStatement statement = connection.prepareStatement("select * from users where id = ? and name = ?");
+                        statement.setLong(1, 42L);
+                        statement.setString(2, name);
+                    }
+                }
+                """);
+
+        JdbcSqlAnalysisResult result = JdbcSqlAnalyzer.defaults().analyze(
+                tempDir,
+                List.of(tempDir.resolve("src/main/java/com/acme/UserRepository.java")));
+
+        assertTrue(result.diagnostics().isEmpty());
+        assertEquals(1, result.statements().size());
+        assertEquals(2, result.statements().getFirst().parameters().size());
+        assertTrue(result.statements().getFirst().parameters().stream()
+                .anyMatch(parameter -> parameter.index() == 1
+                        && parameter.binderMethodName().equals("setLong")));
+        assertTrue(result.statements().getFirst().parameters().stream()
+                .anyMatch(parameter -> parameter.index() == 2
+                        && parameter.binderMethodName().equals("setString")));
+    }
+
     private void write(String relativePath, String content) throws IOException {
         Path file = tempDir.resolve(relativePath);
         Files.createDirectories(file.getParent());

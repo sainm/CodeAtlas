@@ -33,12 +33,15 @@ public final class SqlTableFactMapper {
         Set<String> factKeys = new HashSet<>();
         Map<String, Evidence> evidenceByKey = new LinkedHashMap<>();
         for (SqlTableAccessInfo access : tables.tableAccesses()) {
-            addFact(facts, factKeys, evidenceByKey, context, access);
+            addTableFact(facts, factKeys, evidenceByKey, context, access);
+        }
+        for (SqlColumnAccessInfo access : tables.columnAccesses()) {
+            addColumnFact(facts, factKeys, evidenceByKey, context, access);
         }
         return new JavaSourceFactBatch(facts, List.copyOf(evidenceByKey.values()));
     }
 
-    private static void addFact(
+    private static void addTableFact(
             List<FactRecord> facts,
             Set<String> factKeys,
             Map<String, Evidence> evidenceByKey,
@@ -74,6 +77,42 @@ public final class SqlTableFactMapper {
         facts.add(fact);
     }
 
+    private static void addColumnFact(
+            List<FactRecord> facts,
+            Set<String> factKeys,
+            Map<String, Evidence> evidenceByKey,
+            SqlTableFactContext context,
+            SqlColumnAccessInfo access) {
+        Evidence evidence = Evidence.create(
+                ANALYZER_ID,
+                context.scopeKey(),
+                access.location().relativePath(),
+                "line:" + access.location().line(),
+                1,
+                SourceType.SQL);
+        FactRecord fact = FactRecord.create(
+                List.of(context.sourceRootKey()),
+                sqlStatementId(context, access.statementId(), access.location()),
+                dbColumnId(context, access.tableName(), access.columnName()),
+                columnRelationName(access.kind()),
+                "sql-column",
+                context.projectId(),
+                context.snapshotId(),
+                context.analysisRunId(),
+                context.scopeRunId(),
+                ANALYZER_ID,
+                context.scopeKey(),
+                evidence.evidenceKey(),
+                Confidence.CERTAIN,
+                100,
+                SourceType.SQL);
+        if (!factKeys.add(fact.factKey())) {
+            return;
+        }
+        evidenceByKey.putIfAbsent(evidence.evidenceKey(), evidence);
+        facts.add(fact);
+    }
+
     private static String relationName(SqlTableAccessKind kind) {
         return switch (kind) {
             case READ -> "READS_TABLE";
@@ -81,15 +120,31 @@ public final class SqlTableFactMapper {
         };
     }
 
+    private static String columnRelationName(SqlTableAccessKind kind) {
+        return switch (kind) {
+            case READ -> "READS_COLUMN";
+            case WRITE -> "WRITES_COLUMN";
+        };
+    }
+
     private static String sqlStatementId(SqlTableFactContext context, SqlTableAccessInfo access) {
+        return sqlStatementId(context, access.statementId(), access.location());
+    }
+
+    private static String sqlStatementId(SqlTableFactContext context, String statementId, SourceLocation location) {
         return "sql-statement://" + context.projectId() + "/" + context.moduleKey() + "/"
-                + context.sourceRootKey() + "/" + stripSourceRoot(context.sourceRootKey(), access.location().relativePath())
-                + "#" + access.statementId();
+                + context.sourceRootKey() + "/" + stripSourceRoot(context.sourceRootKey(), location.relativePath())
+                + "#" + statementId;
     }
 
     private static String dbTableId(SqlTableFactContext context, String tableName) {
         return "db-table://" + context.projectId() + "/" + context.datasourceKey() + "/"
                 + context.schemaName() + "/" + tableName;
+    }
+
+    private static String dbColumnId(SqlTableFactContext context, String tableName, String columnName) {
+        return "db-column://" + context.projectId() + "/" + context.datasourceKey() + "/"
+                + context.schemaName() + "/" + tableName + "#" + columnName;
     }
 
     private static String stripSourceRoot(String sourceRoot, String path) {

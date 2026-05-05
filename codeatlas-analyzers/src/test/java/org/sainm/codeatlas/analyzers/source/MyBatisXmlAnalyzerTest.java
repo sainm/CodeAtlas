@@ -181,6 +181,105 @@ class MyBatisXmlAnalyzerTest {
                 && access.tableName().equals("orders")));
     }
 
+    @Test
+    void doesNotResolveUnqualifiedIncludesFromOtherNamespaces() throws IOException {
+        write("src/main/resources/com/acme/CommonMapper.xml", """
+                <mapper namespace="com.acme.CommonMapper">
+                  <sql id="fromTable">from orders</sql>
+                </mapper>
+                """);
+        write("src/main/resources/com/acme/UserMapper.xml", """
+                <mapper namespace="com.acme.UserMapper">
+                  <select id="find">
+                    select *
+                    <include refid="fromTable"/>
+                  </select>
+                </mapper>
+                """);
+
+        MyBatisXmlAnalysisResult xml = MyBatisXmlAnalyzer.defaults().analyze(
+                tempDir,
+                List.of(
+                        tempDir.resolve("src/main/resources/com/acme/CommonMapper.xml"),
+                        tempDir.resolve("src/main/resources/com/acme/UserMapper.xml")));
+        SqlTableAnalysisResult tables = SqlTableAnalyzer.defaults().analyze(xml.sqlStatementSources());
+
+        assertTrue(tables.tableAccesses().stream().noneMatch(access -> access.statementId().equals("com.acme.UserMapper.find")
+                && access.tableName().equals("orders")));
+    }
+
+    @Test
+    void marksParseableDynamicSqlTableAccessesAsConservative() throws IOException {
+        write("src/main/resources/com/acme/UserMapper.xml", """
+                <mapper namespace="com.acme.UserMapper">
+                  <select id="search">
+                    select u.id
+                    from users u
+                    <if test="includeOrders">
+                      join orders o on o.user_id = u.id
+                    </if>
+                  </select>
+                </mapper>
+                """);
+
+        MyBatisXmlAnalysisResult xml = MyBatisXmlAnalyzer.defaults().analyze(
+                tempDir,
+                List.of(tempDir.resolve("src/main/resources/com/acme/UserMapper.xml")));
+        SqlTableAnalysisResult tables = SqlTableAnalyzer.defaults().analyze(xml.sqlStatementSources());
+
+        assertTrue(tables.diagnostics().isEmpty());
+        assertTrue(tables.tableAccesses().stream().anyMatch(access -> access.statementId().equals("com.acme.UserMapper.search")
+                && access.tableName().equals("orders")
+                && access.kind() == SqlTableAccessKind.READ
+                && access.conservativeFallback()));
+    }
+
+    @Test
+    void recordsStatementLineNumbers() throws IOException {
+        write("src/main/resources/com/acme/UserMapper.xml", """
+                <mapper namespace="com.acme.UserMapper">
+
+                  <select id="find">
+                    select * from users
+                  </select>
+
+                  <update id="updateName">
+                    update users set name = #{name}
+                  </update>
+                </mapper>
+                """);
+
+        MyBatisXmlAnalysisResult xml = MyBatisXmlAnalyzer.defaults().analyze(
+                tempDir,
+                List.of(tempDir.resolve("src/main/resources/com/acme/UserMapper.xml")));
+
+        assertTrue(xml.statements().stream().anyMatch(statement -> statement.id().equals("find")
+                && statement.location().line() == 3));
+        assertTrue(xml.statements().stream().anyMatch(statement -> statement.id().equals("updateName")
+                && statement.location().line() == 7));
+    }
+
+    @Test
+    void recordsStatementLineNumbersForMultilineStartTags() throws IOException {
+        write("src/main/resources/com/acme/UserMapper.xml", """
+                <mapper namespace="com.acme.UserMapper">
+                  <select
+                      id="find"
+                      resultType="com.acme.User">
+                    select * from users
+                  </select>
+                </mapper>
+                """);
+
+        MyBatisXmlAnalysisResult xml = MyBatisXmlAnalyzer.defaults().analyze(
+                tempDir,
+                List.of(tempDir.resolve("src/main/resources/com/acme/UserMapper.xml")));
+
+        assertTrue(xml.statements().stream().anyMatch(statement -> statement.id().equals("find")
+                && statement.location().line() == 2
+                && statement.location().column() == 3));
+    }
+
     private void write(String relativePath, String content) throws IOException {
         Path file = tempDir.resolve(relativePath);
         Files.createDirectories(file.getParent());

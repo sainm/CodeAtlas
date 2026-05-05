@@ -1,9 +1,11 @@
 package org.sainm.codeatlas.analyzers.source;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -20,12 +22,20 @@ import net.sf.jsqlparser.util.TablesNamesFinder;
 
 public final class SqlTableAnalyzer {
     private static final Pattern MYBATIS_PARAMETER = Pattern.compile("[#$]\\{[^}]+}");
-    private static final Pattern XML_TAG = Pattern.compile("<[^>]+>");
+    private static final Pattern XML_TAG = Pattern.compile("</?[A-Za-z][^>]*>");
     private static final Pattern SELECT_TABLE = Pattern.compile(
             "(?i)\\b(?:from|join)\\s+([A-Za-z_][A-Za-z0-9_.$]*)");
     private static final Pattern UPDATE_TABLE = Pattern.compile("(?i)\\bupdate\\s+([A-Za-z_][A-Za-z0-9_.$]*)");
     private static final Pattern INSERT_TABLE = Pattern.compile("(?i)\\binsert\\s+into\\s+([A-Za-z_][A-Za-z0-9_.$]*)");
     private static final Pattern DELETE_TABLE = Pattern.compile("(?i)\\bdelete\\s+from\\s+([A-Za-z_][A-Za-z0-9_.$]*)");
+    private static final Pattern TABLE_ALIAS = Pattern.compile(
+            "(?i)\\b(?:from|join)\\s+([A-Za-z_][A-Za-z0-9_.$]*)(?:\\s+(?:as\\s+)?([A-Za-z_][A-Za-z0-9_]*))?");
+    private static final Pattern QUALIFIED_COLUMN = Pattern.compile("\\b([A-Za-z_][A-Za-z0-9_]*)\\.([A-Za-z_][A-Za-z0-9_]*)\\b");
+    private static final Pattern SELECT_LIST = Pattern.compile("(?is)^\\s*select\\s+(.*?)\\s+from\\s+");
+    private static final Pattern INSERT_COLUMNS = Pattern.compile(
+            "(?is)^\\s*insert\\s+into\\s+[A-Za-z_][A-Za-z0-9_.$]*\\s*\\((.*?)\\)");
+    private static final Pattern UPDATE_SET = Pattern.compile(
+            "(?is)^\\s*update\\s+([A-Za-z_][A-Za-z0-9_.$]*)\\s+(?:[A-Za-z_][A-Za-z0-9_]*\\s+)?set\\s+(.*?)(?:\\s+where\\s+|$)");
 
     private SqlTableAnalyzer() {
     }
@@ -39,12 +49,14 @@ public final class SqlTableAnalyzer {
             return new SqlTableAnalysisResult(List.of(), List.of());
         }
         List<SqlTableAccessInfo> tableAccesses = new ArrayList<>();
+        List<SqlColumnAccessInfo> columnAccesses = new ArrayList<>();
         List<JavaAnalysisDiagnostic> diagnostics = new ArrayList<>();
         for (SqlStatementSourceInfo source : statements) {
             String normalizedSql = normalizeSql(source.sql());
             try {
                 Statement statement = CCJSqlParserUtil.parse(normalizedSql);
                 tableAccesses.addAll(tableAccesses(source, statement, normalizedSql));
+                columnAccesses.addAll(columnAccesses(source, statement, normalizedSql));
             } catch (JSQLParserException exception) {
                 List<SqlTableAccessInfo> fallbackTables = fallbackTableAccesses(source, normalizedSql);
                 if (fallbackTables.isEmpty()) {
@@ -56,7 +68,7 @@ public final class SqlTableAnalyzer {
                 }
             }
         }
-        return new SqlTableAnalysisResult(tableAccesses, diagnostics);
+        return new SqlTableAnalysisResult(tableAccesses, columnAccesses, diagnostics);
     }
 
     private static List<SqlTableAccessInfo> tableAccesses(
@@ -64,13 +76,21 @@ public final class SqlTableAnalyzer {
             Statement statement,
             String normalizedSql) {
         if (statement instanceof Select) {
-            return tableAccesses(source, tableNames(statement), SqlTableAccessKind.READ, false);
+            return tableAccesses(source, tableNames(statement), SqlTableAccessKind.READ, source.conservativeFallback());
         }
         if (statement instanceof Insert insert) {
             List<SqlTableAccessInfo> result = new ArrayList<>();
-            result.addAll(tableAccesses(source, tableNames(insert.getTable()), SqlTableAccessKind.WRITE, false));
+            result.addAll(tableAccesses(
+                    source,
+                    tableNames(insert.getTable()),
+                    SqlTableAccessKind.WRITE,
+                    source.conservativeFallback()));
             if (insert.getSelect() != null) {
-                result.addAll(tableAccesses(source, tableNames(insert.getSelect()), SqlTableAccessKind.READ, false));
+                result.addAll(tableAccesses(
+                        source,
+                        tableNames(insert.getSelect()),
+                        SqlTableAccessKind.READ,
+                        source.conservativeFallback()));
             }
             return result;
         }
@@ -83,17 +103,175 @@ public final class SqlTableAnalyzer {
         return List.of();
     }
 
+    private static List<SqlColumnAccessInfo> columnAccesses(
+            SqlStatementSourceInfo source,
+            Statement statement,
+            String normalizedSql) {
+        if (source.conservativeFallback()) {
+            return List.of();
+        }
+        if (statement instanceof Select) {
+            return readColumnAccesses(source, normalizedSql);
+        }
+        if (statement instanceof Insert insert) {
+            List<SqlColumnAccessInfo> result = new ArrayList<>(
+                    insertColumnAccesses(source, normalizedSql, tableNames(insert.getTable())));
+            if (insert.getSelect() != null) {
+                result.addAll(readColumnAccesses(source, normalizedSql));
+            }
+            return result;
+        }
+        if (statement instanceof Update update) {
+            List<SqlColumnAccessInfo> result = new ArrayList<>(
+                    updateColumnAccesses(source, normalizedSql, tableNames(update.getTable())));
+            result.addAll(readColumnAccesses(source, normalizedSql));
+            return result;
+        }
+        if (statement instanceof Delete) {
+            return readColumnAccesses(source, normalizedSql);
+        }
+        return List.of();
+    }
+
+    private static List<SqlColumnAccessInfo> readColumnAccesses(SqlStatementSourceInfo source, String sql) {
+        Map<String, String> aliases = tableAliases(sql);
+        List<String> singleTable = aliases.values().stream().distinct().toList();
+        Set<ColumnKey> columns = new LinkedHashSet<>();
+        Matcher qualifiedMatcher = QUALIFIED_COLUMN.matcher(sql);
+        while (qualifiedMatcher.find()) {
+            String qualifier = qualifiedMatcher.group(1);
+            String tableName = aliases.get(qualifier);
+            if (tableName != null) {
+                columns.add(new ColumnKey(tableName, qualifiedMatcher.group(2)));
+            }
+        }
+        Matcher selectMatcher = SELECT_LIST.matcher(sql);
+        if (selectMatcher.find() && singleTable.size() == 1) {
+            for (String columnName : unqualifiedColumns(selectMatcher.group(1))) {
+                columns.add(new ColumnKey(singleTable.getFirst(), columnName));
+            }
+        }
+        return columnAccesses(source, columns, SqlTableAccessKind.READ);
+    }
+
+    private static List<SqlColumnAccessInfo> insertColumnAccesses(
+            SqlStatementSourceInfo source,
+            String sql,
+            List<String> writtenTables) {
+        if (writtenTables.size() != 1) {
+            return List.of();
+        }
+        Matcher matcher = INSERT_COLUMNS.matcher(sql);
+        if (!matcher.find()) {
+            return List.of();
+        }
+        Set<ColumnKey> columns = new LinkedHashSet<>();
+        for (String columnName : commaSeparatedColumns(matcher.group(1))) {
+            columns.add(new ColumnKey(writtenTables.getFirst(), columnName));
+        }
+        return columnAccesses(source, columns, SqlTableAccessKind.WRITE);
+    }
+
+    private static List<SqlColumnAccessInfo> updateColumnAccesses(
+            SqlStatementSourceInfo source,
+            String sql,
+            List<String> writtenTables) {
+        if (writtenTables.size() != 1) {
+            return List.of();
+        }
+        Matcher matcher = UPDATE_SET.matcher(sql);
+        if (!matcher.find()) {
+            return List.of();
+        }
+        Set<ColumnKey> columns = new LinkedHashSet<>();
+        for (String assignment : matcher.group(2).split(",")) {
+            int equals = assignment.indexOf('=');
+            String left = equals >= 0 ? assignment.substring(0, equals) : assignment;
+            String columnName = stripQualifier(left.trim());
+            if (!columnName.isBlank()) {
+                columns.add(new ColumnKey(writtenTables.getFirst(), columnName));
+            }
+        }
+        return columnAccesses(source, columns, SqlTableAccessKind.WRITE);
+    }
+
+    private static Map<String, String> tableAliases(String sql) {
+        Map<String, String> aliases = new LinkedHashMap<>();
+        Matcher matcher = TABLE_ALIAS.matcher(sql);
+        while (matcher.find()) {
+            String tableName = matcher.group(1);
+            aliases.put(simpleName(tableName), tableName);
+            if (matcher.group(2) != null && !matcher.group(2).isBlank()) {
+                aliases.put(matcher.group(2), tableName);
+            }
+        }
+        return aliases;
+    }
+
+    private static List<String> unqualifiedColumns(String selectList) {
+        if (selectList.contains("*")) {
+            return List.of();
+        }
+        return commaSeparatedColumns(selectList).stream()
+                .map(SqlTableAnalyzer::stripAlias)
+                .map(SqlTableAnalyzer::stripQualifier)
+                .filter(column -> !column.isBlank())
+                .toList();
+    }
+
+    private static List<String> commaSeparatedColumns(String value) {
+        List<String> result = new ArrayList<>();
+        for (String token : value.split(",")) {
+            String columnName = stripQualifier(token.trim());
+            if (!columnName.isBlank() && columnName.matches("[A-Za-z_][A-Za-z0-9_]*")) {
+                result.add(columnName);
+            }
+        }
+        return result;
+    }
+
+    private static String stripAlias(String expression) {
+        return expression.replaceFirst("(?i)\\s+as\\s+[A-Za-z_][A-Za-z0-9_]*$", "")
+                .replaceFirst("(?i)\\s+[A-Za-z_][A-Za-z0-9_]*$", "");
+    }
+
+    private static String stripQualifier(String value) {
+        int dot = value.lastIndexOf('.');
+        return dot >= 0 ? value.substring(dot + 1).trim() : value.trim();
+    }
+
+    private static String simpleName(String tableName) {
+        int dot = tableName.lastIndexOf('.');
+        return dot >= 0 ? tableName.substring(dot + 1) : tableName;
+    }
+
+    private static List<SqlColumnAccessInfo> columnAccesses(
+            SqlStatementSourceInfo source,
+            Iterable<ColumnKey> columns,
+            SqlTableAccessKind kind) {
+        List<SqlColumnAccessInfo> result = new ArrayList<>();
+        for (ColumnKey column : columns) {
+            result.add(new SqlColumnAccessInfo(
+                    source.statementId(),
+                    column.tableName(),
+                    column.columnName(),
+                    kind,
+                    source.location()));
+        }
+        return result;
+    }
+
     private static List<SqlTableAccessInfo> writeTableAccesses(
             SqlStatementSourceInfo source,
             String normalizedSql,
             List<String> writtenTables,
             Statement statement) {
         List<SqlTableAccessInfo> result = new ArrayList<>(
-                tableAccesses(source, writtenTables, SqlTableAccessKind.WRITE, false));
+                tableAccesses(source, writtenTables, SqlTableAccessKind.WRITE, source.conservativeFallback()));
         Set<String> readTables = new LinkedHashSet<>(tableNames(statement));
         readTables.addAll(matches(SELECT_TABLE, normalizedSql));
         readTables.removeAll(writtenTables);
-        result.addAll(tableAccesses(source, readTables, SqlTableAccessKind.READ, false));
+        result.addAll(tableAccesses(source, readTables, SqlTableAccessKind.READ, source.conservativeFallback()));
         return result;
     }
 
@@ -183,5 +361,8 @@ public final class SqlTableAnalyzer {
             }
         }
         return result;
+    }
+
+    private record ColumnKey(String tableName, String columnName) {
     }
 }

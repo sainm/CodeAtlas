@@ -3,7 +3,15 @@ package org.sainm.codeatlas.analyzers.source;
 public record SqlStatementSourceInfo(
         String statementId,
         String sql,
+        boolean conservativeFallback,
         SourceLocation location) {
+    public SqlStatementSourceInfo(
+            String statementId,
+            String sql,
+            SourceLocation location) {
+        this(statementId, sql, false, location);
+    }
+
     public SqlStatementSourceInfo {
         if (statementId == null || statementId.isBlank()) {
             throw new IllegalArgumentException("statementId is required");

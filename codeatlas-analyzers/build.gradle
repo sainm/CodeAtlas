@@ -2,6 +2,7 @@ dependencies {
     api project(':codeatlas-facts')
     implementation 'fr.inria.gforge.spoon:spoon-core:11.3.0'
     implementation 'com.github.jsqlparser:jsqlparser:5.3'
+    implementation 'org.eclipse.jgit:org.eclipse.jgit:6.10.0.202406032230-r'
     implementation 'org.ow2.asm:asm:9.9.1'
     runtimeOnly platform(org.springframework.boot.gradle.plugin.SpringBootPlugin.BOM_COORDINATES)
     runtimeOnly('org.apache.tomcat.embed:tomcat-embed-jasper') {

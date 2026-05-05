@@ -18,6 +18,7 @@ public record MyBatisXmlAnalysisResult(
                 .map(statement -> new SqlStatementSourceInfo(
                         statement.namespace() + "." + statement.id(),
                         statement.sql(),
+                        statement.conservativeTableAccess(),
                         statement.location()))
                 .toList();
     }

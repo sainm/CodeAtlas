@@ -143,159 +143,159 @@
 - [x] 解析 JDBC SQL literals 和简单 constant concatenation。
 - [x] 输出 SqlStatement -READS_TABLE/WRITES_TABLE-> DbTable。
 - [x] 输出 JDBC method -> SqlStatement -> DbTable。
-- [ ] 输出 PreparedStatement parameter binding facts。
-- [ ] 增加 JPA entity table 和 field column mapping。
-- [ ] 增加字段级 MAPS_TO_COLUMN、READS_COLUMN、WRITES_COLUMN。
-- [ ] 增加 DB table 和 column impact queries。
-- [ ] 增加 MyBatis、JDBC、dynamic SQL、JPA、table impact、field impact 测试。
+- [x] 输出 PreparedStatement parameter binding facts。
+- [x] 增加 JPA entity table 和 field column mapping。
+- [x] 增加字段级 MAPS_TO_COLUMN、READS_COLUMN、WRITES_COLUMN。
+- [x] 增加 DB table 和 column impact queries。
+- [x] 增加 MyBatis、JDBC、dynamic SQL、JPA、table impact、field impact 测试。
 
 ## 9. 影响分析
 
-- [ ] 使用 JGit 读取 Git branch、commit、diff、changed files 和 hunks。
-- [ ] 将 changed files 解析到 class、method、JSP、SQL、config、table symbols。
-- [ ] 实现从 changed method 出发的 caller traversal。
-- [ ] 实现从 entrypoints 出发的 downstream traversal。
-- [ ] 实现 JSP/API -> Action/Controller -> Service -> DAO/Mapper -> SQL/table path search。
+- [x] 使用 JGit 读取 Git branch、commit、diff、changed files 和 hunks。
+- [x] 将 changed files 解析到 class、method、JSP、SQL、config、table symbols。
+- [x] 实现从 changed method 出发的 caller traversal。
+- [x] 实现从 entrypoints 出发的 downstream traversal。
+- [x] 实现 JSP/API -> Action/Controller -> Service -> DAO/Mapper -> SQL/table path search。
 - [ ] 默认使用 Neo4j active facts 作为事实源。
-- [ ] 增加 JVM primitive adjacency cache，服务热点 caller/callee edges。
-- [ ] 实现按 projectId、snapshotId、relation group 分片的 cache。
-- [ ] 实现 cache invalidation 和 Neo4j fallback。
-- [ ] 构建 Fast Impact Report JSON。
-- [ ] 构建 Markdown report exporter。
-- [ ] 报告包含 affected symbols、path steps、risk、confidence、sourceType、evidenceKeys、truncation 和 suggested tests。
-- [ ] 增加 benchmark profile 下 10 到 30 秒 fast report 回归 guard。
-- [ ] 增加 deleted relationships、changed snapshots、AI disabled reports、truncation 测试。
+- [x] 增加 JVM primitive adjacency cache，服务热点 caller/callee edges。
+- [x] 实现按 projectId、snapshotId、relation group 分片的 cache。
+- [x] 实现 cache invalidation 和 Neo4j fallback。
+- [x] 构建 Fast Impact Report JSON。
+- [x] 构建 Markdown report exporter。
+- [x] 报告包含 affected symbols、path steps、risk、confidence、sourceType、evidenceKeys、truncation 和 suggested tests。
+- [x] 增加 benchmark profile 下 10 到 30 秒 fast report 回归 guard。
+- [x] 增加 deleted relationships、changed snapshots、AI disabled reports、truncation 测试。
 
 ## 10. 变量追踪
 
-- [ ] 实现 method-local def-use。
-- [ ] 按源码顺序传播 simple local aliases。
-- [ ] 追踪 request.getParameter、getAttribute、setAttribute。
-- [ ] 追踪 ActionForm 和 DynaActionForm property reads。
-- [ ] 追踪 getter/setter 简单传播。
-- [ ] 为 request-derived arguments 输出 PASSES_PARAM。
-- [ ] 追踪 Controller/Action -> Service -> DAO/Mapper parameter flow。
-- [ ] 追踪 JSP input -> request parameter -> Java parameter source paths。
-- [ ] 追踪 Java parameter -> SQL parameter/table sink paths。
-- [ ] 增加 variable trace source、sink 和 combined reports。
-- [ ] 增加 alias chains、assignment order、string transformations、ActionForm、JSP sources、SQL sinks 测试。
+- [x] 实现 method-local def-use。
+- [x] 按源码顺序传播 simple local aliases。
+- [x] 追踪 request.getParameter、getAttribute、setAttribute。
+- [x] 追踪 ActionForm 和 DynaActionForm property reads。
+- [x] 追踪 getter/setter 简单传播。
+- [x] 为 request-derived arguments 输出 PASSES_PARAM。
+- [x] 追踪 Controller/Action -> Service -> DAO/Mapper parameter flow。
+- [x] 追踪 JSP input -> request parameter -> Java parameter source paths。
+- [x] 追踪 Java parameter -> SQL parameter/table sink paths。
+- [x] 增加 variable trace source、sink 和 combined reports。
+- [x] 增加 alias chains、assignment order、string transformations、ActionForm、JSP sources、SQL sinks 测试。
 
 ## 11. REST API 和 Query Planning
 
-- [ ] 所有 REST API 使用 `/api/v1` 版本前缀；breaking change 进入 `/api/v2`。
-- [ ] 增加 workspaces API。
-- [ ] 增加 projects API。
-- [ ] 增加 import-reviews API。
-- [ ] 增加 analysis-runs API。
-- [ ] 增加 snapshots API。
-- [ ] 增加 project overview endpoint。
-- [ ] 增加 symbol search endpoint。
-- [ ] 增加 caller/callee/path query endpoints。
-- [ ] 增加 impact analysis 和 report endpoints。
-- [ ] 增加 variable trace endpoint。
-- [ ] 增加 db-impact endpoint，覆盖 table/column 到 SQL、Mapper/DAO、Service、入口的 read/write/display/test 分组。
-- [ ] 增加 features endpoint，覆盖 feature.planChange、feature.planAddition 和 ChangePlanReport artifact。
-- [ ] 增加 architecture-health endpoint，输出热点、循环依赖候选、动态解析风险和边界风险。
-- [ ] 增加 JSP backend flow endpoint。
-- [ ] 增加 SQL/table impact endpoint。
-- [ ] 增加 reports endpoint。
-- [ ] 增加 evidence endpoint。
-- [ ] 增加 saved-queries endpoint。
-- [ ] 增加 subscriptions endpoint。
-- [ ] 增加 review-threads endpoint。
-- [ ] 增加 policies endpoint。
-- [ ] 增加 ci-checks endpoint。
-- [ ] 增加 exports endpoint。
-- [ ] 增加 admin endpoint。
-- [ ] 增加 natural-language deterministic query planning endpoint。
-- [ ] 增加 result view contract endpoint。
-- [ ] 查询类 API 默认只读并 pin 到 committed snapshotId；未传 snapshot 时使用 latest committed snapshot，并在响应中返回实际 snapshotId。
-- [ ] 长任务使用 async job，提交请求返回 jobId/reportArtifactId，前端通过轮询或订阅状态获取结果。
-- [ ] 所有列表接口提供分页、排序和最大 limit，超限返回结构化错误。
-- [ ] 对 invalid 或 missing parameters 返回结构化 400 errors。
-- [ ] 错误响应包含 requestId、code、message、details、retryable 和 status。
-- [ ] 删除项目、清理 workspace、重建索引、触发深度分析等写入类管理操作必须使用幂等 key 或明确的 confirm=true 参数。
-- [ ] 增加 project allow-list authorization 和 403 responses。
-- [ ] 增加 local frontend development CORS support。
-- [ ] 为每个 read-only query contract 增加测试。
+- [x] 所有 REST API 使用 `/api/v1` 版本前缀；breaking change 进入 `/api/v2`。
+- [x] 增加 workspaces API。
+- [x] 增加 projects API。
+- [x] 增加 import-reviews API。
+- [x] 增加 analysis-runs API。
+- [x] 增加 snapshots API。
+- [x] 增加 project overview endpoint。
+- [x] 增加 symbol search endpoint。
+- [x] 增加 caller/callee/path query endpoints。
+- [x] 增加 impact analysis 和 report endpoints。
+- [x] 增加 variable trace endpoint。
+- [x] 增加 db-impact endpoint，覆盖 table/column 到 SQL、Mapper/DAO、Service、入口的 read/write/display/test 分组。
+- [x] 增加 features endpoint，覆盖 feature.planChange、feature.planAddition 和 ChangePlanReport artifact。
+- [x] 增加 architecture-health endpoint，输出热点、循环依赖候选、动态解析风险和边界风险。
+- [x] 增加 JSP backend flow endpoint。
+- [x] 增加 SQL/table impact endpoint。
+- [x] 增加 reports endpoint。
+- [x] 增加 evidence endpoint。
+- [x] 增加 saved-queries endpoint。
+- [x] 增加 subscriptions endpoint。
+- [x] 增加 review-threads endpoint。
+- [x] 增加 policies endpoint。
+- [x] 增加 ci-checks endpoint。
+- [x] 增加 exports endpoint。
+- [x] 增加 admin endpoint。
+- [x] 增加 natural-language deterministic query planning endpoint。
+- [x] 增加 result view contract endpoint。
+- [x] 查询类 API 默认只读并 pin 到 committed snapshotId；未传 snapshot 时使用 latest committed snapshot，并在响应中返回实际 snapshotId。
+- [x] 长任务使用 async job，提交请求返回 jobId/reportArtifactId，前端通过轮询或订阅状态获取结果。
+- [x] 所有列表接口提供分页、排序和最大 limit，超限返回结构化错误。
+- [x] 对 invalid 或 missing parameters 返回结构化 400 errors。
+- [x] 错误响应包含 requestId、code、message、details、retryable 和 status。
+- [x] 删除项目、清理 workspace、重建索引、触发深度分析等写入类管理操作必须使用幂等 key 或明确的 confirm=true 参数。
+- [x] 增加 project allow-list authorization 和 403 responses。
+- [x] 增加 local frontend development CORS support。
+- [x] 为每个 read-only query contract 增加测试。
 
 ## 12. UI
 
-- [ ] 采用“任务工作台优先”的首页信息架构，避免默认从图谱或 raw SymbolId 开始。
-- [ ] 构建 project dashboard，展示 capability cards、analysis status、entrypoints、blind spots，并作为默认项目首页的概览区域。
-- [ ] 构建 Task Workbench 三列布局：左侧常用任务/最近报告，中间统一输入和结果摘要，右侧证据/覆盖/盲区面板。
-- [ ] 默认项目首页采用 Project Dashboard + Task Workbench 组合页，Task Workbench 是主操作区，Dashboard 不作为竞争首页。
-- [ ] 构建 global query/search input。
-- [ ] 统一输入支持 Git diff、DB 表/字段、JSP/HTML 页面、Java symbol、变量名和自然语言功能描述。
-- [ ] 构建快捷任务按钮：分析 Git Diff、查 DB 影响、查变量流向、查 JSP/Web Client 链路、规划功能修改、找相似实现。
-- [ ] 构建结果摘要区，展示风险、影响入口、SQL/table、建议测试、Fast/Deep 状态和下一步动作。
-- [ ] 构建 symbol candidate picker。
-- [ ] 多候选时 Candidate Picker 先展示 project/module/datasource、类型、路径、行号、confidence 和 evidence key，禁止自动跨范围选择。
-- [ ] 构建 impact report page。
-- [ ] 构建 graph explorer，支持 caller、callee、combined、entry-to-SQL modes。
-- [ ] 构建 variable trace view，支持 source、sink、all modes。
-- [ ] 构建 JSP/Web Client flow view，展示 JSP/HTML/ClientRequest -> Action/Controller -> Service -> DAO/Mapper -> SQL/table。
-- [ ] 构建 SQL/Table Path View，用于从入口、方法、Mapper 或 SQL 下钻到 SQL/table/column 路径。
-- [ ] 构建 DB Impact View，区分 read/write/display/test impact。
-- [ ] 明确 DB Impact View 是表/字段变更报告页，SQL/Table Path View 是路径探索页，避免两套页面重复表达同一职责。
-- [ ] 构建 Feature Change/Add Plan View，展示必须关注、建议检查、可能相关、建议测试和不确定项。
-- [ ] 构建 Architecture Health View，展示热点、循环依赖候选、动态风险和边界风险。
-- [ ] 构建 evidence panel，展示 file、line、evidence type、snippet metadata、analyzer、sourceType、confidence、raw details。
-- [ ] Evidence Panel 统一显示 analysisBoundary、pending/stale/deep supplement 状态和分析覆盖。
-- [ ] 默认页面隐藏 raw SymbolId 和 raw JSON，只在下钻详情中展示。
-- [ ] 对大结果展示 truncation 和 continuation affordances。
-- [ ] 将 raw JSON 作为下钻详情，而不是 primary view。
-- [ ] 为主流程增加 UI tests 或 browser smoke checks。
+- [x] 采用“任务工作台优先”的首页信息架构，避免默认从图谱或 raw SymbolId 开始。
+- [x] 构建 project dashboard，展示 capability cards、analysis status、entrypoints、blind spots，并作为默认项目首页的概览区域。
+- [x] 构建 Task Workbench 三列布局：左侧常用任务/最近报告，中间统一输入和结果摘要，右侧证据/覆盖/盲区面板。
+- [x] 默认项目首页采用 Project Dashboard + Task Workbench 组合页，Task Workbench 是主操作区，Dashboard 不作为竞争首页。
+- [x] 构建 global query/search input。
+- [x] 统一输入支持 Git diff、DB 表/字段、JSP/HTML 页面、Java symbol、变量名和自然语言功能描述。
+- [x] 构建快捷任务按钮：分析 Git Diff、查 DB 影响、查变量流向、查 JSP/Web Client 链路、规划功能修改、找相似实现。
+- [x] 构建结果摘要区，展示风险、影响入口、SQL/table、建议测试、Fast/Deep 状态和下一步动作。
+- [x] 构建 symbol candidate picker。
+- [x] 多候选时 Candidate Picker 先展示 project/module/datasource、类型、路径、行号、confidence 和 evidence key，禁止自动跨范围选择。
+- [x] 构建 impact report page。
+- [x] 构建 graph explorer，支持 caller、callee、combined、entry-to-SQL modes。
+- [x] 构建 variable trace view，支持 source、sink、all modes。
+- [x] 构建 JSP/Web Client flow view，展示 JSP/HTML/ClientRequest -> Action/Controller -> Service -> DAO/Mapper -> SQL/table。
+- [x] 构建 SQL/Table Path View，用于从入口、方法、Mapper 或 SQL 下钻到 SQL/table/column 路径。
+- [x] 构建 DB Impact View，区分 read/write/display/test impact。
+- [x] 明确 DB Impact View 是表/字段变更报告页，SQL/Table Path View 是路径探索页，避免两套页面重复表达同一职责。
+- [x] 构建 Feature Change/Add Plan View，展示必须关注、建议检查、可能相关、建议测试和不确定项。
+- [x] 构建 Architecture Health View，展示热点、循环依赖候选、动态风险和边界风险。
+- [x] 构建 evidence panel，展示 file、line、evidence type、snippet metadata、analyzer、sourceType、confidence、raw details。
+- [x] Evidence Panel 统一显示 analysisBoundary、pending/stale/deep supplement 状态和分析覆盖。
+- [x] 默认页面隐藏 raw SymbolId 和 raw JSON，只在下钻详情中展示。
+- [x] 对大结果展示 truncation 和 continuation affordances。
+- [x] 将 raw JSON 作为下钻详情，而不是 primary view。
+- [x] 为主流程增加 UI tests 或 browser smoke checks。
 
 ## 13. AI 和 RAG
 
-- [ ] 定义 AI provider abstraction。
-- [ ] 实现 system 和 project AI configuration。
-- [ ] 加密保存 API keys。
-- [ ] 对 source snippets 和 prompt logs 脱敏。
-- [ ] 构建带 source budgets 的 evidence packs。
-- [ ] 实现 AI impact summary、risk explanation、test suggestion prompts。
-- [ ] 确保 AI output 引用 evidence paths。
-- [ ] 定义 AI candidate relation family：AI_ASSISTED_CANDIDATE。
-- [ ] AI candidate 只能进入 AI_ASSISTED_CANDIDATE relation family 或 planning artifact，不写入静态分析 relation family。
-- [ ] AI candidate 必须走 staging schema 校验：identity 存在性、evidenceKey 引用、confidence boundary、project/snapshot 权限和 allowed relation type。
-- [ ] 默认影响路径查询不展开 AI candidate；只有用户打开“包含 AI 候选”或 Feature Planner 需要排序时才使用。
-- [ ] AI candidate 必须携带 createdFromEvidencePackId、expiresAt 或 staleAgainstSnapshot。
-- [ ] 底层 evidence 变化后自动将 AI candidate 标记 stale，不参与 active 确定路径。
-- [ ] AI candidate tombstone 只清理 AI candidate family，不能删除 Spoon/XML/JSP/SQL/Impact Flow facts。
-- [ ] 在 AI disabled 或 failure 时提供 static fallback。
-- [ ] 实现 embedding provider abstraction。
-- [ ] 实现 Neo4j Vector Index v1 contract。
-- [ ] 实现 exact symbol search + vector recall + graph expansion hybrid search。
-- [ ] 召回 historical impact report summaries。
-- [ ] 实现 evidence-backed answer draft。
-- [ ] 增加 AI disabled mode、redaction、evidence citation、hybrid search 测试。
+- [x] 定义 AI provider abstraction。
+- [x] 实现 system 和 project AI configuration。
+- [x] 加密保存 API keys。
+- [x] 对 source snippets 和 prompt logs 脱敏。
+- [x] 构建带 source budgets 的 evidence packs。
+- [x] 实现 AI impact summary、risk explanation、test suggestion prompts。
+- [x] 确保 AI output 引用 evidence paths。
+- [x] 定义 AI candidate relation family：AI_ASSISTED_CANDIDATE。
+- [x] AI candidate 只能进入 AI_ASSISTED_CANDIDATE relation family 或 planning artifact，不写入静态分析 relation family。
+- [x] AI candidate 必须走 staging schema 校验：identity 存在性、evidenceKey 引用、confidence boundary、project/snapshot 权限和 allowed relation type。
+- [x] 默认影响路径查询不展开 AI candidate；只有用户打开“包含 AI 候选”或 Feature Planner 需要排序时才使用。
+- [x] AI candidate 必须携带 createdFromEvidencePackId、expiresAt 或 staleAgainstSnapshot。
+- [x] 底层 evidence 变化后自动将 AI candidate 标记 stale，不参与 active 确定路径。
+- [x] AI candidate tombstone 只清理 AI candidate family，不能删除 Spoon/XML/JSP/SQL/Impact Flow facts。
+- [x] 在 AI disabled 或 failure 时提供 static fallback。
+- [x] 实现 embedding provider abstraction。
+- [x] 实现 Neo4j Vector Index v1 contract。
+- [x] 实现 exact symbol search + vector recall + graph expansion hybrid search。
+- [x] 召回 historical impact report summaries。
+- [x] 实现 evidence-backed answer draft。
+- [x] 增加 AI disabled mode、redaction、evidence citation、hybrid search 测试。
 
 ## 14. MCP 和 Agents
 
-- [ ] 实现 read-only MCP server。
-- [ ] 定义 MCP tool names、resources、prompts。
-- [ ] 暴露 symbol.search、graph.findCallers、graph.findCallees、graph.findImpactPaths、impact.analyzeDiff、db.findCodeImpacts、variable.findImpacts、jsp.findBackendFlow、feature.planChange、feature.planAddition、rag.semanticSearch、rag.answerDraft、report.getImpactReport、project.overview。
-- [ ] 实现 ImpactAnalysisAgent profile。
-- [ ] 实现 DbImpactAgent profile，输出 DbImpactReport，并区分 table 级降级和 column 级确定影响。
-- [ ] 实现 VariableTraceAgent profile。
-- [ ] 实现 VariableImpactAgent profile，输出变量来源、流向和影响范围。
-- [ ] 实现 FeatureChangePlanAgent profile，输出已有功能修改范围、回归建议和 ChangePlanReport。
-- [ ] 实现 FeatureAdditionPlanAgent profile，输出新增功能候选参照、落点建议、风险和测试建议。
-- [ ] 实现 CodeQuestionAgent profile。
-- [ ] 实现 Agent 状态机：CREATED、PLANNING、WAITING_FOR_USER、RUNNING_FAST、FAST_READY、RUNNING_DEEP、COMPLETED、PARTIAL、FAILED、CANCELLED。
-- [ ] Agent 状态字段包含 agentRunId、agentType、projectId、snapshotId、queryId、reportArtifactId、status、currentStep、pendingQuestions、pendingScopes、deepJobIds、partialResults、warnings、errors、cost、createdAt、updatedAt。
-- [ ] Agent 多候选场景返回 Candidate Picker 或追问，不跨 project/module/datasource 自动选择。
-- [ ] Agent 快速报告先返回，深度层完成后生成补充 artifact，并标记原报告 stale/upgrade available。
-- [ ] Agent 失败返回 PARTIAL/FAILED/TRUNCATED/PENDING 和原因，不隐藏已可用结构化结果。
-- [ ] 实现 tool call guard。
-- [ ] 拒绝 out-of-profile tools。
-- [ ] 拒绝 non-read-only tools。
-- [ ] 拒绝 raw Cypher、SQL、file glob、shell command 和 statement-style arguments。
-- [ ] dispatch 前执行 project allow-list。
-- [ ] 增加 fixed-window rate limiting。
-- [ ] 增加 redacted audit log，记录 requestId、principal、projectId、toolName、parameter summary、result count、redaction state、duration、rejection reason。
-- [ ] 确保 agent output 包含 evidence、confidence、sourceType 和 truncation。
+- [x] 实现 read-only MCP server。
+- [x] 定义 MCP tool names、resources、prompts。
+- [x] 暴露 symbol.search、graph.findCallers、graph.findCallees、graph.findImpactPaths、impact.analyzeDiff、db.findCodeImpacts、variable.findImpacts、jsp.findBackendFlow、feature.planChange、feature.planAddition、rag.semanticSearch、rag.answerDraft、report.getImpactReport、project.overview。
+- [x] 实现 ImpactAnalysisAgent profile。
+- [x] 实现 DbImpactAgent profile，输出 DbImpactReport，并区分 table 级降级和 column 级确定影响。
+- [x] 实现 VariableTraceAgent profile。
+- [x] 实现 VariableImpactAgent profile，输出变量来源、流向和影响范围。
+- [x] 实现 FeatureChangePlanAgent profile，输出已有功能修改范围、回归建议和 ChangePlanReport。
+- [x] 实现 FeatureAdditionPlanAgent profile，输出新增功能候选参照、落点建议、风险和测试建议。
+- [x] 实现 CodeQuestionAgent profile。
+- [x] 实现 Agent 状态机：CREATED、PLANNING、WAITING_FOR_USER、RUNNING_FAST、FAST_READY、RUNNING_DEEP、COMPLETED、PARTIAL、FAILED、CANCELLED。
+- [x] Agent 状态字段包含 agentRunId、agentType、projectId、snapshotId、queryId、reportArtifactId、status、currentStep、pendingQuestions、pendingScopes、deepJobIds、partialResults、warnings、errors、cost、createdAt、updatedAt。
+- [x] Agent 多候选场景返回 Candidate Picker 或追问，不跨 project/module/datasource 自动选择。
+- [x] Agent 快速报告先返回，深度层完成后生成补充 artifact，并标记原报告 stale/upgrade available。
+- [x] Agent 失败返回 PARTIAL/FAILED/TRUNCATED/PENDING 和原因，不隐藏已可用结构化结果。
+- [x] 实现 tool call guard。
+- [x] 拒绝 out-of-profile tools。
+- [x] 拒绝 non-read-only tools。
+- [x] 拒绝 raw Cypher、SQL、file glob、shell command 和 statement-style arguments。
+- [x] dispatch 前执行 project allow-list。
+- [x] 增加 fixed-window rate limiting。
+- [x] 增加 redacted audit log，记录 requestId、principal、projectId、toolName、parameter summary、result count、redaction state、duration、rejection reason。
+- [x] 确保 agent output 包含 evidence、confidence、sourceType 和 truncation。
 
 ## 15. 生产加固
 

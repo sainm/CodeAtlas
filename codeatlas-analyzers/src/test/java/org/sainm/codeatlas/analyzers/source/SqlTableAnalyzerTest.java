@@ -36,6 +36,11 @@ class SqlTableAnalyzerTest {
         assertTable(result, "com.acme.UserMapper.updateName", "users", SqlTableAccessKind.WRITE);
         assertTable(result, "com.acme.UserMapper.deleteAccount", "accounts", SqlTableAccessKind.WRITE);
         assertTable(result, "com.acme.UserMapper.insertAudit", "audit_log", SqlTableAccessKind.WRITE);
+        assertColumn(result, "com.acme.UserMapper.find", "users", "id", SqlTableAccessKind.READ);
+        assertColumn(result, "com.acme.UserMapper.find", "accounts", "user_id", SqlTableAccessKind.READ);
+        assertColumn(result, "com.acme.UserMapper.updateName", "users", "name", SqlTableAccessKind.WRITE);
+        assertColumn(result, "com.acme.UserMapper.insertAudit", "audit_log", "id", SqlTableAccessKind.WRITE);
+        assertColumn(result, "com.acme.UserMapper.insertAudit", "audit_log", "name", SqlTableAccessKind.WRITE);
     }
 
     @Test
@@ -115,6 +120,21 @@ class SqlTableAnalyzerTest {
         assertTable(result, "com.acme.UserMapper.search", "users", SqlTableAccessKind.READ, true);
     }
 
+    @Test
+    void preservesSqlComparisonsThatLookLikeXmlTags() {
+        SourceLocation location = new SourceLocation("src/main/java/com/acme/UserRepository.java", 12, 9);
+
+        SqlTableAnalysisResult result = SqlTableAnalyzer.defaults().analyze(List.of(
+                new SqlStatementSourceInfo(
+                        "com.acme.UserRepository.load(Ljava/sql/Connection;)V@12",
+                        "select * from users where id < (select max(id) from accounts) and id > 0",
+                        location)));
+
+        assertTrue(result.diagnostics().isEmpty());
+        assertTable(result, "com.acme.UserRepository.load(Ljava/sql/Connection;)V@12", "users", SqlTableAccessKind.READ);
+        assertTable(result, "com.acme.UserRepository.load(Ljava/sql/Connection;)V@12", "accounts", SqlTableAccessKind.READ);
+    }
+
     private static void assertTable(
             SqlTableAnalysisResult result,
             String statementId,
@@ -135,5 +155,17 @@ class SqlTableAnalyzerTest {
                 && access.tableName().equals(tableName)
                 && access.kind() == kind
                 && access.conservativeFallback() == conservativeFallback), statementId + " " + kind + " " + tableName);
+    }
+
+    private static void assertColumn(
+            SqlTableAnalysisResult result,
+            String statementId,
+            String tableName,
+            String columnName,
+            SqlTableAccessKind kind) {
+        assertTrue(result.columnAccesses().stream().anyMatch(access -> access.statementId().equals(statementId)
+                && access.tableName().equals(tableName)
+                && access.columnName().equals(columnName)
+                && access.kind() == kind), statementId + " " + kind + " " + tableName + "." + columnName);
     }
 }

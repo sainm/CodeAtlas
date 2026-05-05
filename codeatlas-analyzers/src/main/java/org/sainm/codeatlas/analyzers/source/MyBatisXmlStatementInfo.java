@@ -6,6 +6,7 @@ public record MyBatisXmlStatementInfo(
         String id,
         MyBatisStatementKind kind,
         String sql,
+        boolean conservativeTableAccess,
         SourceLocation location) {
     public MyBatisXmlStatementInfo(
             String path,
@@ -13,7 +14,17 @@ public record MyBatisXmlStatementInfo(
             String id,
             MyBatisStatementKind kind,
             SourceLocation location) {
-        this(path, namespace, id, kind, "", location);
+        this(path, namespace, id, kind, "", false, location);
+    }
+
+    public MyBatisXmlStatementInfo(
+            String path,
+            String namespace,
+            String id,
+            MyBatisStatementKind kind,
+            String sql,
+            SourceLocation location) {
+        this(path, namespace, id, kind, sql, false, location);
     }
 
     public MyBatisXmlStatementInfo {

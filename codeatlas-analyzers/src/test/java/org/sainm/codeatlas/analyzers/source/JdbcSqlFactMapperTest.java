@@ -17,6 +17,10 @@ class JdbcSqlFactMapperTest {
                         "load",
                         "(Ljava/sql/Connection;)V",
                         "select * from users",
+                        List.of(new JdbcSqlParameterBindingInfo(
+                                1,
+                                "setString",
+                                new SourceLocation("src/main/java/com/acme/UserRepository.java", 10, 13))),
                         location)),
                 List.of());
 
@@ -34,5 +38,9 @@ class JdbcSqlFactMapperTest {
         assertTrue(batch.facts().stream().anyMatch(fact -> fact.relationType().name().equals("BINDS_TO")
                 && fact.sourceIdentityId().equals("method://shop/_root/src/main/java/com.acme.UserRepository#load(Ljava/sql/Connection;)V")
                 && fact.targetIdentityId().equals("sql-statement://shop/_root/src/main/java/com/acme/UserRepository.java#com.acme.UserRepository.load(Ljava/sql/Connection;)V@9")));
+        assertTrue(batch.facts().stream().anyMatch(fact -> fact.relationType().name().equals("HAS_PARAM")
+                && fact.sourceIdentityId().equals("sql-statement://shop/_root/src/main/java/com/acme/UserRepository.java#com.acme.UserRepository.load(Ljava/sql/Connection;)V@9")
+                && fact.targetIdentityId().equals("sql-param://shop/_root/src/main/java/com/acme/UserRepository.java#com.acme.UserRepository.load(Ljava/sql/Connection;)V@9:param[1]")
+                && fact.qualifier().equals("setString")));
     }
 }
