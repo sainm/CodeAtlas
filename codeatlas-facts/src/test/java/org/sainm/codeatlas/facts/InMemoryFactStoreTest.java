@@ -53,6 +53,35 @@ class InMemoryFactStoreTest {
     }
 
     @Test
+    void lookupMethodsExcludeInactiveAndTombstoneFacts() {
+        FactRecord active = fact("shop", "snap-1", "CALLS", "ev-1");
+        FactRecord dead = tombstone(FactRecord.create(
+                List.of("src/main/java"),
+                "method://shop/_root/src/main/java/X#dead()V",
+                "method://shop/_root/src/main/java/Y#gone()V",
+                "CALLS",
+                "dead",
+                "shop",
+                "snap-1",
+                "analysis-1",
+                "scope-1",
+                "spoon",
+                "src/main/java",
+                "ev-dead",
+                Confidence.CERTAIN,
+                100,
+                SourceType.SPOON));
+        store.insertAll(List.of(active, dead));
+
+        assertEquals(1, store.factsByRelation("shop", "snap-1", "CALLS").size(),
+                "tombstoned facts should be excluded from relation lookup");
+        assertEquals(active.sourceIdentityId(),
+                store.factsBySource("shop", "snap-1", active.sourceIdentityId()).getFirst().sourceIdentityId());
+        assertEquals(0, store.factsByTarget("shop", "snap-1", dead.targetIdentityId()).size(),
+                "tombstoned fact's target should not appear");
+    }
+
+    @Test
     void tombstonesExpiredFacts() {
         FactRecord active1 = fact("shop", "snap-1", "CALLS", "ev-1");
         FactRecord active2 = fact("shop", "snap-1", "CALLS", "ev-2");

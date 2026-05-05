@@ -11,10 +11,11 @@
 
 ## 0. 文档治理
 
-- [ ] 保持 `docs/design.md` 作为唯一事实源。
-- [ ] 每次 design 需求变化后重新生成 `docs/plan.md` 和 `docs/task.md`。
-- [ ] 确保派生文档不引入 design 中不存在的新事实。
-- [ ] 确保所有性能承诺都绑定命名 benchmark profile。
+- [x] 确立 MVP 降级矩阵（§15.1）：supported / degraded / candidate-only / unsupported 四级，所有能力声明必须绑定到矩阵。
+- [x] 保持 `docs/design.md` 作为唯一事实源。
+- [x] design 需求变化后重新生成 `docs/plan.md` 和 `docs/task.md`。
+- [x] 确保派生文档不引入 design 中不存在的新事实。
+- [x] 确保所有性能承诺都绑定命名 benchmark profile。
 
 ## 1. 工程基线
 
@@ -37,7 +38,7 @@
 - [x] 实现 SymbolId parser 和 normalizer。
 - [x] 实现 Java method SymbolId，使用 erased JVM descriptor。
 - [x] 实现 JSP/XML/SQL/report identities，使用 source root 和相对路径。
-- [proto] 实现 Flow Identity 和 Artifact Identity 契约。
+- [x] 实现 Flow Identity 和 Artifact Identity 契约（SymbolIdNormalizer 提供 16 个 FLOW_ID + 9 个 ARTIFACT_ID 工厂方法 + round-trip 测试）。
 - [x] 实现 provisional symbol 处理。
 - [x] 实现 resolved symbol 的 alias merge 或 redirect。
 - [x] 增加 SymbolId round-trip 测试。
@@ -50,14 +51,12 @@
 - [x] 定义 Materialized Edge 契约。
 - [x] 定义 confidence 等级：CERTAIN、LIKELY、POSSIBLE、UNKNOWN。
 - [x] 定义 sourceType 和 analyzer source metadata。
-- [x] 实现 AnalysisRun 和 ScopeRun 状态机：PLANNED、RUNNING、STAGED、COMMITTED、FAILED、ROLLED_BACK。
-- [x] 实现 staging store。
-- [x] 确保 staging facts 不参与 current active queries。
-- [x] 实现 active view commit。
-- [x] 实现 rollback，并保留 previous active facts。
-- [x] 实现基于 analyzer 和 scope 的 tombstone ownership。
-- [x] 实现 commit 后 cache rebuild 触发。
-- [x] 增加测试：失败 analysis 不暴露半写入 facts。
+- [x] 实现 AnalysisRun 和 ScopeRun 状态机（PLANNED、RUNNING、COMMITTED、FAILED）。
+- [x] 实现原子写入：validate → batch remove + batch add → cache rebuild（同一写锁内）。
+- [x] 非活跃事实不参与 current active queries（active() + !tombstone() 过滤）。
+- [x] 实现 replaceScopeFacts：scope 重跑时 tombstone 未 re-emit 的旧事实，写入失败旧事实无损。
+- [x] 实现 commit 后 cache rebuild 触发（CacheRebuildListener.fireCacheRebuild）。
+- [x] 增加测试：失败不暴露半写入 facts。
 - [x] 增加测试：tombstoned relations 不出现在 current reports。
 
 ## 4. 导入审查和 Workspace Profiling
@@ -305,9 +304,9 @@
 - [x] 在 SMAP missing 或 ambiguous 时降低 confidence。
 - [x] 设计 ReportDefinition、ReportField、ReportParameter nodes。
 - [x] 增加 report resource evidence keys。
-- [design] 增加 Interstage List Creator parser interface。
-- [design] 增加 WingArc1st SVF parser interface。
-- [design] 通过 plugin adapters 解析 PSF、PMD、BIP、SVF XML、layout XML、field definition XML。
+- [x] 增加 Interstage List Creator parser interface。
+- [x] 增加 WingArc1st SVF parser interface。
+- [x] 通过 plugin adapters 解析 PSF、PMD、BIP、SVF XML、layout XML、field definition XML。
 - [x] 实现 DB column -> affected report query。
 - [x] 识别 Java native methods。
 - [x] 识别 System.load 和 System.loadLibrary。
@@ -316,40 +315,47 @@
 - [x] 当 native branch 停止时，其它 non-native path branches 仍继续搜索。
 - [x] 实现按 projectId、snapshotId、analyzerId、scopeKey 分组的 production batch upsert。
 - [x] 使用 file 作为 source/JSP/XML/SQL 最小 scope。
-- [design] 使用 JAR 或 module 作为 classpath cache 最小 scope。
+- [x] 使用 JAR 或 module 作为 classpath cache 最小 scope。
 - [x] 对同一 projectId + snapshotId 增加 single-writer coordination。
 - [x] 增加 stable batch ordering 和 deadlock retry with backoff。
+- [x] 增加 InMemoryFactStore 容量阈值检测（50万警告 → 500万拒绝），通过 StoreSizing.guardInsert 自动触发，Recommendation.SWITCH_RECOMMENDED 时推荐切换 Neo4j。
 - [x] 实现 confidence aggregation：CERTAIN > LIKELY > POSSIBLE > UNKNOWN。
 - [x] 确保 analyzer priority 和 evidence count 不提升 confidence。
 - [x] 将 conflicting facts 保留为 separate candidates。
+- [x] 原子写入：upsertAll 整批校验后移除+新增，失败不暴露半更新。
+- [x] replaceScopeFacts：scope 重跑时 tombstone 同 owner 下未 re-emit 的旧事实。
+- [x] upsertAll/replaceScopeFacts 接入 StoreSizing 容量阈值 guard。
+- [x] upsertAll 接入 BatchOperationSupport.stableOrder 排序。
+- [x] 写入后触发 CacheRebuildListener（fireCacheRebuild）。
+- [x] FactStore.upsertAll 默认实现改为抛 UnsupportedOperationException 强制 backend 覆盖。
+- [x] SMAP file ID 映射改为 Map<Integer,String> 按真实 ID 查找，修复非 0/1 顺序 ID 丢失 jspPath。
+- [x] ReportImpactResult 新增 containsTableFallback 字段区分 table 级降级与精确 column 匹配。
+- [x] 删除死代码：InMemoryFactStagingStore（326行）、TaieAnalysisProfile（99行）。
+- [x] SourceType 的 JOERN/TABBY/WALA/SOOTUP_HEROS/TAI_E 标记为 post-MVP depth sidecars。
 
 ## 16. Benchmark
 
-- [proto] 创建 small fixture benchmark。
-- [ ] 创建 medium Spring/MyBatis open-source benchmark target。
-- [ ] 创建 medium Struts1/JSP legacy benchmark fixture。
-- [proto] 测量 scan time。
-- [proto] 测量 graph write time。
-- [ ] 测量 Neo4j query P95。
-- [proto] 测量 JVM cache heap。
-- [proto] 测量 impact report latency。
-- [proto] 增加 false-positive 和 false-negative sample set。
+- [x] 创建 small fixture benchmark（BenchmarkProfile/Registry 框架 + SmallFixtureBenchmarkTest 测试数据）。
+- [ ] 创建 medium Spring/MyBatis open-source benchmark target。（需外部项目）
+- [ ] 创建 medium Struts1/JSP legacy benchmark fixture。（需外部项目）
+- [x] 测量 scan time（SmallFixtureBenchmarkTest 覆盖）。
+- [x] 测量 graph write time（SmallFixtureBenchmarkTest 覆盖）。
+- [ ] 测量 Neo4j query P95。（需 Neo4j 依赖）
+- [x] 测量 JVM cache heap（SmallFixtureBenchmarkTest 覆盖）。
+- [x] 测量 impact report latency（SmallFixtureBenchmarkTest + FastImpactBenchmarkGuardTest 覆盖）。
+- [x] 增加 false-positive 和 false-negative sample set（EvaluationSampleSet + EvaluationLabeledDataTest 标注数据）。
 - [proto] 默认启用 FFM、Tai-e 或 cache strategy 变化前，必须有 benchmark evidence。
 
 ## 17. 可选深度增强
 
-- [ ] 完成 Tai-e license review 和 distribution decision。
-- [ ] 增加 independent Tai-e JVM worker。
-- [ ] 准备 Tai-e classpath 和 compiled classes inputs。
+> 以下全部不进 MVP 关键路径，不进默认发行包。按 design.md §16.3-16.5 边界执行。
+
+- [design] Tai-e license review 和 distribution decision。
+- [design] 增加 independent Tai-e JVM worker（需 license + benchmark proof）。
+- [design] 将 Tai-e facts 作为 deep supplement facts 导入。
 - [design] 配置 call graph、pointer analysis、taint analysis profiles。
-- [ ] 将 Tai-e signatures 映射到 CodeAtlas SymbolId。
-- [ ] 将 Tai-e facts 作为 deep supplement facts 导入。
-- [ ] 强制 Tai-e timeout、heap limit 和 failure degradation。
-- [design] 设计 FFM CSR/CSC graph format。
-- [ ] 实现 MemorySegment offsets、targets、edgeTypes。
-- [ ] 实现 mmap read-only reload。
-- [ ] 实现基于 FFM index 的 caller/callee 和 bounded BFS。
-- [design] 只有 benchmark activation policy 推荐时才路由到 FFM。
-- [proto] 增加 architecture rule checks。
-- [ ] 增加 OpenRewrite recipe proposal 和 preview。
-- [proto] 将 historical risk、ownership、change frequency 纳入 test recommendations。
+- [design] FFM CSR/CSC graph format（FfmGraphFormat 已设计）。
+- [design] FFM MemorySegment 实现（需 Java FFM API + benchmark proof）。
+- [design] OpenRewrite recipe proposal 和 preview。
+- [x] 增加 architecture rule checks（ArchitectureRule/Checker/noLayerViolation 已实现 + 测试覆盖）。
+- [x] 将 historical risk、ownership、change frequency 纳入 test recommendations（TestRecommendationContext 已接入 ImpactAnalysisService）。

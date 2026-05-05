@@ -54,13 +54,14 @@ class JasperSmapParserTest {
         assertEquals(2, multiLine.jspLineStart());
         assertEquals(3, multiLine.jspLineEnd());
         assertEquals(6, multiLine.generatedLineStart());
-        assertEquals(10, multiLine.generatedLineEnd());
+        assertEquals(25, multiLine.generatedLineEnd());
 
         JasperSmapParser.JspLineMapping includeMapping = result.get().mappings().get(2);
         assertEquals("include/nav.jsp", includeMapping.jspPath());
         assertEquals(10, includeMapping.jspLineStart());
         assertEquals(12, includeMapping.jspLineEnd());
         assertEquals(20, includeMapping.generatedLineStart());
+        assertEquals(34, includeMapping.generatedLineEnd());
     }
 
     @Test

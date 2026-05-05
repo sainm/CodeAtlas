@@ -141,4 +141,27 @@ public final class ImpactAnalysisService {
         ArchitectureRuleChecker checker = new ArchitectureRuleChecker(rules);
         return checker.check(paths);
     }
+
+    /**
+     * Enhances test recommendations with historical risk, ownership,
+     * and change frequency signals from the given context.
+     */
+    public List<String> prioritizeTests(
+            List<String> suggestedTests,
+            List<ImpactPath> paths,
+            TestRecommendationContext context) {
+        if (context == null) {
+            return List.copyOf(suggestedTests);
+        }
+        return context.prioritizeTests(suggestedTests, paths);
+    }
+
+    /**
+     * Runs a full evaluation against a labeled sample set.
+     */
+    public EvaluationSampleSet.EvaluationResult evaluate(
+            EvaluationSampleSet sampleSet,
+            List<ImpactPath> reportedPaths) {
+        return sampleSet.evaluate(reportedPaths);
+    }
 }

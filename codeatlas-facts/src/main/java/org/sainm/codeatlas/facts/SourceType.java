@@ -23,6 +23,7 @@ public enum SourceType {
     BOUNDARY_SYMBOL,
     SHELL,
     GIT,
+    // -- post-MVP depth sidecars (not in active use) --
     JOERN,
     TABBY,
     WALA,

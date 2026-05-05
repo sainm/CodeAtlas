@@ -411,4 +411,104 @@ class SymbolIdTest {
         assertThrows(IllegalArgumentException.class,
                 () -> new SymbolId(htmlPage, "shop", "_root", "src/main/webapp", "WEB-INF//jsp/edit.jsp", null));
     }
+
+    // -- FLOW_ID normalizer round-trip tests
+
+    @Test
+    void paramSlotNormalizerRoundTripsThroughParser() {
+        SymbolContext ctx = new SymbolContext("shop", "_root", "D:/workspace/shop");
+        SymbolId normal = SymbolIdNormalizer.paramSlot(
+                ctx, List.of("src/main/java"), "D:/workspace/shop/src/main/java/com/foo/OrderService.java",
+                "com.foo.OrderService", "cancelOrder", "(Ljava/lang/Long;)V", 0, "Ljava/lang/Long;");
+        SymbolId parsed = SymbolIdParser.parse(normal.canonical());
+
+        assertEquals(normal, parsed);
+        assertEquals(IdentityType.FLOW_ID, normal.identityType());
+        assertEquals("src/main/java", normal.sourceRootKey());
+        assertTrue(normal.fragment().orElseThrow().startsWith("param["));
+    }
+
+    @Test
+    void returnSlotNormalizerRoundTrips() {
+        SymbolContext ctx = new SymbolContext("shop", "_root", "D:/workspace/shop");
+        SymbolId normal = SymbolIdNormalizer.returnSlot(
+                ctx, List.of("src/main/java"), "D:/workspace/shop/src/main/java/com/foo/OrderService.java",
+                "com.foo.OrderService", "cancelOrder", "(Ljava/lang/Long;)V");
+        SymbolId parsed = SymbolIdParser.parse(normal.canonical());
+
+        assertEquals(normal, parsed);
+        assertEquals(IdentityType.FLOW_ID, normal.identityType());
+    }
+
+    @Test
+    void scopeOnlyFlowNormalizersRoundTrip() {
+        assertEquals(
+                SymbolIdParser.parse("request-param://shop/_root/order-form#orderId"),
+                SymbolIdNormalizer.requestParam("shop", "order-form", "orderId"));
+        assertEquals(
+                SymbolIdParser.parse("session-attr://shop/_root/http-session#cart"),
+                SymbolIdNormalizer.sessionAttr("shop", "http-session", "cart"));
+        assertEquals(
+                SymbolIdParser.parse("model-attr://shop/_root/spring-model#order"),
+                SymbolIdNormalizer.modelAttr("shop", "spring-model", "order"));
+        assertEquals(
+                SymbolIdParser.parse("request-attr://shop/_root/http-request#trace"),
+                SymbolIdNormalizer.requestAttr("shop", "http-request", "trace"));
+    }
+
+    @Test
+    void sqlFlowNormalizersRoundTrip() {
+        SymbolContext ctx = new SymbolContext("shop", "_root", "D:/workspace/shop");
+        SymbolId sqlParam = SymbolIdNormalizer.sqlParam(
+                ctx, List.of("src/main/resources"),
+                "D:/workspace/shop/src/main/resources/mapper/OrderMapper.xml",
+                "com.shop.OrderMapper.selectById", "status");
+        SymbolId parsed = SymbolIdParser.parse(sqlParam.canonical());
+
+        assertEquals(sqlParam, parsed);
+        assertEquals(IdentityType.FLOW_ID, sqlParam.identityType());
+
+        SymbolId branch = SymbolIdNormalizer.sqlBranchCondition(
+                ctx, List.of("src/main/resources"),
+                "D:/workspace/shop/src/main/resources/mapper/OrderMapper.xml",
+                "com.shop.OrderMapper.selectById", "if_status_not_null");
+        assertEquals(IdentityType.FLOW_ID, branch.identityType());
+        assertTrue(branch.fragment().orElseThrow().startsWith("branch["));
+    }
+
+    // -- ARTIFACT_ID normalizer round-trip tests
+
+    @Test
+    void artifactNormalizersRoundTrip() {
+        SymbolId seed = SymbolIdNormalizer.featureSeed("shop", "run-001", "6f4a9c");
+        assertEquals(SymbolIdParser.parse("feature-seed://shop/run-001/6f4a9c"), seed);
+        assertEquals(IdentityType.ARTIFACT_ID, seed.identityType());
+
+        SymbolId plan = SymbolIdNormalizer.changePlan("shop", "run-001", "plan-42");
+        assertEquals(SymbolIdParser.parse("change-plan://shop/run-001/plan-42"), plan);
+        assertEquals(IdentityType.ARTIFACT_ID, plan.identityType());
+
+        SymbolId health = SymbolIdNormalizer.architectureHealth("shop", "run-001", "rpt-2026");
+        assertEquals(
+                SymbolIdParser.parse("architecture-health://shop/run-001/rpt-2026"), health);
+
+        SymbolId review = SymbolIdNormalizer.importReview("shop", "rvw-001");
+        assertEquals(SymbolIdParser.parse("import-review://shop/_root/rvw-001"), review);
+
+        SymbolId query = SymbolIdNormalizer.savedQuery("shop", "q-abc");
+        assertEquals(SymbolIdParser.parse("saved-query://shop/_root/q-abc"), query);
+
+        SymbolId watch = SymbolIdNormalizer.watchSubscription("shop", "sub-xyz");
+        assertEquals(SymbolIdParser.parse("watch-subscription://shop/_root/sub-xyz"), watch);
+    }
+
+    @Test
+    void featureScopeAndAnalysisScopeDecisionNormalizersRoundTrip() {
+        SymbolId scope = SymbolIdNormalizer.featureScope("shop", "run-001", "feat-1");
+        assertEquals(SymbolIdParser.parse("feature-scope://shop/run-001/feat-1"), scope);
+
+        SymbolId decision = SymbolIdNormalizer.analysisScopeDecision("shop", "dec-1");
+        assertEquals(
+                SymbolIdParser.parse("analysis-scope-decision://shop/_root/dec-1"), decision);
+    }
 }

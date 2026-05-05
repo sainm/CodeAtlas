@@ -1,7 +1,9 @@
 package org.sainm.codeatlas.analyzers.source;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -64,8 +66,7 @@ public final class JasperSmapParser {
         if (!STRATUM.matcher(smapBody).find()) {
             return Optional.empty();
         }
-        List<String> fileIds = new ArrayList<>();
-        List<String> filePaths = new ArrayList<>();
+        Map<Integer, String> filePathsById = new LinkedHashMap<>();
         List<JspLineMapping> mappings = new ArrayList<>();
         boolean inFiles = false;
         boolean inLines = false;
@@ -82,8 +83,7 @@ public final class JasperSmapParser {
             }
             if (LINE_SECTION.matcher(line).find()) {
                 if (pendingFileId != null) {
-                    fileIds.add(pendingFileId);
-                    filePaths.add(pendingFilePath);
+                    filePathsById.put(Integer.parseInt(pendingFileId), pendingFilePath);
                     pendingFileId = null;
                 }
                 inFiles = false;
@@ -103,14 +103,12 @@ public final class JasperSmapParser {
                 Matcher fileMatcher = FILE_ENTRY.matcher(line);
                 if (fileMatcher.find()) {
                     if (pendingFileId != null) {
-                        fileIds.add(pendingFileId);
-                        filePaths.add(pendingFilePath);
+                        filePathsById.put(Integer.parseInt(pendingFileId), pendingFilePath);
                     }
                     pendingFileId = fileMatcher.group(1);
                     pendingFilePath = fileMatcher.group(2);
                 } else if (pendingFileId != null) {
-                    fileIds.add(pendingFileId);
-                    filePaths.add(line);
+                    filePathsById.put(Integer.parseInt(pendingFileId), line);
                     pendingFileId = null;
                 }
             }
@@ -123,14 +121,15 @@ public final class JasperSmapParser {
                         int inputFileId = mapMatcher.group(2) != null ? Integer.parseInt(mapMatcher.group(2)) : 0;
                         int inputLineCount = mapMatcher.group(3) != null ? Integer.parseInt(mapMatcher.group(3)) : 1;
                         int outputStart = Integer.parseInt(mapMatcher.group(4));
-                        int outputEnd = mapMatcher.group(5) != null ? Integer.parseInt(mapMatcher.group(5)) : outputStart;
-                        String jspFilePath = inputFileId < filePaths.size() ? filePaths.get(inputFileId) : "";
+                        int outputIncrement = mapMatcher.group(5) != null ? Integer.parseInt(mapMatcher.group(5)) : 1;
+                        int generatedLineEnd = outputStart + inputLineCount * outputIncrement - 1;
+                        String jspFilePath = filePathsById.getOrDefault(inputFileId, "");
                         mappings.add(new JspLineMapping(
                                 jspFilePath,
                                 inputStart,
                                 inputStart + inputLineCount - 1,
                                 outputStart,
-                                outputEnd));
+                                generatedLineEnd));
                     }
                 }
             }
@@ -138,7 +137,7 @@ public final class JasperSmapParser {
         if (mappings.isEmpty()) {
             return Optional.empty();
         }
-        return Optional.of(new JasperSmapResult(filePaths, mappings));
+        return Optional.of(new JasperSmapResult(List.copyOf(filePathsById.values()), mappings));
     }
 
     public record JspLineMapping(

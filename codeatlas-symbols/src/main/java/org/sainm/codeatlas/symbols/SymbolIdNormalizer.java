@@ -219,6 +219,188 @@ public final class SymbolIdNormalizer {
         return fileSymbol(DefaultSymbolKind.REPORT_FIELD, context, sourceRoots, physicalPath, fieldName);
     }
 
+    // ---- FLOW_ID factories ----
+
+    public static SymbolId paramSlot(
+            SymbolContext context,
+            List<String> sourceRoots,
+            String physicalPath,
+            String ownerQualifiedName,
+            String methodName,
+            String erasedDescriptor,
+            int paramIndex,
+            String paramTypeDescriptor) {
+        String base = ownerQualifiedName + "#" + methodName + erasedDescriptor;
+        String fragment = "param[" + paramIndex + ":" + paramTypeDescriptor + "]";
+        return flowSymbol(DefaultSymbolKind.PARAM_SLOT, context, sourceRoots, physicalPath, base, fragment);
+    }
+
+    public static SymbolId returnSlot(
+            SymbolContext context,
+            List<String> sourceRoots,
+            String physicalPath,
+            String ownerQualifiedName,
+            String methodName,
+            String erasedDescriptor) {
+        String base = ownerQualifiedName + "#" + methodName + erasedDescriptor;
+        String fragment = "return[" + erasedDescriptor + "]";
+        return flowSymbol(DefaultSymbolKind.RETURN_SLOT, context, sourceRoots, physicalPath, base, fragment);
+    }
+
+    public static SymbolId requestParam(String projectKey, String scope, String paramName) {
+        requireNonBlank(projectKey, "projectKey");
+        requireNonBlank(scope, "scope");
+        requireNonBlank(paramName, "paramName");
+        return flowSymbolScopeOnly(DefaultSymbolKind.REQUEST_PARAM, projectKey, scope, paramName);
+    }
+
+    public static SymbolId requestAttr(String projectKey, String scope, String attrName) {
+        requireNonBlank(projectKey, "projectKey");
+        requireNonBlank(scope, "scope");
+        requireNonBlank(attrName, "attrName");
+        return flowSymbolScopeOnly(DefaultSymbolKind.REQUEST_ATTR, projectKey, scope, attrName);
+    }
+
+    public static SymbolId sessionAttr(String projectKey, String scope, String attrName) {
+        requireNonBlank(projectKey, "projectKey");
+        requireNonBlank(scope, "scope");
+        requireNonBlank(attrName, "attrName");
+        return flowSymbolScopeOnly(DefaultSymbolKind.SESSION_ATTR, projectKey, scope, attrName);
+    }
+
+    public static SymbolId modelAttr(String projectKey, String scope, String attrName) {
+        requireNonBlank(projectKey, "projectKey");
+        requireNonBlank(scope, "scope");
+        requireNonBlank(attrName, "attrName");
+        return flowSymbolScopeOnly(DefaultSymbolKind.MODEL_ATTR, projectKey, scope, attrName);
+    }
+
+    public static SymbolId sqlParam(
+            SymbolContext context,
+            List<String> sourceRoots,
+            String physicalPath,
+            String statementId,
+            String paramName) {
+        String fragment = "param[" + paramName + "]";
+        return flowSymbol(DefaultSymbolKind.SQL_PARAM, context, sourceRoots, physicalPath, statementId, fragment);
+    }
+
+    public static SymbolId sqlBranchCondition(
+            SymbolContext context,
+            List<String> sourceRoots,
+            String physicalPath,
+            String statementId,
+            String branchId) {
+        String fragment = "branch[" + branchId + "]";
+        return flowSymbol(DefaultSymbolKind.SQL_BRANCH_CONDITION, context, sourceRoots, physicalPath, statementId, fragment);
+    }
+
+    public static SymbolId methodSummary(
+            SymbolContext context,
+            List<String> sourceRoots,
+            String physicalPath,
+            String ownerQualifiedName,
+            String methodName,
+            String erasedDescriptor) {
+        String ownerPath = ownerQualifiedName + "#" + methodName + erasedDescriptor;
+        return flowSymbol(DefaultSymbolKind.METHOD_SUMMARY, context, sourceRoots, physicalPath, ownerPath, "");
+    }
+
+    // ---- ARTIFACT_ID factories ----
+
+    public static SymbolId featureSeed(String projectKey, String runId, String seedHash) {
+        return artifactSymbol(DefaultSymbolKind.FEATURE_SEED, projectKey, runId, seedHash);
+    }
+
+    public static SymbolId featureScope(String projectKey, String runId, String scopeId) {
+        return artifactSymbol(DefaultSymbolKind.FEATURE_SCOPE, projectKey, runId, scopeId);
+    }
+
+    public static SymbolId changePlan(String projectKey, String runId, String planId) {
+        return artifactSymbol(DefaultSymbolKind.CHANGE_PLAN, projectKey, runId, planId);
+    }
+
+    public static SymbolId architectureHealth(String projectKey, String runId, String reportId) {
+        return artifactSymbol(DefaultSymbolKind.ARCHITECTURE_HEALTH, projectKey, runId, reportId);
+    }
+
+    public static SymbolId importReview(String projectKey, String reviewId) {
+        requireNonBlank(projectKey, "projectKey");
+        requireNonBlank(reviewId, "reviewId");
+        return artifactSymbol(DefaultSymbolKind.IMPORT_REVIEW, projectKey, "_root", reviewId);
+    }
+
+    public static SymbolId analysisScopeDecision(String projectKey, String decisionId) {
+        requireNonBlank(projectKey, "projectKey");
+        requireNonBlank(decisionId, "decisionId");
+        return artifactSymbol(DefaultSymbolKind.ANALYSIS_SCOPE_DECISION, projectKey, "_root", decisionId);
+    }
+
+    public static SymbolId savedQuery(String projectKey, String queryId) {
+        requireNonBlank(projectKey, "projectKey");
+        requireNonBlank(queryId, "queryId");
+        return artifactSymbol(DefaultSymbolKind.SAVED_QUERY, projectKey, "_root", queryId);
+    }
+
+    public static SymbolId watchSubscription(String projectKey, String subscriptionId) {
+        requireNonBlank(projectKey, "projectKey");
+        requireNonBlank(subscriptionId, "subscriptionId");
+        return artifactSymbol(DefaultSymbolKind.WATCH_SUBSCRIPTION, projectKey, "_root", subscriptionId);
+    }
+
+    // -- private FLOW_ID / ARTIFACT_ID helpers
+
+    private static SymbolId flowSymbol(
+            DefaultSymbolKind kind,
+            SymbolContext context,
+            List<String> sourceRoots,
+            String physicalPath,
+            String ownerPath,
+            String fragment) {
+        SourceOwnedPath filePath = sourceOwnedPath(context, sourceRoots, physicalPath);
+        SymbolId symbolId = new SymbolId(
+                kind.toSymbolKind(),
+                context.projectKey(),
+                context.moduleKey(),
+                filePath.sourceRootKey(),
+                ownerPath,
+                fragment);
+        return SymbolIdParser.withSourceRoots(filePath.sourceRoots()).parseId(symbolId.canonical());
+    }
+
+    private static SymbolId flowSymbolScopeOnly(
+            DefaultSymbolKind kind,
+            String projectKey,
+            String scope,
+            String fragmentValue) {
+        SymbolId symbolId = new SymbolId(
+                kind.toSymbolKind(),
+                projectKey,
+                "_root",
+                "",
+                scope,
+                fragmentValue);
+        return SymbolIdParser.parse(symbolId.canonical());
+    }
+
+    private static SymbolId artifactSymbol(
+            DefaultSymbolKind kind,
+            String projectKey,
+            String moduleKey,
+            String ownerPath) {
+        requireNonBlank(projectKey, "projectKey");
+        requireNonBlank(moduleKey, "moduleKey");
+        requireNonBlank(ownerPath, "ownerPath");
+        SymbolId symbolId = new SymbolId(
+                kind.toSymbolKind(),
+                projectKey,
+                moduleKey,
+                "",
+                ownerPath,
+                null);
+        return SymbolIdParser.parse(symbolId.canonical());
+    }
+
     private static SymbolId fileSymbol(
             DefaultSymbolKind kind,
             SymbolContext context,

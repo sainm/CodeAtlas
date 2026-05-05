@@ -20,11 +20,15 @@ public final class ReportImpactQueryEngine {
         requireReport(report);
         requireNonBlank(dbColumnId, "dbColumnId");
         String tableId = dbTableIdFromColumn(dbColumnId);
+        boolean isColumnLevelQuery = dbColumnId.startsWith("db-column://");
         List<FactRecord> columnFacts = report.facts().stream()
                 .filter(fact -> isColumnOrTableRelation(fact)
                         && (fact.targetIdentityId().equals(dbColumnId)
                                 || fact.targetIdentityId().equals(tableId)))
                 .toList();
+        // Table-level facts are a degradation from column precision
+        boolean containsTableFallback = isColumnLevelQuery && columnFacts.stream()
+                .anyMatch(fact -> fact.targetIdentityId().equals(tableId));
         Set<String> intermediateIds = new LinkedHashSet<>();
         for (FactRecord fact : columnFacts) {
             intermediateIds.add(fact.sourceIdentityId());
@@ -42,7 +46,7 @@ public final class ReportImpactQueryEngine {
                 .filter(fact -> reportDefinitionIds.contains(fact.sourceIdentityId())
                         || reportDefinitionIds.contains(fact.targetIdentityId()))
                 .toList();
-        return new ReportImpactResult(dbColumnId, columnFacts, reportFacts, paths);
+        return new ReportImpactResult(dbColumnId, columnFacts, reportFacts, paths, containsTableFallback);
     }
 
     public ReportImpactResult findAffectedColumns(CurrentFactReport report, String reportDefinitionId) {
@@ -65,7 +69,7 @@ public final class ReportImpactQueryEngine {
             pathSet.add(List.of(reportDefinitionId, fact.sourceIdentityId(), fact.targetIdentityId()));
         }
         List<ImpactPath> paths = pathSet.stream().map(ImpactPath::new).toList();
-        return new ReportImpactResult(reportDefinitionId, columnFacts, reportFacts, paths);
+        return new ReportImpactResult(reportDefinitionId, columnFacts, reportFacts, paths, false);
     }
 
     private static boolean isColumnOrTableRelation(FactRecord fact) {
@@ -108,7 +112,8 @@ public final class ReportImpactQueryEngine {
             String queryId,
             List<FactRecord> columnFacts,
             List<FactRecord> reportFacts,
-            List<ImpactPath> reversePaths) {
+            List<ImpactPath> reversePaths,
+            boolean containsTableFallback) {
         public ReportImpactResult {
             requireNonBlank(queryId, "queryId");
             columnFacts = List.copyOf(columnFacts == null ? List.of() : columnFacts);
