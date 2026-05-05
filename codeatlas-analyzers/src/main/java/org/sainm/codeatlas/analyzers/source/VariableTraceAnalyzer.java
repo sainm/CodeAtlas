@@ -119,14 +119,16 @@ public final class VariableTraceAnalyzer {
         for (CtElement element : orderedTraceElements(bodyOwner)) {
             if (element instanceof CtLocalVariable<?> localVariable) {
                 variableTypes.put(localVariable.getSimpleName(), typeName(localVariable.getType()));
-                rememberBeanGetterAlias(propertyAliases, localVariable.getSimpleName(), localVariable.getDefaultExpression());
-                rememberRequestParameterAlias(requestParameterAliases, localVariable.getSimpleName(), localVariable.getDefaultExpression());
+                refreshBeanPropertyAlias(propertyAliases, localVariable.getSimpleName(), localVariable.getDefaultExpression());
+                refreshRequestParameterAlias(requestParameterAliases, localVariable.getSimpleName(), localVariable.getDefaultExpression());
                 handleDefinition(sourceRoot, context, aliases, localVariable.getSimpleName(),
                         localVariable.getDefaultExpression(), localVariable, defUses);
-                propagateRequestParameterAlias(requestParameterAliases, localVariable.getSimpleName(), localVariable.getDefaultExpression());
-                propagateParameterAlias(parameterAliases, localVariable.getSimpleName(), localVariable.getDefaultExpression());
+                refreshParameterAlias(parameterAliases, localVariable.getSimpleName(), localVariable.getDefaultExpression());
             } else if (element instanceof CtAssignment<?, ?> assignment
                     && assignment.getAssigned() instanceof CtVariableWrite<?> target) {
+                refreshBeanPropertyAlias(propertyAliases, target.getVariable().getSimpleName(), assignment.getAssignment());
+                refreshRequestParameterAlias(requestParameterAliases, target.getVariable().getSimpleName(), assignment.getAssignment());
+                refreshParameterAlias(parameterAliases, target.getVariable().getSimpleName(), assignment.getAssignment());
                 handleDefinition(sourceRoot, context, aliases, target.getVariable().getSimpleName(),
                         assignment.getAssignment(), assignment, defUses);
             } else if (element instanceof CtInvocation<?> invocation) {
@@ -164,17 +166,16 @@ public final class VariableTraceAnalyzer {
         return result;
     }
 
-    private static void propagateParameterAlias(
+    private static void refreshParameterAlias(
             Map<String, ParameterSource> parameterAliases,
             String targetVariableName,
             CtExpression<?> expression) {
-        if (!(expression instanceof CtVariableRead<?>)) {
+        List<String> reads = variableReads(expression);
+        if (!(expression instanceof CtVariableRead<?>) || reads.size() != 1 || !parameterAliases.containsKey(reads.getFirst())) {
+            parameterAliases.remove(targetVariableName);
             return;
         }
-        List<String> reads = variableReads(expression);
-        if (reads.size() == 1 && parameterAliases.containsKey(reads.getFirst())) {
-            parameterAliases.put(targetVariableName, parameterAliases.get(reads.getFirst()));
-        }
+        parameterAliases.put(targetVariableName, parameterAliases.get(reads.getFirst()));
     }
 
     private static void handleParameterDerivedArguments(
@@ -215,33 +216,26 @@ public final class VariableTraceAnalyzer {
         }
     }
 
-    private static void rememberRequestParameterAlias(
+    private static void refreshRequestParameterAlias(
             Map<String, String> requestParameterAliases,
             String variableName,
             CtExpression<?> expression) {
-        if (!(expression instanceof CtInvocation<?> invocation)
-                || !invocation.getExecutable().getSimpleName().equals("getParameter")
-                || !targetSimpleName(invocation).equals("request")
-                || invocation.getArguments().isEmpty()) {
-            return;
-        }
-        String parameterName = stringLiteral(invocation.getArguments().getFirst());
-        if (!parameterName.isBlank()) {
-            requestParameterAliases.put(variableName, parameterName);
-        }
-    }
-
-    private static void propagateRequestParameterAlias(
-            Map<String, String> requestParameterAliases,
-            String targetVariableName,
-            CtExpression<?> expression) {
-        if (!(expression instanceof CtVariableRead<?>)) {
-            return;
+        if (expression instanceof CtInvocation<?> invocation
+                && invocation.getExecutable().getSimpleName().equals("getParameter")
+                && targetSimpleName(invocation).equals("request")
+                && !invocation.getArguments().isEmpty()) {
+            String parameterName = stringLiteral(invocation.getArguments().getFirst());
+            if (!parameterName.isBlank()) {
+                requestParameterAliases.put(variableName, parameterName);
+                return;
+            }
         }
         List<String> reads = variableReads(expression);
-        if (reads.size() == 1 && requestParameterAliases.containsKey(reads.getFirst())) {
-            requestParameterAliases.put(targetVariableName, requestParameterAliases.get(reads.getFirst()));
+        if (expression instanceof CtVariableRead<?> && reads.size() == 1 && requestParameterAliases.containsKey(reads.getFirst())) {
+            requestParameterAliases.put(variableName, requestParameterAliases.get(reads.getFirst()));
+            return;
         }
+        requestParameterAliases.remove(variableName);
     }
 
     private static void handleRequestDerivedArguments(
@@ -281,18 +275,24 @@ public final class VariableTraceAnalyzer {
         }
     }
 
-    private static void rememberBeanGetterAlias(
+    private static void refreshBeanPropertyAlias(
             Map<String, BeanPropertyRead> propertyAliases,
             String variableName,
             CtExpression<?> expression) {
-        if (!(expression instanceof CtInvocation<?> invocation)) {
+        if (expression instanceof CtInvocation<?> invocation) {
+            String propertyName = getterPropertyName(invocation);
+            String sourceObject = targetSimpleName(invocation);
+            if (!propertyName.isBlank() && !sourceObject.isBlank()) {
+                propertyAliases.put(variableName, new BeanPropertyRead(sourceObject, propertyName));
+                return;
+            }
+        }
+        List<String> reads = variableReads(expression);
+        if (expression instanceof CtVariableRead<?> && reads.size() == 1 && propertyAliases.containsKey(reads.getFirst())) {
+            propertyAliases.put(variableName, propertyAliases.get(reads.getFirst()));
             return;
         }
-        String propertyName = getterPropertyName(invocation);
-        String sourceObject = targetSimpleName(invocation);
-        if (!propertyName.isBlank() && !sourceObject.isBlank()) {
-            propertyAliases.put(variableName, new BeanPropertyRead(sourceObject, propertyName));
-        }
+        propertyAliases.remove(variableName);
     }
 
     private static void handleBeanSetterFlow(

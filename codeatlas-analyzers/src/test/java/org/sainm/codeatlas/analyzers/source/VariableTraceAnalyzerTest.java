@@ -181,6 +181,42 @@ class VariableTraceAnalyzerTest {
     }
 
     @Test
+    void refreshesRequestAliasesWhenVariablesAreReassigned() throws IOException {
+        write("src/main/java/com/acme/UserController.java", """
+                package com.acme;
+
+                import jakarta.servlet.http.HttpServletRequest;
+
+                class UserController {
+                    void handle(HttpServletRequest request, UserService service) {
+                        String id = request.getParameter("id");
+                        String overwritten = id;
+                        overwritten = "manual";
+                        String reassigned = "manual";
+                        reassigned = id;
+                        service.find(overwritten);
+                        service.find(reassigned);
+                    }
+                }
+
+                class UserService {
+                    void find(String id) {}
+                }
+                """);
+
+        VariableTraceAnalysisResult result = VariableTraceAnalyzer.defaults().analyze(
+                tempDir,
+                List.of(tempDir.resolve("src/main/java/com/acme/UserController.java")));
+
+        assertTrue(result.diagnostics().isEmpty());
+        assertTrue(result.requestDerivedArguments().stream().noneMatch(argument -> argument.variableName().equals("overwritten")));
+        assertTrue(result.requestDerivedArguments().stream().anyMatch(argument -> argument.requestParameterName().equals("id")
+                && argument.variableName().equals("reassigned")
+                && argument.targetQualifiedName().equals("com.acme.UserService")
+                && argument.targetMethodName().equals("find")));
+    }
+
+    @Test
     void tracksControllerServiceDaoParameterFlow() throws IOException {
         write("src/main/java/com/acme/UserService.java", """
                 package com.acme;
@@ -207,6 +243,39 @@ class VariableTraceAnalyzerTest {
                 && argument.targetQualifiedName().equals("com.acme.UserDao")
                 && argument.targetMethodName().equals("find")
                 && argument.targetArgumentIndex() == 0));
+    }
+
+    @Test
+    void refreshesParameterAliasesWhenVariablesAreReassigned() throws IOException {
+        write("src/main/java/com/acme/UserService.java", """
+                package com.acme;
+
+                class UserService {
+                    void load(String id, UserDao dao) {
+                        String overwritten = id;
+                        overwritten = "manual";
+                        String reassigned = "manual";
+                        reassigned = id;
+                        dao.find(overwritten);
+                        dao.find(reassigned);
+                    }
+                }
+
+                class UserDao {
+                    void find(String id) {}
+                }
+                """);
+
+        VariableTraceAnalysisResult result = VariableTraceAnalyzer.defaults().analyze(
+                tempDir,
+                List.of(tempDir.resolve("src/main/java/com/acme/UserService.java")));
+
+        assertTrue(result.diagnostics().isEmpty());
+        assertTrue(result.parameterDerivedArguments().stream().noneMatch(argument -> argument.variableName().equals("overwritten")));
+        assertTrue(result.parameterDerivedArguments().stream().anyMatch(argument -> argument.variableName().equals("reassigned")
+                && argument.sourceParameterIndex() == 0
+                && argument.targetQualifiedName().equals("com.acme.UserDao")
+                && argument.targetMethodName().equals("find")));
     }
 
     @Test

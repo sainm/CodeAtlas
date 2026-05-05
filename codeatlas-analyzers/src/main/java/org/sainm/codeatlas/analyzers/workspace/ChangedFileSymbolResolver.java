@@ -44,6 +44,9 @@ public final class ChangedFileSymbolResolver {
             String path = changedFile.effectivePath();
             Path file = workspaceRoot.resolve(path);
             if (!Files.isRegularFile(file)) {
+                if (isDeleted(changedFile)) {
+                    addDeletedPathSymbols(context, symbols, changedFile);
+                }
                 continue;
             }
             String lower = path.toLowerCase();
@@ -84,7 +87,7 @@ public final class ChangedFileSymbolResolver {
         JdbcSqlAnalysisResult jdbc = JdbcSqlAnalyzer.defaults().analyze(workspaceRoot, List.of(file));
         diagnostics.addAll(jdbc.diagnostics());
         SqlTableAnalysisResult tables = SqlTableAnalyzer.defaults().analyze(jdbc.sqlStatementSources());
-        addSqlAndTableSymbols(context, symbols, jdbc.statements().stream()
+        addSqlAndTableSymbols(context, context.javaSourceRootKey(), symbols, jdbc.statements().stream()
                 .map(statement -> new SqlSymbol(statement.statementId(), statement.location().relativePath(), statement.location().line()))
                 .toList(), tables.tableAccesses());
     }
@@ -98,7 +101,7 @@ public final class ChangedFileSymbolResolver {
         MyBatisXmlAnalysisResult xml = MyBatisXmlAnalyzer.defaults().analyze(workspaceRoot, List.of(file));
         diagnostics.addAll(xml.diagnostics());
         SqlTableAnalysisResult tables = SqlTableAnalyzer.defaults().analyze(xml.sqlStatementSources());
-        addSqlAndTableSymbols(context, symbols, xml.statements().stream()
+        addSqlAndTableSymbols(context, context.resourceSourceRootKey(), symbols, xml.statements().stream()
                 .map(statement -> new SqlSymbol(
                         statement.namespace() + "." + statement.id(),
                         statement.location().relativePath(),
@@ -108,14 +111,42 @@ public final class ChangedFileSymbolResolver {
 
     private static void addSqlAndTableSymbols(
             ChangedSymbolContext context,
+            String sqlSourceRootKey,
             Map<String, ChangedSymbolInfo> symbols,
             List<SqlSymbol> sqlSymbols,
             List<SqlTableAccessInfo> tableAccesses) {
         for (SqlSymbol sql : sqlSymbols) {
-            add(symbols, "sql-statement", sqlStatementId(context, sql), sql.relativePath(), sql.line());
+            add(symbols, "sql-statement", sqlStatementId(context, sqlSourceRootKey, sql), sql.relativePath(), sql.line());
         }
         for (SqlTableAccessInfo access : tableAccesses) {
             add(symbols, "db-table", dbTableId(context, access.tableName()), access.location().relativePath(), access.location().line());
+        }
+    }
+
+    private static boolean isDeleted(GitChangedFile changedFile) {
+        return "DELETE".equalsIgnoreCase(changedFile.changeType())
+                || (!changedFile.oldPath().isBlank() && changedFile.newPath().isBlank());
+    }
+
+    private static void addDeletedPathSymbols(
+            ChangedSymbolContext context,
+            Map<String, ChangedSymbolInfo> symbols,
+            GitChangedFile changedFile) {
+        String path = changedFile.effectivePath();
+        String lower = path.toLowerCase();
+        int line = firstDeletedLine(changedFile);
+        add(symbols, "source-file", sourceFileId(context, sourceRootForPath(context, path), path), path, line);
+        if (lower.endsWith(".java")) {
+            String qualifiedName = javaTypeName(context, path);
+            if (!qualifiedName.isBlank()) {
+                add(symbols, "class", classId(context, qualifiedName), path, line);
+            }
+        } else if (lower.endsWith(".jsp") || lower.endsWith(".jspx")) {
+            add(symbols, "jsp-page", jspPageId(context, path), path, line);
+        } else if (isConfigFile(lower)) {
+            add(symbols, "config-key", configKeyId(context, path), path, line);
+        } else if (lower.endsWith(".xml")) {
+            add(symbols, "source-file", sourceFileId(context, context.resourceSourceRootKey(), path), path, line);
         }
     }
 
@@ -136,6 +167,14 @@ public final class ChangedFileSymbolResolver {
     private static int firstChangedLine(GitChangedFile changedFile) {
         return changedFile.hunks().stream()
                 .mapToInt(GitChangedHunk::newStartLine)
+                .filter(line -> line > 0)
+                .findFirst()
+                .orElse(0);
+    }
+
+    private static int firstDeletedLine(GitChangedFile changedFile) {
+        return changedFile.hunks().stream()
+                .mapToInt(GitChangedHunk::oldStartLine)
                 .filter(line -> line > 0)
                 .findFirst()
                 .orElse(0);
@@ -170,10 +209,15 @@ public final class ChangedFileSymbolResolver {
                 + "#" + stripSourceRoot(context.resourceSourceRootKey(), path);
     }
 
-    private static String sqlStatementId(ChangedSymbolContext context, SqlSymbol sql) {
+    private static String sqlStatementId(ChangedSymbolContext context, String sourceRootKey, SqlSymbol sql) {
         return "sql-statement://" + context.projectId() + "/" + context.moduleKey() + "/"
-                + context.resourceSourceRootKey() + "/" + stripSourceRoot(context.resourceSourceRootKey(), sql.relativePath())
+                + sourceRootKey + "/" + stripSourceRoot(sourceRootKey, sql.relativePath())
                 + "#" + sql.statementId();
+    }
+
+    private static String sourceFileId(ChangedSymbolContext context, String sourceRootKey, String path) {
+        return "source-file://" + context.projectId() + "/" + context.moduleKey() + "/"
+                + sourceRootKey + "/" + stripSourceRoot(sourceRootKey, path);
     }
 
     private static String dbTableId(ChangedSymbolContext context, String tableName) {
@@ -185,6 +229,25 @@ public final class ChangedFileSymbolResolver {
         String normalized = FileInventoryEntry.normalizeRelativePath(path);
         String prefix = sourceRoot.endsWith("/") ? sourceRoot : sourceRoot + "/";
         return normalized.startsWith(prefix) ? normalized.substring(prefix.length()) : normalized;
+    }
+
+    private static String sourceRootForPath(ChangedSymbolContext context, String path) {
+        String normalized = FileInventoryEntry.normalizeRelativePath(path);
+        if (normalized.startsWith(context.javaSourceRootKey() + "/")) {
+            return context.javaSourceRootKey();
+        }
+        if (normalized.startsWith(context.webSourceRootKey() + "/")) {
+            return context.webSourceRootKey();
+        }
+        return context.resourceSourceRootKey();
+    }
+
+    private static String javaTypeName(ChangedSymbolContext context, String path) {
+        String ownerPath = stripSourceRoot(context.javaSourceRootKey(), path);
+        if (!ownerPath.endsWith(".java")) {
+            return "";
+        }
+        return ownerPath.substring(0, ownerPath.length() - ".java".length()).replace('/', '.');
     }
 
     private static void add(
