@@ -431,9 +431,12 @@ public final class AiContracts {
                     .toList();
         }
 
-        public void markStaleForEvidence(String evidenceKey) {
+        public void markStaleForEvidence(String projectId, String snapshotId, String evidenceKey) {
             List<AiCandidateRelation> replacement = candidates.stream()
-                    .map(candidate -> candidate.evidenceKey().equals(evidenceKey) ? stale(candidate) : candidate)
+                    .map(candidate -> candidate.projectId().equals(projectId)
+                            && candidate.snapshotId().equals(snapshotId)
+                            && candidate.evidenceKey().equals(evidenceKey)
+                            ? stale(candidate) : candidate)
                     .toList();
             candidates.clear();
             candidates.addAll(replacement);

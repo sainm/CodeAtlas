@@ -104,8 +104,29 @@ class AiContractsTest {
         assertTrue(new AiContracts.ImpactPathQueryPolicy().includeAiCandidates(true, false));
         assertEquals(1, store.activeCandidates("shop", "snap-1").size());
 
-        store.markStaleForEvidence("ev-1");
+        store.markStaleForEvidence("shop", "snap-1", "ev-1");
         assertEquals(0, store.activeCandidates("shop", "snap-1").size());
+    }
+
+    @Test
+    void markStaleDoesNotAffectOtherProjectsOrSnapshots() {
+        Clock clock = Clock.fixed(Instant.parse("2026-01-01T00:00:00Z"), ZoneOffset.UTC);
+        AiContracts.AiCandidateStore store = new AiContracts.AiCandidateStore(clock);
+        store.add(candidate("shop", "snap-1", "AI_SUGGESTS_RELATION", Confidence.POSSIBLE,
+                Optional.of(Instant.parse("2026-01-02T00:00:00Z")), false, "ev-1"));
+        store.add(candidate("other", "snap-1", "AI_SUGGESTS_RELATION", Confidence.POSSIBLE,
+                Optional.of(Instant.parse("2026-01-02T00:00:00Z")), false, "ev-1"));
+        store.add(candidate("shop", "snap-2", "AI_SUGGESTS_RELATION", Confidence.POSSIBLE,
+                Optional.of(Instant.parse("2026-01-02T00:00:00Z")), false, "ev-1"));
+
+        store.markStaleForEvidence("shop", "snap-1", "ev-1");
+
+        assertEquals(0, store.activeCandidates("shop", "snap-1").size(),
+                "candidates with matching evidence in same project/snapshot should be stale");
+        assertEquals(1, store.activeCandidates("other", "snap-1").size(),
+                "other project with same evidence key should not be affected");
+        assertEquals(1, store.activeCandidates("shop", "snap-2").size(),
+                "other snapshot with same evidence key should not be affected");
     }
 
     @Test
@@ -170,13 +191,24 @@ class AiContractsTest {
             Confidence confidence,
             Optional<Instant> expiresAt,
             boolean stale) {
+        return candidate("shop", "snap-1", relationName, confidence, expiresAt, stale, "ev-1");
+    }
+
+    private static AiContracts.AiCandidateRelation candidate(
+            String projectId,
+            String snapshotId,
+            String relationName,
+            Confidence confidence,
+            Optional<Instant> expiresAt,
+            boolean stale,
+            String evidenceKey) {
         return new AiContracts.AiCandidateRelation(
-                "shop",
-                "snap-1",
+                projectId,
+                snapshotId,
                 "src",
                 "dst",
                 relationName,
-                "ev-1",
+                evidenceKey,
                 confidence,
                 "ep-1",
                 expiresAt,

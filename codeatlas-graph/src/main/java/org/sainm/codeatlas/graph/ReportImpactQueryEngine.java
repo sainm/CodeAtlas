@@ -19,10 +19,11 @@ public final class ReportImpactQueryEngine {
     public ReportImpactResult findAffectedReports(CurrentFactReport report, String dbColumnId) {
         requireReport(report);
         requireNonBlank(dbColumnId, "dbColumnId");
+        String tableId = dbTableIdFromColumn(dbColumnId);
         List<FactRecord> columnFacts = report.facts().stream()
                 .filter(fact -> isColumnOrTableRelation(fact)
                         && (fact.targetIdentityId().equals(dbColumnId)
-                                || fact.targetIdentityId().startsWith(dbTableIdFromColumn(dbColumnId) + "#")))
+                                || fact.targetIdentityId().equals(tableId)))
                 .toList();
         Set<String> intermediateIds = new LinkedHashSet<>();
         for (FactRecord fact : columnFacts) {
@@ -84,8 +85,11 @@ public final class ReportImpactQueryEngine {
         if (!dbColumnId.startsWith("db-column://")) {
             return dbColumnId;
         }
-        int hashIndex = dbColumnId.lastIndexOf('#');
-        return hashIndex >= 0 ? dbColumnId.substring(0, hashIndex) : dbColumnId;
+        String withoutKind = dbColumnId.substring("db-column://".length());
+        int hashIndex = withoutKind.lastIndexOf('#');
+        return hashIndex >= 0
+                ? "db-table://" + withoutKind.substring(0, hashIndex)
+                : "db-table://" + withoutKind;
     }
 
     private static void requireReport(CurrentFactReport report) {

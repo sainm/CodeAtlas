@@ -109,7 +109,11 @@ public final class InMemoryFactStore implements FactStore {
         lock.writeLock().lock();
         try {
             for (FactRecord fact : batch) {
-                facts.removeIf(existing -> existing.factKey().equals(fact.factKey()));
+                facts.removeIf(existing -> existing.factKey().equals(fact.factKey())
+                        && existing.projectId().equals(fact.projectId())
+                        && existing.snapshotId().equals(fact.snapshotId())
+                        && existing.analyzerId().equals(fact.analyzerId())
+                        && existing.scopeKey().equals(fact.scopeKey()));
                 facts.add(fact);
             }
         } finally {

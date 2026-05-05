@@ -125,6 +125,98 @@ class InMemoryFactStoreTest {
     }
 
     @Test
+    void upsertDoesNotAffectOtherSnapshots() {
+        String qualifier = "direct";
+        FactRecord snap1 = FactRecord.create(
+                List.of("src/main/java"),
+                "method://shop/_root/src/main/java/A#m()V",
+                "method://shop/_root/src/main/java/B#n()V",
+                "CALLS",
+                qualifier,
+                "shop",
+                "snap-1",
+                "analysis-1",
+                "scope-1",
+                "spoon",
+                "src/main/java",
+                "ev-1",
+                Confidence.CERTAIN,
+                100,
+                SourceType.SPOON);
+        store.insert(snap1);
+
+        FactRecord snap2 = FactRecord.create(
+                List.of("src/main/java"),
+                snap1.sourceIdentityId(),
+                snap1.targetIdentityId(),
+                "CALLS",
+                qualifier,
+                snap1.projectId(),
+                "snap-2",
+                snap1.analysisRunId(),
+                snap1.scopeRunId(),
+                snap1.analyzerId(),
+                snap1.scopeKey(),
+                "ev-2",
+                Confidence.LIKELY,
+                50,
+                SourceType.SPOON);
+
+        store.upsertAll(List.of(snap2));
+
+        assertEquals(1, store.activeFacts("shop", "snap-1").size());
+        assertEquals(Confidence.CERTAIN, store.activeFacts("shop", "snap-1").getFirst().confidence());
+        assertEquals(1, store.activeFacts("shop", "snap-2").size());
+        assertEquals(Confidence.LIKELY, store.activeFacts("shop", "snap-2").getFirst().confidence());
+    }
+
+    @Test
+    void upsertPreservesFactsFromDifferentAnalyzers() {
+        FactRecord spoon = FactRecord.create(
+                List.of("src/main/java"),
+                "method://shop/_root/src/main/java/A#m()V",
+                "method://shop/_root/src/main/java/B#n()V",
+                "CALLS",
+                "direct",
+                "shop",
+                "snap-1",
+                "analysis-1",
+                "scope-1",
+                "spoon",
+                "src/main/java",
+                "ev-spoon",
+                Confidence.CERTAIN,
+                100,
+                SourceType.SPOON);
+        store.insert(spoon);
+
+        FactRecord asm = FactRecord.create(
+                List.of("src/main/java"),
+                spoon.sourceIdentityId(),
+                spoon.targetIdentityId(),
+                "CALLS",
+                "direct",
+                spoon.projectId(),
+                spoon.snapshotId(),
+                "analysis-1",
+                "scope-1",
+                "asm",
+                spoon.scopeKey(),
+                "ev-asm",
+                Confidence.LIKELY,
+                80,
+                SourceType.ASM);
+
+        store.upsertAll(List.of(asm));
+
+        List<FactRecord> active = store.activeFacts("shop", "snap-1");
+        assertEquals(2, active.size(),
+                "upsert from another analyzer should not delete the original fact");
+        assertTrue(active.stream().anyMatch(f -> f.evidenceKey().equals("ev-spoon")));
+        assertTrue(active.stream().anyMatch(f -> f.evidenceKey().equals("ev-asm")));
+    }
+
+    @Test
     void generatesReport() {
         store.insertAll(List.of(
                 fact("shop", "snap-1", "CALLS", "ev-1"),

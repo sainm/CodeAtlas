@@ -52,6 +52,34 @@ class ReportImpactQueryEngineTest {
     }
 
     @Test
+    void columnQueryDoesNotMatchUnrelatedColumnsOnSameTable() {
+        String emailColumn = "db-column://shop/mainDs/public/users#email";
+        String nameColumn = "db-column://shop/mainDs/public/users#name";
+        String tableId = "db-table://shop/mainDs/public/users";
+        String sqlEmail = "sql-statement://shop/_root/src/main/resources/com/acme/Mapper.xml#email";
+        String sqlName = "sql-statement://shop/_root/src/main/resources/com/acme/Mapper.xml#name";
+        String reportId = "report-definition://shop/_root/report/user-summary";
+
+        CurrentFactReport report = CurrentFactReport.from("shop", List.of(
+                fact(sqlEmail, emailColumn, "READS_COLUMN"),
+                fact(sqlName, nameColumn, "READS_COLUMN"),
+                fact(sqlEmail, tableId, "READS_TABLE"),
+                fact(sqlEmail, reportId, "EXPORTS_SYMBOL")));
+
+        ReportImpactQueryEngine.ReportImpactResult result = ReportImpactQueryEngine.defaults()
+                .findAffectedReports(report, emailColumn);
+
+        assertEquals(2, result.columnFacts().size(),
+                "should include exact column match AND table-level fallback, but not name column");
+        assertTrue(result.columnFacts().stream().anyMatch(f -> f.targetIdentityId().equals(emailColumn)),
+                "should include the exact email column match");
+        assertTrue(result.columnFacts().stream().anyMatch(f -> f.targetIdentityId().equals(tableId)),
+                "should include table-level fallback");
+        assertTrue(result.columnFacts().stream().noneMatch(f -> f.targetIdentityId().equals(nameColumn)),
+                "should NOT include name column on same table");
+    }
+
+    @Test
     void deduplicatesReportPaths() {
         String columnId = "db-column://shop/mainDs/public/reports#export_date";
         String sqlId = "sql-statement://shop/_root/src/main/resources/com/acme/ReportMapper.xml#load";
