@@ -1,6 +1,7 @@
 package org.sainm.codeatlas.analyzers.workspace;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -40,7 +41,7 @@ class ChangedFileSymbolResolverTest {
         ChangedSymbolResolution result = ChangedFileSymbolResolver.defaults().resolve(
                 tempDir,
                 List.of(
-                        changed("src/main/java/com/acme/UserRepository.java", 7),
+                        changed("src/main/java/com/acme/UserRepository.java", 8),
                         changed("src/main/resources/com/acme/UserMapper.xml", 2),
                         changed("src/main/webapp/WEB-INF/jsp/user.jsp", 1),
                         changed("src/main/resources/application.yml", 1)),
@@ -88,6 +89,71 @@ class ChangedFileSymbolResolverTest {
         assertSymbol(result, "config-key", "config-key://shop/_root/src/main/resources/deleted.yml#deleted.yml");
     }
 
+    @Test
+    void filtersJdbcSqlAndTablesToChangedHunks() throws IOException {
+        write("src/main/java/com/acme/UserRepository.java", """
+                package com.acme;
+
+                import java.sql.Connection;
+                import java.sql.SQLException;
+
+                class UserRepository {
+                    void loadUsers(Connection connection) throws SQLException {
+                        connection.prepareStatement("select id from users");
+                    }
+
+                    void loadOrders(Connection connection) throws SQLException {
+                        connection.prepareStatement("select id from orders");
+                    }
+                }
+                """);
+
+        ChangedSymbolResolution result = ChangedFileSymbolResolver.defaults().resolve(
+                tempDir,
+                List.of(changed("src/main/java/com/acme/UserRepository.java", 12)),
+                defaultContext());
+
+        assertSymbol(result, "method", "method://shop/_root/src/main/java/com.acme.UserRepository#loadOrders(Ljava/sql/Connection;)V");
+        assertSymbol(result, "sql-statement",
+                "sql-statement://shop/_root/src/main/java/com/acme/UserRepository.java#com.acme.UserRepository.loadOrders(Ljava/sql/Connection;)V@12");
+        assertSymbol(result, "db-table", "db-table://shop/mainDs/public/orders");
+        assertSymbol(result, "db-column", "db-column://shop/mainDs/public/orders#id");
+        assertNoSymbol(result, "sql-statement",
+                "sql-statement://shop/_root/src/main/java/com/acme/UserRepository.java#com.acme.UserRepository.loadUsers(Ljava/sql/Connection;)V@8");
+        assertNoSymbol(result, "db-table", "db-table://shop/mainDs/public/users");
+        assertNoSymbol(result, "db-column", "db-column://shop/mainDs/public/users#id");
+    }
+
+    @Test
+    void filtersMyBatisSqlAndTablesToChangedHunks() throws IOException {
+        write("src/main/resources/com/acme/UserMapper.xml", """
+                <mapper namespace="com.acme.UserMapper">
+                  <select id="findUsers">
+                    select id
+                    from users
+                  </select>
+                  <select id="findOrders">
+                    select id
+                    from orders
+                  </select>
+                </mapper>
+                """);
+
+        ChangedSymbolResolution result = ChangedFileSymbolResolver.defaults().resolve(
+                tempDir,
+                List.of(changed("src/main/resources/com/acme/UserMapper.xml", 8)),
+                defaultContext());
+
+        assertSymbol(result, "sql-statement",
+                "sql-statement://shop/_root/src/main/resources/com/acme/UserMapper.xml#com.acme.UserMapper.findOrders");
+        assertSymbol(result, "db-table", "db-table://shop/mainDs/public/orders");
+        assertSymbol(result, "db-column", "db-column://shop/mainDs/public/orders#id");
+        assertNoSymbol(result, "sql-statement",
+                "sql-statement://shop/_root/src/main/resources/com/acme/UserMapper.xml#com.acme.UserMapper.findUsers");
+        assertNoSymbol(result, "db-table", "db-table://shop/mainDs/public/users");
+        assertNoSymbol(result, "db-column", "db-column://shop/mainDs/public/users#id");
+    }
+
     private static GitChangedFile changed(String path, int line) {
         return new GitChangedFile("", path, "MODIFY", List.of(new GitChangedHunk(line, 1, line, 1)));
     }
@@ -99,6 +165,22 @@ class ChangedFileSymbolResolverTest {
     private static void assertSymbol(ChangedSymbolResolution result, String kind, String identityId) {
         assertTrue(result.symbols().stream().anyMatch(symbol -> symbol.kind().equals(kind)
                 && symbol.identityId().equals(identityId)), kind + " " + identityId);
+    }
+
+    private static void assertNoSymbol(ChangedSymbolResolution result, String kind, String identityId) {
+        assertFalse(result.symbols().stream().anyMatch(symbol -> symbol.kind().equals(kind)
+                && symbol.identityId().equals(identityId)), kind + " " + identityId);
+    }
+
+    private static ChangedSymbolContext defaultContext() {
+        return new ChangedSymbolContext(
+                "shop",
+                "_root",
+                "src/main/java",
+                "src/main/resources",
+                "src/main/webapp",
+                "mainDs",
+                "public");
     }
 
     private void write(String relativePath, String content) throws IOException {

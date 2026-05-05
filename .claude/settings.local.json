@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(./gradlew test *)",
+      "Bash(where claude *)",
+      "Bash(claude --version)",
+      "WebSearch",
+      "Bash(claude plugin *)",
+      "Bash(git ls-remote *)",
+      "Bash(./gradlew :codeatlas-analyzers:test --tests \"*SqlTableAnalyzerTest\")",
+      "Bash(./gradlew :codeatlas-graph:test --tests \"*FastImpactReportTest\")",
+      "Bash(./gradlew :codeatlas-mcp:test --tests \"*McpContractsTest\")",
+      "Bash(./gradlew :codeatlas-analyzers:test --tests \"*NativeMethodFactMapperTest\")",
+      "Bash(./gradlew :codeatlas-analyzers:test --tests \"*NativeMethodFactMapperTest.mapsNativeMethodsToBoundaryAndLibraryFacts\")",
+      "Bash(./gradlew :codeatlas-analyzers:test --tests \"*JasperSmapParserTest\")",
+      "Bash(./gradlew :codeatlas-analyzers:compileJava)",
+      "Bash(./gradlew :codeatlas-graph:test --tests \"*ReportImpactQueryEngineTest\")",
+      "Bash(./gradlew :codeatlas-facts:test --tests \"*InMemoryFactStoreTest\")",
+      "Bash(./gradlew :codeatlas-facts:test --tests \"*BatchOperationSupportTest\")",
+      "Bash(./gradlew :codeatlas-graph:compileJava)",
+      "Bash(./gradlew compileJava)"
+    ]
+  }
+}

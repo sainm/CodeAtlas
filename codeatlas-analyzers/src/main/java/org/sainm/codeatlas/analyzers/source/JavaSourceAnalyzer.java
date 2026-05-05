@@ -99,6 +99,7 @@ public final class JavaSourceAnalyzer {
                         annotations(method),
                         modifiers(method),
                         method.getBody() != null,
+                        endLine(method.getPosition()),
                         location(sourceRoot, method.getPosition())));
             }
         }
@@ -118,6 +119,7 @@ public final class JavaSourceAnalyzer {
                     annotations(constructor),
                     modifiers(constructor),
                     true,
+                    endLine(constructor.getPosition()),
                     constructorLocation));
         }
         for (CtInvocation<?> invocation : model.getElements(new TypeFilter<>(CtInvocation.class))) {
@@ -216,6 +218,10 @@ public final class JavaSourceAnalyzer {
         Path file = position.getFile().toPath();
         String relativePath = sourceRoot.toAbsolutePath().normalize().relativize(file.toAbsolutePath().normalize()).toString();
         return new SourceLocation(relativePath, position.getLine(), position.getColumn());
+    }
+
+    private static int endLine(SourcePosition position) {
+        return position == null || !position.isValidPosition() ? 0 : position.getEndLine();
     }
 
     private static List<JavaClassInfo> sortedClasses(List<JavaClassInfo> classes) {

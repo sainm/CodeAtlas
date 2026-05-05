@@ -24,14 +24,18 @@ public final class SqlTableAnalyzer {
     private static final Pattern MYBATIS_PARAMETER = Pattern.compile("[#$]\\{[^}]+}");
     private static final Pattern XML_TAG = Pattern.compile("</?[A-Za-z][^>]*>");
     private static final Pattern SELECT_TABLE = Pattern.compile(
-            "(?i)\\b(?:from|join)\\s+([A-Za-z_][A-Za-z0-9_.$]*)");
+            "(?i)\\b(?:from|(?:right|left|cross|full|inner|natural)?\\s*(?:outer\\s+)?join)\\s+([A-Za-z_][A-Za-z0-9_.$]*)");
     private static final Pattern UPDATE_TABLE = Pattern.compile("(?i)\\bupdate\\s+([A-Za-z_][A-Za-z0-9_.$]*)");
     private static final Pattern INSERT_TABLE = Pattern.compile("(?i)\\binsert\\s+into\\s+([A-Za-z_][A-Za-z0-9_.$]*)");
     private static final Pattern DELETE_TABLE = Pattern.compile("(?i)\\bdelete\\s+from\\s+([A-Za-z_][A-Za-z0-9_.$]*)");
     private static final Pattern TABLE_ALIAS = Pattern.compile(
-            "(?i)\\b(?:from|join)\\s+([A-Za-z_][A-Za-z0-9_.$]*)(?:\\s+(?:as\\s+)?([A-Za-z_][A-Za-z0-9_]*))?");
+            "(?i)\\b(?:from|(?:right|left|cross|full|inner|natural)?\\s*(?:outer\\s+)?join)\\s+([A-Za-z_][A-Za-z0-9_.$]*)(?:\\s+(?:as\\s+)?([A-Za-z_][A-Za-z0-9_]*))?");
     private static final Pattern QUALIFIED_COLUMN = Pattern.compile("\\b([A-Za-z_][A-Za-z0-9_]*)\\.([A-Za-z_][A-Za-z0-9_]*)\\b");
     private static final Pattern SELECT_LIST = Pattern.compile("(?is)^\\s*select\\s+(.*?)\\s+from\\s+");
+    private static final Pattern WHERE_CLAUSE = Pattern.compile(
+            "(?is)\\bwhere\\b(.*?)(?:\\bgroup\\s+by\\b|\\border\\s+by\\b|\\bhaving\\b|\\blimit\\b|$)");
+    private static final Pattern UNQUALIFIED_PREDICATE_COLUMN = Pattern.compile(
+            "(?i)\\b([A-Za-z_][A-Za-z0-9_]*)\\b\\s*(?:=|<>|!=|<=|>=|<|>|\\bin\\b|\\blike\\b|\\bis\\b)");
     private static final Pattern INSERT_COLUMNS = Pattern.compile(
             "(?is)^\\s*insert\\s+into\\s+[A-Za-z_][A-Za-z0-9_.$]*\\s*\\((.*?)\\)");
     private static final Pattern UPDATE_SET = Pattern.compile(
@@ -151,6 +155,11 @@ public final class SqlTableAnalyzer {
                 columns.add(new ColumnKey(singleTable.getFirst(), columnName));
             }
         }
+        if (singleTable.size() == 1) {
+            for (String columnName : unqualifiedPredicateColumns(sql)) {
+                columns.add(new ColumnKey(singleTable.getFirst(), columnName));
+            }
+        }
         return columnAccesses(source, columns, SqlTableAccessKind.READ);
     }
 
@@ -200,12 +209,19 @@ public final class SqlTableAnalyzer {
         Matcher matcher = TABLE_ALIAS.matcher(sql);
         while (matcher.find()) {
             String tableName = matcher.group(1);
-            aliases.put(simpleName(tableName), tableName);
+            addSelfAlias(aliases, tableName);
             if (matcher.group(2) != null && !matcher.group(2).isBlank()) {
                 aliases.put(matcher.group(2), tableName);
             }
         }
+        matches(UPDATE_TABLE, sql).forEach(tableName -> addSelfAlias(aliases, tableName));
+        matches(DELETE_TABLE, sql).forEach(tableName -> addSelfAlias(aliases, tableName));
+        matches(INSERT_TABLE, sql).forEach(tableName -> addSelfAlias(aliases, tableName));
         return aliases;
+    }
+
+    private static void addSelfAlias(Map<String, String> aliases, String tableName) {
+        aliases.put(simpleName(tableName), tableName);
     }
 
     private static List<String> unqualifiedColumns(String selectList) {
@@ -217,6 +233,33 @@ public final class SqlTableAnalyzer {
                 .map(SqlTableAnalyzer::stripQualifier)
                 .filter(column -> !column.isBlank())
                 .toList();
+    }
+
+    private static List<String> unqualifiedPredicateColumns(String sql) {
+        Set<String> result = new LinkedHashSet<>();
+        Matcher whereMatcher = WHERE_CLAUSE.matcher(sql);
+        while (whereMatcher.find()) {
+            Matcher columnMatcher = UNQUALIFIED_PREDICATE_COLUMN.matcher(whereMatcher.group(1));
+            while (columnMatcher.find()) {
+                String columnName = columnMatcher.group(1);
+                if (!isSqlKeyword(columnName)) {
+                    result.add(columnName);
+                }
+            }
+        }
+        return List.copyOf(result);
+    }
+
+    private static boolean isSqlKeyword(String value) {
+        String lower = value.toLowerCase(Locale.ROOT);
+        return lower.equals("and")
+                || lower.equals("or")
+                || lower.equals("not")
+                || lower.equals("null")
+                || lower.equals("exists")
+                || lower.equals("select")
+                || lower.equals("from")
+                || lower.equals("where");
     }
 
     private static List<String> commaSeparatedColumns(String value) {

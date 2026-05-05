@@ -106,6 +106,14 @@ class CodeAtlasServerTest {
     }
 
     @Test
+    void typeMismatchParametersReturnStructuredErrors() throws Exception {
+        HttpResponse<String> response = get("/api/v1/projects?limit=abc");
+
+        assertEquals(400, response.statusCode());
+        assertStructuredError(response.body(), "INVALID_REQUEST", 400);
+    }
+
+    @Test
     void projectAllowListReturnsForbiddenForUnknownProjects() throws Exception {
         HttpResponse<String> response = get("/api/v1/projects/overview?projectId=blocked");
 
@@ -117,11 +125,14 @@ class CodeAtlasServerTest {
     void managementOperationsRequireConfirmationOrIdempotencyKey() throws Exception {
         HttpResponse<String> rejected = delete("/api/v1/admin/projects?projectId=shop");
         HttpResponse<String> confirmed = delete("/api/v1/admin/projects?projectId=shop&confirm=true");
+        HttpResponse<String> forbidden = delete("/api/v1/admin/projects?projectId=blocked&confirm=true");
 
         assertEquals(400, rejected.statusCode());
         assertStructuredError(rejected.body(), "CONFIRMATION_REQUIRED", 400);
         assertEquals(200, confirmed.statusCode());
         assertTrue(confirmed.body().contains("\"status\":\"accepted\""));
+        assertEquals(403, forbidden.statusCode());
+        assertStructuredError(forbidden.body(), "PROJECT_FORBIDDEN", 403);
     }
 
     @Test

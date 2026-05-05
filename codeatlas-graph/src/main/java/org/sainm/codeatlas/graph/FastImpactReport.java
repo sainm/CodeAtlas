@@ -121,12 +121,20 @@ public record FastImpactReport(
         for (int i = 0; i < value.length(); i++) {
             char c = value.charAt(i);
             switch (c) {
-                case '\\' -> json.append("\\\\");
                 case '"' -> json.append("\\\"");
+                case '\\' -> json.append("\\\\");
+                case '\b' -> json.append("\\b");
+                case '\f' -> json.append("\\f");
                 case '\n' -> json.append("\\n");
                 case '\r' -> json.append("\\r");
                 case '\t' -> json.append("\\t");
-                default -> json.append(c);
+                default -> {
+                    if (c < 0x20) {
+                        json.append(String.format("\\u%04x", (int) c));
+                    } else {
+                        json.append(c);
+                    }
+                }
             }
         }
         return json.append('"');

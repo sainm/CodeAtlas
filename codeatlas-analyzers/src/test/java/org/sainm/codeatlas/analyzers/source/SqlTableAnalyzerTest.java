@@ -38,9 +38,32 @@ class SqlTableAnalyzerTest {
         assertTable(result, "com.acme.UserMapper.insertAudit", "audit_log", SqlTableAccessKind.WRITE);
         assertColumn(result, "com.acme.UserMapper.find", "users", "id", SqlTableAccessKind.READ);
         assertColumn(result, "com.acme.UserMapper.find", "accounts", "user_id", SqlTableAccessKind.READ);
+        assertColumn(result, "com.acme.UserMapper.updateName", "users", "id", SqlTableAccessKind.READ);
+        assertColumn(result, "com.acme.UserMapper.deleteAccount", "accounts", "id", SqlTableAccessKind.READ);
         assertColumn(result, "com.acme.UserMapper.updateName", "users", "name", SqlTableAccessKind.WRITE);
         assertColumn(result, "com.acme.UserMapper.insertAudit", "audit_log", "id", SqlTableAccessKind.WRITE);
         assertColumn(result, "com.acme.UserMapper.insertAudit", "audit_log", "name", SqlTableAccessKind.WRITE);
+    }
+
+    @Test
+    void tracksUnqualifiedPredicateColumnsForSingleTableSql() {
+        SourceLocation location = new SourceLocation("src/main/resources/com/acme/UserMapper.xml", 1, 1);
+
+        SqlTableAnalysisResult result = SqlTableAnalyzer.defaults().analyze(List.of(
+                new SqlStatementSourceInfo(
+                        "selectByEmail",
+                        "select id from users where email = ? and status in (?, ?)",
+                        location),
+                new SqlStatementSourceInfo(
+                        "deleteByEmail",
+                        "delete from users where email = ?",
+                        location)));
+
+        assertTrue(result.diagnostics().isEmpty());
+        assertColumn(result, "selectByEmail", "users", "id", SqlTableAccessKind.READ);
+        assertColumn(result, "selectByEmail", "users", "email", SqlTableAccessKind.READ);
+        assertColumn(result, "selectByEmail", "users", "status", SqlTableAccessKind.READ);
+        assertColumn(result, "deleteByEmail", "users", "email", SqlTableAccessKind.READ);
     }
 
     @Test
@@ -133,6 +156,42 @@ class SqlTableAnalyzerTest {
         assertTrue(result.diagnostics().isEmpty());
         assertTable(result, "com.acme.UserRepository.load(Ljava/sql/Connection;)V@12", "users", SqlTableAccessKind.READ);
         assertTable(result, "com.acme.UserRepository.load(Ljava/sql/Connection;)V@12", "accounts", SqlTableAccessKind.READ);
+    }
+
+    @Test
+    void extractsTablesFromAllJoinVariants() {
+        SourceLocation location = new SourceLocation("src/main/resources/com/acme/Mapper.xml", 1, 1);
+
+        SqlTableAnalysisResult result = SqlTableAnalyzer.defaults().analyze(List.of(
+                new SqlStatementSourceInfo("s1", "select * from a left join b on a.id = b.a_id", location),
+                new SqlStatementSourceInfo("s2", "select * from a right join b on a.id = b.a_id", location),
+                new SqlStatementSourceInfo("s3", "select * from a inner join b on a.id = b.a_id", location),
+                new SqlStatementSourceInfo("s4", "select * from a cross join b", location),
+                new SqlStatementSourceInfo("s5", "select * from a full join b on a.id = b.a_id", location),
+                new SqlStatementSourceInfo("s6", "select * from a natural join b", location),
+                new SqlStatementSourceInfo("s7", "select * from a left outer join b on a.id = b.a_id", location),
+                new SqlStatementSourceInfo("s8", "select * from a right outer join b on a.id = b.a_id", location),
+                new SqlStatementSourceInfo("s9", "select * from a full outer join b on a.id = b.a_id", location)));
+
+        assertTrue(result.diagnostics().isEmpty());
+        for (int i = 1; i <= 9; i++) {
+            assertTable(result, "s" + i, "a", SqlTableAccessKind.READ);
+            assertTable(result, "s" + i, "b", SqlTableAccessKind.READ);
+        }
+    }
+
+    @Test
+    void resolvesTableAliasesWithAllJoinVariants() {
+        SourceLocation location = new SourceLocation("src/main/resources/com/acme/Mapper.xml", 1, 1);
+
+        SqlTableAnalysisResult result = SqlTableAnalyzer.defaults().analyze(List.of(
+                new SqlStatementSourceInfo("s1",
+                        "select l.id, r.name from t l left join u r on l.id = r.t_id", location)));
+
+        assertTrue(result.diagnostics().isEmpty());
+        assertTable(result, "s1", "t", SqlTableAccessKind.READ);
+        assertTable(result, "s1", "u", SqlTableAccessKind.READ);
+        assertColumn(result, "s1", "t", "id", SqlTableAccessKind.READ);
     }
 
     private static void assertTable(

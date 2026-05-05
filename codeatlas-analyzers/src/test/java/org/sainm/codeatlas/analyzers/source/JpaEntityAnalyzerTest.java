@@ -37,8 +37,12 @@ class JpaEntityAnalyzerTest {
                     @Column(name = "display_name")
                     String name;
 
+                    String email;
+
                     @Transient
                     String ignored;
+
+                    transient String localCache;
                 }
                 """);
 
@@ -52,7 +56,7 @@ class JpaEntityAnalyzerTest {
         assertEquals("com.acme.UserEntity", entity.qualifiedName());
         assertEquals("users", entity.tableName());
         assertEquals("crm", entity.schemaName());
-        assertEquals(2, entity.columns().size());
+        assertEquals(3, entity.columns().size());
         assertTrue(entity.columns().stream()
                 .anyMatch(column -> column.fieldName().equals("id")
                         && column.columnName().equals("user_id")
@@ -60,6 +64,11 @@ class JpaEntityAnalyzerTest {
         assertTrue(entity.columns().stream()
                 .anyMatch(column -> column.fieldName().equals("name")
                         && column.columnName().equals("display_name")));
+        assertTrue(entity.columns().stream()
+                .anyMatch(column -> column.fieldName().equals("email")
+                        && column.columnName().equals("email")));
+        assertTrue(entity.columns().stream()
+                .noneMatch(column -> column.fieldName().equals("localCache")));
     }
 
     @Test

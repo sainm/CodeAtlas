@@ -55,6 +55,39 @@ class SqlTableFactMapperTest {
                 Confidence.CERTAIN);
     }
 
+    @Test
+    void doesNotDoublePrefixSchemaQualifiedTableAndColumnNames() {
+        SourceLocation location = new SourceLocation("src/main/resources/com/acme/UserMapper.xml", 12, 5);
+        SqlTableAnalysisResult tables = new SqlTableAnalysisResult(
+                List.of(new SqlTableAccessInfo("com.acme.UserMapper.find", "public.users", SqlTableAccessKind.READ, location)),
+                List.of(new SqlColumnAccessInfo("com.acme.UserMapper.find", "public.users", "id", SqlTableAccessKind.READ, location)),
+                List.of());
+
+        JavaSourceFactBatch batch = SqlTableFactMapper.defaults().map(
+                tables,
+                new SqlTableFactContext(
+                        "shop",
+                        "_root",
+                        "src/main/resources",
+                        "mainDs",
+                        "public",
+                        "snapshot-1",
+                        "analysis-1",
+                        "scope-1",
+                        "src/main/resources/com/acme/UserMapper.xml"));
+
+        assertFact(batch,
+                "READS_TABLE",
+                "sql-statement://shop/_root/src/main/resources/com/acme/UserMapper.xml#com.acme.UserMapper.find",
+                "db-table://shop/mainDs/public/users",
+                Confidence.CERTAIN);
+        assertFact(batch,
+                "READS_COLUMN",
+                "sql-statement://shop/_root/src/main/resources/com/acme/UserMapper.xml#com.acme.UserMapper.find",
+                "db-column://shop/mainDs/public/users#id",
+                Confidence.CERTAIN);
+    }
+
     private static void assertFact(
             JavaSourceFactBatch batch,
             String relation,

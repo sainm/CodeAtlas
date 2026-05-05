@@ -139,12 +139,21 @@ public final class SqlTableFactMapper {
 
     private static String dbTableId(SqlTableFactContext context, String tableName) {
         return "db-table://" + context.projectId() + "/" + context.datasourceKey() + "/"
-                + context.schemaName() + "/" + tableName;
+                + context.schemaName() + "/" + tableNameWithoutContextSchema(context, tableName);
     }
 
     private static String dbColumnId(SqlTableFactContext context, String tableName, String columnName) {
         return "db-column://" + context.projectId() + "/" + context.datasourceKey() + "/"
-                + context.schemaName() + "/" + tableName + "#" + columnName;
+                + context.schemaName() + "/" + tableNameWithoutContextSchema(context, tableName) + "#" + columnName;
+    }
+
+    private static String tableNameWithoutContextSchema(SqlTableFactContext context, String tableName) {
+        String normalized = tableName == null ? "" : tableName.trim();
+        String prefix = context.schemaName() + ".";
+        if (normalized.regionMatches(true, 0, prefix, 0, prefix.length())) {
+            return normalized.substring(prefix.length());
+        }
+        return normalized;
     }
 
     private static String stripSourceRoot(String sourceRoot, String path) {

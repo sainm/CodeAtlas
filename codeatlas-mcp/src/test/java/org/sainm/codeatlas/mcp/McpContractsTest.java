@@ -77,6 +77,20 @@ class McpContractsTest {
     }
 
     @Test
+    void candidateResolverReturnsPickerForSameScopeAmbiguities() {
+        McpContracts.CandidateResolver resolver = new McpContracts.CandidateResolver();
+        List<McpContracts.CandidateOption> candidates = List.of(
+                new McpContracts.CandidateOption("shop", "web", "mainDs", "Method", "src/UserService.java", 12, "LIKELY", "ev-1"),
+                new McpContracts.CandidateOption("shop", "web", "mainDs", "Method", "src/UserController.java", 18, "LIKELY", "ev-2"));
+
+        McpContracts.CandidateDecision decision = resolver.decide(candidates);
+
+        assertTrue(decision.needsPicker());
+        assertTrue(decision.followUpQuestion().orElseThrow().contains("choose one candidate"));
+        assertEquals(2, decision.candidates().size());
+    }
+
+    @Test
     void toolGuardRejectsOutOfProfileUnsafeArgumentsDisallowedProjectsAndRateLimit() {
         McpContracts.McpCatalog catalog = McpContracts.McpCatalog.defaults();
         McpContracts.RedactedAuditLog auditLog = new McpContracts.RedactedAuditLog();
@@ -130,6 +144,28 @@ class McpContractsTest {
     }
 
     @Test
+    void readOnlyServerRejectsUnknownToolsWithAuditEntry() {
+        McpContracts.RedactedAuditLog auditLog = new McpContracts.RedactedAuditLog();
+        McpContracts.ReadOnlyMcpServer server = new McpContracts.ReadOnlyMcpServer(
+                McpContracts.McpCatalog.defaults(),
+                new McpContracts.ToolCallGuard(
+                        Set.of("shop"),
+                        new McpContracts.FixedWindowRateLimiter(10, Duration.ofMinutes(1)),
+                        auditLog,
+                        clock));
+
+        McpContracts.ToolResponse response = server.dispatch(
+                McpContracts.AgentProfileRegistry.defaults().require(McpContracts.AgentType.CODE_QUESTION),
+                request("shop", "shell.run", Map.of("query", "x")));
+
+        assertFalse(response.accepted());
+        assertEquals(Optional.of("unknown MCP tool"), response.rejectionReason());
+        assertEquals(1, auditLog.entries().size());
+        assertEquals("shell.run", auditLog.entries().getFirst().toolName());
+        assertEquals(Optional.of("unknown MCP tool"), auditLog.entries().getFirst().rejectionReason());
+    }
+
+    @Test
     void agentOutputRequiresEvidenceConfidenceSourceTypeAndTruncation() {
         McpContracts.AgentOutput output = new McpContracts.AgentOutput(
                 List.of(Map.of("path", "EntryPoint -> SQL")),
@@ -142,6 +178,41 @@ class McpContractsTest {
         assertTrue(output.truncated());
         assertEquals("ev-1", output.evidence().getFirst().evidenceKey());
         assertEquals("TRUNCATED", output.status());
+    }
+
+    @Test
+    void slidingWindowPreventsBoundaryBurst() {
+        Instant start = clock.instant();
+        McpContracts.FixedWindowRateLimiter limiter = new McpContracts.FixedWindowRateLimiter(2, Duration.ofSeconds(10));
+
+        assertTrue(limiter.tryAcquire("alice", start));
+        assertTrue(limiter.tryAcquire("alice", start.plusMillis(1)));
+        assertFalse(limiter.tryAcquire("alice", start.plusMillis(2)));
+
+        Instant nearEnd = start.plusSeconds(9).plusMillis(999);
+        assertFalse(limiter.tryAcquire("alice", nearEnd));
+    }
+
+    @Test
+    void slidingWindowAllowsRequestsAfterOldEntriesExpire() {
+        Instant start = clock.instant();
+        McpContracts.FixedWindowRateLimiter limiter = new McpContracts.FixedWindowRateLimiter(2, Duration.ofSeconds(10));
+
+        assertTrue(limiter.tryAcquire("alice", start));
+        assertTrue(limiter.tryAcquire("alice", start.plusSeconds(1)));
+
+        Instant afterWindow = start.plusSeconds(10).plusMillis(1);
+        assertTrue(limiter.tryAcquire("alice", afterWindow));
+    }
+
+    @Test
+    void slidingWindowTracksPrincipalsIndependently() {
+        Instant start = clock.instant();
+        McpContracts.FixedWindowRateLimiter limiter = new McpContracts.FixedWindowRateLimiter(1, Duration.ofSeconds(10));
+
+        assertTrue(limiter.tryAcquire("alice", start));
+        assertFalse(limiter.tryAcquire("alice", start.plusMillis(1)));
+        assertTrue(limiter.tryAcquire("bob", start.plusMillis(1)));
     }
 
     private static McpContracts.CandidateOption candidate(String project, String module, String datasource) {

@@ -65,8 +65,8 @@ public final class JpaEntityAnalyzer {
             List<JpaColumnMappingInfo> columns = new ArrayList<>();
             for (CtField<?> field : type.getFields()) {
                 if (field.getModifiers().contains(ModifierKind.STATIC)
-                        || hasAnnotation(field, "Transient")
-                        || (!hasAnnotation(field, "Column") && !hasAnnotation(field, "Id"))) {
+                        || field.getModifiers().contains(ModifierKind.TRANSIENT)
+                        || hasAnnotation(field, "Transient")) {
                     continue;
                 }
                 String columnName = annotationValue(field, "Column", "name");

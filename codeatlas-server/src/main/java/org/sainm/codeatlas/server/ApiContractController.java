@@ -14,7 +14,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/v1")
-public class ApiContractController {
+public final class ApiContractController {
     private static final int MAX_LIMIT = 100;
 
     @GetMapping("/workspaces")
@@ -211,6 +211,7 @@ public class ApiContractController {
             @RequestParam(defaultValue = "false") boolean confirm,
             @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey) {
         requireConfirmed(confirm, idempotencyKey);
+        requireProject(projectId);
         return Map.of("projectId", projectId, "status", "accepted");
     }
 

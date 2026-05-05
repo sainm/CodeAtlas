@@ -156,7 +156,7 @@
 - [x] 实现从 changed method 出发的 caller traversal。
 - [x] 实现从 entrypoints 出发的 downstream traversal。
 - [x] 实现 JSP/API -> Action/Controller -> Service -> DAO/Mapper -> SQL/table path search。
-- [ ] 默认使用 Neo4j active facts 作为事实源。
+- [proto] 默认使用 Neo4j active facts 作为事实源。
 - [x] 增加 JVM primitive adjacency cache，服务热点 caller/callee edges。
 - [x] 实现按 projectId、snapshotId、relation group 分片的 cache。
 - [x] 实现 cache invalidation 和 Neo4j fallback。
@@ -299,57 +299,57 @@
 
 ## 15. 生产加固
 
-- [ ] 实现 Jasper generated servlet SMAP parser。
-- [ ] 在 evidence 中保存 jspPath、jspLineStart、jspLineEnd、generatedServletPath、generatedLineStart、generatedLineEnd。
-- [ ] 保留 include/tagfile/custom-tag SMAP candidate lists。
-- [ ] 在 SMAP missing 或 ambiguous 时降低 confidence。
-- [ ] 设计 ReportDefinition、ReportField、ReportParameter nodes。
-- [ ] 增加 report resource evidence keys。
-- [ ] 增加 Interstage List Creator parser interface。
-- [ ] 增加 WingArc1st SVF parser interface。
-- [ ] 通过 plugin adapters 解析 PSF、PMD、BIP、SVF XML、layout XML、field definition XML。
-- [ ] 实现 DB column -> affected report query。
-- [ ] 识别 Java native methods。
-- [ ] 识别 System.load 和 System.loadLibrary。
-- [ ] 建模 NativeLibrary 和 native boundaries。
-- [ ] 在 native paths 标记 analysisBoundary=NATIVE 和 requiresManualReview=true。
-- [ ] 当 native branch 停止时，其它 non-native path branches 仍继续搜索。
-- [ ] 实现按 projectId、snapshotId、analyzerId、scopeKey 分组的 production batch upsert。
-- [ ] 使用 file 作为 source/JSP/XML/SQL 最小 scope。
-- [ ] 使用 JAR 或 module 作为 classpath cache 最小 scope。
-- [ ] 对同一 projectId + snapshotId 增加 single-writer coordination。
-- [ ] 增加 stable batch ordering 和 deadlock retry with backoff。
-- [ ] 实现 confidence aggregation：CERTAIN > LIKELY > POSSIBLE > UNKNOWN。
-- [ ] 确保 analyzer priority 和 evidence count 不提升 confidence。
-- [ ] 将 conflicting facts 保留为 separate candidates。
+- [x] 实现 Jasper generated servlet SMAP parser。
+- [x] 在 evidence 中保存 jspPath、jspLineStart、jspLineEnd、generatedServletPath、generatedLineStart、generatedLineEnd。
+- [x] 保留 include/tagfile/custom-tag SMAP candidate lists。
+- [x] 在 SMAP missing 或 ambiguous 时降低 confidence。
+- [x] 设计 ReportDefinition、ReportField、ReportParameter nodes。
+- [x] 增加 report resource evidence keys。
+- [design] 增加 Interstage List Creator parser interface。
+- [design] 增加 WingArc1st SVF parser interface。
+- [design] 通过 plugin adapters 解析 PSF、PMD、BIP、SVF XML、layout XML、field definition XML。
+- [x] 实现 DB column -> affected report query。
+- [x] 识别 Java native methods。
+- [x] 识别 System.load 和 System.loadLibrary。
+- [x] 建模 NativeLibrary 和 native boundaries。
+- [x] 在 native paths 标记 analysisBoundary=NATIVE 和 requiresManualReview=true。
+- [x] 当 native branch 停止时，其它 non-native path branches 仍继续搜索。
+- [x] 实现按 projectId、snapshotId、analyzerId、scopeKey 分组的 production batch upsert。
+- [x] 使用 file 作为 source/JSP/XML/SQL 最小 scope。
+- [design] 使用 JAR 或 module 作为 classpath cache 最小 scope。
+- [x] 对同一 projectId + snapshotId 增加 single-writer coordination。
+- [x] 增加 stable batch ordering 和 deadlock retry with backoff。
+- [x] 实现 confidence aggregation：CERTAIN > LIKELY > POSSIBLE > UNKNOWN。
+- [x] 确保 analyzer priority 和 evidence count 不提升 confidence。
+- [x] 将 conflicting facts 保留为 separate candidates。
 
 ## 16. Benchmark
 
-- [ ] 创建 small fixture benchmark。
+- [proto] 创建 small fixture benchmark。
 - [ ] 创建 medium Spring/MyBatis open-source benchmark target。
 - [ ] 创建 medium Struts1/JSP legacy benchmark fixture。
-- [ ] 测量 scan time。
-- [ ] 测量 graph write time。
+- [proto] 测量 scan time。
+- [proto] 测量 graph write time。
 - [ ] 测量 Neo4j query P95。
-- [ ] 测量 JVM cache heap。
-- [ ] 测量 impact report latency。
-- [ ] 增加 false-positive 和 false-negative sample set。
-- [ ] 默认启用 FFM、Tai-e 或 cache strategy 变化前，必须有 benchmark evidence。
+- [proto] 测量 JVM cache heap。
+- [proto] 测量 impact report latency。
+- [proto] 增加 false-positive 和 false-negative sample set。
+- [proto] 默认启用 FFM、Tai-e 或 cache strategy 变化前，必须有 benchmark evidence。
 
 ## 17. 可选深度增强
 
 - [ ] 完成 Tai-e license review 和 distribution decision。
 - [ ] 增加 independent Tai-e JVM worker。
 - [ ] 准备 Tai-e classpath 和 compiled classes inputs。
-- [ ] 配置 call graph、pointer analysis、taint analysis profiles。
+- [design] 配置 call graph、pointer analysis、taint analysis profiles。
 - [ ] 将 Tai-e signatures 映射到 CodeAtlas SymbolId。
 - [ ] 将 Tai-e facts 作为 deep supplement facts 导入。
 - [ ] 强制 Tai-e timeout、heap limit 和 failure degradation。
-- [ ] 设计 FFM CSR/CSC graph format。
+- [design] 设计 FFM CSR/CSC graph format。
 - [ ] 实现 MemorySegment offsets、targets、edgeTypes。
 - [ ] 实现 mmap read-only reload。
 - [ ] 实现基于 FFM index 的 caller/callee 和 bounded BFS。
-- [ ] 只有 benchmark activation policy 推荐时才路由到 FFM。
-- [ ] 增加 architecture rule checks。
+- [design] 只有 benchmark activation policy 推荐时才路由到 FFM。
+- [proto] 增加 architecture rule checks。
 - [ ] 增加 OpenRewrite recipe proposal 和 preview。
-- [ ] 将 historical risk、ownership、change frequency 纳入 test recommendations。
+- [proto] 将 historical risk、ownership、change frequency 纳入 test recommendations。

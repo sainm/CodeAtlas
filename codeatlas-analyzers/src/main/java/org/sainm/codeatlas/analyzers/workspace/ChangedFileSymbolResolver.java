@@ -1,11 +1,14 @@
 package org.sainm.codeatlas.analyzers.workspace;
 
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import org.sainm.codeatlas.analyzers.source.JavaAnalysisDiagnostic;
 import org.sainm.codeatlas.analyzers.source.JavaClassInfo;
@@ -16,6 +19,9 @@ import org.sainm.codeatlas.analyzers.source.JdbcSqlAnalysisResult;
 import org.sainm.codeatlas.analyzers.source.JdbcSqlAnalyzer;
 import org.sainm.codeatlas.analyzers.source.MyBatisXmlAnalysisResult;
 import org.sainm.codeatlas.analyzers.source.MyBatisXmlAnalyzer;
+import org.sainm.codeatlas.analyzers.source.MyBatisXmlStatementInfo;
+import org.sainm.codeatlas.analyzers.source.SqlColumnAccessInfo;
+import org.sainm.codeatlas.analyzers.source.SqlStatementSourceInfo;
 import org.sainm.codeatlas.analyzers.source.SqlTableAccessInfo;
 import org.sainm.codeatlas.analyzers.source.SqlTableAnalysisResult;
 import org.sainm.codeatlas.analyzers.source.SqlTableAnalyzer;
@@ -38,9 +44,12 @@ public final class ChangedFileSymbolResolver {
         if (context == null) {
             throw new IllegalArgumentException("context is required");
         }
+        List<GitChangedFile> files = changedFiles == null ? List.of() : changedFiles;
+        List<Path> javaPaths = new ArrayList<>();
+        List<Path> xmlPaths = new ArrayList<>();
         Map<String, ChangedSymbolInfo> symbols = new LinkedHashMap<>();
         List<JavaAnalysisDiagnostic> diagnostics = new ArrayList<>();
-        for (GitChangedFile changedFile : changedFiles == null ? List.<GitChangedFile>of() : changedFiles) {
+        for (GitChangedFile changedFile : files) {
             String path = changedFile.effectivePath();
             Path file = workspaceRoot.resolve(path);
             if (!Files.isRegularFile(file)) {
@@ -51,32 +60,62 @@ public final class ChangedFileSymbolResolver {
             }
             String lower = path.toLowerCase();
             if (lower.endsWith(".java")) {
-                addJavaSymbols(workspaceRoot, file, changedFile, context, symbols, diagnostics);
+                javaPaths.add(file);
             } else if (lower.endsWith(".jsp") || lower.endsWith(".jspx")) {
                 add(symbols, "jsp-page", jspPageId(context, path), path, firstChangedLine(changedFile));
             } else if (lower.endsWith(".xml")) {
-                addMyBatisSymbols(workspaceRoot, file, context, symbols, diagnostics);
+                xmlPaths.add(file);
             } else if (isConfigFile(lower)) {
                 add(symbols, "config-key", configKeyId(context, path), path, firstChangedLine(changedFile));
+            }
+        }
+        JavaSourceAnalysisResult javaSource = !javaPaths.isEmpty()
+                ? JavaSourceAnalyzer.defaults().analyze(workspaceRoot, javaPaths)
+                : new JavaSourceAnalysisResult(false, List.of(), List.of(), List.of(), List.of(), List.of());
+        diagnostics.addAll(javaSource.diagnostics());
+        JdbcSqlAnalysisResult jdbc = !javaPaths.isEmpty()
+                ? JdbcSqlAnalyzer.defaults().analyze(workspaceRoot, javaPaths)
+                : new JdbcSqlAnalysisResult(List.of(), List.of());
+        diagnostics.addAll(jdbc.diagnostics());
+        MyBatisXmlAnalysisResult myBatisXml = !xmlPaths.isEmpty()
+                ? MyBatisXmlAnalyzer.defaults().analyze(workspaceRoot, xmlPaths)
+                : new MyBatisXmlAnalysisResult(List.of(), List.of(), List.of());
+        diagnostics.addAll(myBatisXml.diagnostics());
+        List<SqlStatementSourceInfo> allSqlSources = new ArrayList<>();
+        allSqlSources.addAll(jdbc.sqlStatementSources());
+        allSqlSources.addAll(myBatisXml.sqlStatementSources());
+        SqlTableAnalysisResult sqlTables = !allSqlSources.isEmpty()
+                ? SqlTableAnalyzer.defaults().analyze(allSqlSources)
+                : new SqlTableAnalysisResult(List.of(), List.of());
+        for (GitChangedFile changedFile : files) {
+            String path = changedFile.effectivePath();
+            Path file = workspaceRoot.resolve(path);
+            String lower = path.toLowerCase();
+            if (lower.endsWith(".java")) {
+                addJavaSymbolsFromBatch(changedFile, context, javaSource, jdbc, sqlTables, symbols);
+            } else if (lower.endsWith(".xml")) {
+                addMyBatisSymbolsFromBatch(file, changedFile, context, myBatisXml, sqlTables, symbols);
             }
         }
         return new ChangedSymbolResolution(List.copyOf(symbols.values()), diagnostics);
     }
 
-    private static void addJavaSymbols(
-            Path workspaceRoot,
-            Path file,
+    private static void addJavaSymbolsFromBatch(
             GitChangedFile changedFile,
             ChangedSymbolContext context,
-            Map<String, ChangedSymbolInfo> symbols,
-            List<JavaAnalysisDiagnostic> diagnostics) {
-        JavaSourceAnalysisResult source = JavaSourceAnalyzer.defaults().analyze(workspaceRoot, List.of(file));
-        diagnostics.addAll(source.diagnostics());
-        for (JavaClassInfo classInfo : source.classes()) {
-            add(symbols, "class", classId(context, classInfo.qualifiedName()), classInfo.location().relativePath(), classInfo.location().line());
+            JavaSourceAnalysisResult javaSource,
+            JdbcSqlAnalysisResult jdbc,
+            SqlTableAnalysisResult sqlTables,
+            Map<String, ChangedSymbolInfo> symbols) {
+        String path = changedFile.effectivePath();
+        for (JavaClassInfo classInfo : javaSource.classes()) {
+            if (classInfo.location().relativePath().equals(path)) {
+                add(symbols, "class", classId(context, classInfo.qualifiedName()), classInfo.location().relativePath(), classInfo.location().line());
+            }
         }
-        for (JavaMethodInfo method : source.methods()) {
-            if (overlapsChangedHunk(method.location().line(), changedFile.hunks())) {
+        for (JavaMethodInfo method : javaSource.methods()) {
+            if (method.location().relativePath().equals(path)
+                    && overlapsChangedHunk(method.location().line(), method.endLine(), changedFile.hunks())) {
                 add(symbols,
                         "method",
                         methodId(context, method.ownerQualifiedName(), method.simpleName(), method.signature()),
@@ -84,29 +123,40 @@ public final class ChangedFileSymbolResolver {
                         method.location().line());
             }
         }
-        JdbcSqlAnalysisResult jdbc = JdbcSqlAnalyzer.defaults().analyze(workspaceRoot, List.of(file));
-        diagnostics.addAll(jdbc.diagnostics());
-        SqlTableAnalysisResult tables = SqlTableAnalyzer.defaults().analyze(jdbc.sqlStatementSources());
-        addSqlAndTableSymbols(context, context.javaSourceRootKey(), symbols, jdbc.statements().stream()
-                .map(statement -> new SqlSymbol(statement.statementId(), statement.location().relativePath(), statement.location().line()))
-                .toList(), tables.tableAccesses());
+        List<SqlSymbol> changedSqlSymbols = jdbc.statements().stream()
+                .filter(statement -> statement.location().relativePath().equals(path)
+                        && overlapsChangedHunk(statement.location().line(), endLine(statement.location().line(), statement.sql()), changedFile.hunks()))
+                .map(statement -> new SqlSymbol(statement.statementId(), statement.location().relativePath(), statement.location().line(), endLine(statement.location().line(), statement.sql())))
+                .toList();
+        Set<String> changedStatementIds = statementIds(changedSqlSymbols);
+        SqlTableAnalysisResult filteredTables = filterTablesByStatementIds(sqlTables, changedStatementIds);
+        addSqlAndTableSymbols(context, context.javaSourceRootKey(), symbols, changedSqlSymbols,
+                filteredTables.tableAccesses(),
+                filteredTables.columnAccesses());
     }
 
-    private static void addMyBatisSymbols(
-            Path workspaceRoot,
+    private static void addMyBatisSymbolsFromBatch(
             Path file,
+            GitChangedFile changedFile,
             ChangedSymbolContext context,
-            Map<String, ChangedSymbolInfo> symbols,
-            List<JavaAnalysisDiagnostic> diagnostics) {
-        MyBatisXmlAnalysisResult xml = MyBatisXmlAnalyzer.defaults().analyze(workspaceRoot, List.of(file));
-        diagnostics.addAll(xml.diagnostics());
-        SqlTableAnalysisResult tables = SqlTableAnalyzer.defaults().analyze(xml.sqlStatementSources());
-        addSqlAndTableSymbols(context, context.resourceSourceRootKey(), symbols, xml.statements().stream()
+            MyBatisXmlAnalysisResult xml,
+            SqlTableAnalysisResult sqlTables,
+            Map<String, ChangedSymbolInfo> symbols) {
+        String path = changedFile.effectivePath();
+        List<SqlSymbol> changedSqlSymbols = xml.statements().stream()
+                .filter(statement -> statement.location().relativePath().equals(path)
+                        && overlapsChangedHunk(statement.location().line(), myBatisStatementEndLine(file, statement), changedFile.hunks()))
                 .map(statement -> new SqlSymbol(
                         statement.namespace() + "." + statement.id(),
                         statement.location().relativePath(),
-                        statement.location().line()))
-                .toList(), tables.tableAccesses());
+                        statement.location().line(),
+                        myBatisStatementEndLine(file, statement)))
+                .toList();
+        Set<String> changedStatementIds = statementIds(changedSqlSymbols);
+        SqlTableAnalysisResult filteredTables = filterTablesByStatementIds(sqlTables, changedStatementIds);
+        addSqlAndTableSymbols(context, context.resourceSourceRootKey(), symbols, changedSqlSymbols,
+                filteredTables.tableAccesses(),
+                filteredTables.columnAccesses());
     }
 
     private static void addSqlAndTableSymbols(
@@ -114,13 +164,36 @@ public final class ChangedFileSymbolResolver {
             String sqlSourceRootKey,
             Map<String, ChangedSymbolInfo> symbols,
             List<SqlSymbol> sqlSymbols,
-            List<SqlTableAccessInfo> tableAccesses) {
+            List<SqlTableAccessInfo> tableAccesses,
+            List<SqlColumnAccessInfo> columnAccesses) {
         for (SqlSymbol sql : sqlSymbols) {
             add(symbols, "sql-statement", sqlStatementId(context, sqlSourceRootKey, sql), sql.relativePath(), sql.line());
         }
         for (SqlTableAccessInfo access : tableAccesses) {
             add(symbols, "db-table", dbTableId(context, access.tableName()), access.location().relativePath(), access.location().line());
         }
+        for (SqlColumnAccessInfo access : columnAccesses) {
+            add(symbols, "db-column", dbColumnId(context, access.tableName(), access.columnName()), access.location().relativePath(), access.location().line());
+        }
+    }
+
+    private static SqlTableAnalysisResult filterTablesByStatementIds(SqlTableAnalysisResult tables, Set<String> statementIds) {
+        return new SqlTableAnalysisResult(
+                tables.tableAccesses().stream()
+                        .filter(access -> statementIds.contains(access.statementId()))
+                        .toList(),
+                tables.columnAccesses().stream()
+                        .filter(access -> statementIds.contains(access.statementId()))
+                        .toList(),
+                tables.diagnostics());
+    }
+
+    private static Set<String> statementIds(List<SqlSymbol> sqlSymbols) {
+        Set<String> result = new LinkedHashSet<>();
+        for (SqlSymbol sqlSymbol : sqlSymbols) {
+            result.add(sqlSymbol.statementId());
+        }
+        return result;
     }
 
     private static boolean isDeleted(GitChangedFile changedFile) {
@@ -150,14 +223,15 @@ public final class ChangedFileSymbolResolver {
         }
     }
 
-    private static boolean overlapsChangedHunk(int line, List<GitChangedHunk> hunks) {
+    private static boolean overlapsChangedHunk(int startLine, int endLine, List<GitChangedHunk> hunks) {
         if (hunks == null || hunks.isEmpty()) {
             return true;
         }
+        int normalizedEndLine = Math.max(startLine, endLine);
         for (GitChangedHunk hunk : hunks) {
             int start = hunk.newStartLine();
             int end = start + Math.max(1, hunk.newLineCount()) - 1;
-            if (line >= start && line <= end) {
+            if (startLine <= end && normalizedEndLine >= start) {
                 return true;
             }
         }
@@ -222,7 +296,12 @@ public final class ChangedFileSymbolResolver {
 
     private static String dbTableId(ChangedSymbolContext context, String tableName) {
         return "db-table://" + context.projectId() + "/" + context.datasourceKey() + "/"
-                + context.schemaName() + "/" + tableName;
+                + context.schemaName() + "/" + tableNameWithoutContextSchema(context, tableName);
+    }
+
+    private static String dbColumnId(ChangedSymbolContext context, String tableName, String columnName) {
+        return "db-column://" + context.projectId() + "/" + context.datasourceKey() + "/"
+                + context.schemaName() + "/" + tableNameWithoutContextSchema(context, tableName) + "#" + columnName;
     }
 
     private static String stripSourceRoot(String sourceRoot, String path) {
@@ -250,6 +329,36 @@ public final class ChangedFileSymbolResolver {
         return ownerPath.substring(0, ownerPath.length() - ".java".length()).replace('/', '.');
     }
 
+    private static int endLine(int startLine, String text) {
+        return startLine + (int) text.chars().filter(character -> character == '\n').count();
+    }
+
+    private static int myBatisStatementEndLine(Path file, MyBatisXmlStatementInfo statement) {
+        int fallback = endLine(statement.location().line(), statement.sql());
+        try {
+            List<String> lines = Files.readAllLines(file);
+            String closingTag = "</" + statement.kind().name().toLowerCase() + ">";
+            int startIndex = Math.max(0, statement.location().line() - 1);
+            for (int index = startIndex; index < lines.size(); index++) {
+                if (lines.get(index).toLowerCase().contains(closingTag)) {
+                    return index + 1;
+                }
+            }
+        } catch (IOException ignored) {
+            return fallback;
+        }
+        return fallback;
+    }
+
+    private static String tableNameWithoutContextSchema(ChangedSymbolContext context, String tableName) {
+        String normalized = tableName == null ? "" : tableName.trim();
+        String prefix = context.schemaName() + ".";
+        if (normalized.regionMatches(true, 0, prefix, 0, prefix.length())) {
+            return normalized.substring(prefix.length());
+        }
+        return normalized;
+    }
+
     private static void add(
             Map<String, ChangedSymbolInfo> symbols,
             String kind,
@@ -259,6 +368,6 @@ public final class ChangedFileSymbolResolver {
         symbols.putIfAbsent(identityId, new ChangedSymbolInfo(kind, identityId, relativePath, line));
     }
 
-    private record SqlSymbol(String statementId, String relativePath, int line) {
+    private record SqlSymbol(String statementId, String relativePath, int line, int endLine) {
     }
 }

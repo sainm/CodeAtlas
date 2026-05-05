@@ -74,6 +74,7 @@ class GraphNodeTypeRegistryTest {
                 "ConfigKey",
                 "ReportDefinition",
                 "ReportField",
+                "ReportParameter",
                 "SyntheticSymbol",
                 "FeatureSeed",
                 "FeatureScope",

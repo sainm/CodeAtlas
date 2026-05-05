@@ -46,6 +46,7 @@ public enum DefaultSymbolKind {
     CONFIG_KEY("config-key", IdentityType.SYMBOL_ID),
     REPORT_DEFINITION("report-definition", IdentityType.SYMBOL_ID),
     REPORT_FIELD("report-field", IdentityType.SYMBOL_ID),
+    REPORT_PARAMETER("report-parameter", IdentityType.SYMBOL_ID),
     NATIVE_LIBRARY("native-library", IdentityType.SYMBOL_ID),
     BOUNDARY_SYMBOL("boundary-symbol", IdentityType.SYMBOL_ID),
     SYNTHETIC_SYMBOL("synthetic-symbol", IdentityType.SYMBOL_ID),
@@ -125,7 +126,7 @@ public enum DefaultSymbolKind {
             case METHOD, FIELD, JSP_FORM, JSP_TAG, JSP_EXPRESSION, JSP_SCRIPTLET, DICON_COMPONENT,
                     HTML_FORM, HTML_LINK, CLIENT_REQUEST, CONFIG_KEY, SQL_STATEMENT, SQL_VARIANT,
                     DB_COLUMN, DB_INDEX, DB_CONSTRAINT, REPORT_DEFINITION, REPORT_FIELD,
-                    SYNTHETIC_SYMBOL -> true;
+                    SYNTHETIC_SYMBOL, BOUNDARY_SYMBOL, NATIVE_LIBRARY, REPORT_PARAMETER -> true;
             default -> false;
         };
     }

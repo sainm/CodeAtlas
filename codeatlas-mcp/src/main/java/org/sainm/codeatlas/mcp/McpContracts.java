@@ -3,6 +3,7 @@ package org.sainm.codeatlas.mcp;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.EnumMap;
@@ -99,6 +100,10 @@ public final class McpContracts {
             return tool;
         }
 
+        public Optional<McpToolDefinition> findTool(String name) {
+            return Optional.ofNullable(tools.get(name));
+        }
+
         public List<McpResource> resources() {
             return resources;
         }
@@ -170,7 +175,13 @@ public final class McpContracts {
 
         public ToolResponse dispatch(AgentProfile profile, ToolRequest request) {
             Instant started = guard.clock().instant();
-            GuardDecision decision = guard.authorize(profile, catalog.requireTool(request.toolName()), request);
+            Optional<McpToolDefinition> tool = catalog.findTool(request.toolName());
+            if (tool.isEmpty()) {
+                String reason = "unknown MCP tool";
+                guard.audit(request, 0, started, Optional.of(reason));
+                return ToolResponse.rejected(reason);
+            }
+            GuardDecision decision = guard.authorize(profile, tool.get(), request);
             if (!decision.allowed()) {
                 guard.audit(request, 0, started, Optional.of(decision.reason()));
                 return ToolResponse.rejected(decision.reason());
@@ -314,7 +325,7 @@ public final class McpContracts {
             if (scopes.size() > 1) {
                 return new CandidateDecision(true, Optional.of("请选择 project/module/datasource 范围后继续。"), candidates);
             }
-            return new CandidateDecision(false, Optional.empty(), candidates);
+            return new CandidateDecision(true, Optional.of("Please choose one candidate before continuing."), candidates);
         }
     }
 
@@ -493,7 +504,7 @@ public final class McpContracts {
     public static final class FixedWindowRateLimiter {
         private final int maxRequests;
         private final Duration window;
-        private final Map<String, Window> windows = new LinkedHashMap<>();
+        private final Map<String, ArrayDeque<Instant>> logs = new LinkedHashMap<>();
 
         public FixedWindowRateLimiter(int maxRequests, Duration window) {
             if (maxRequests <= 0) {
@@ -504,19 +515,16 @@ public final class McpContracts {
         }
 
         public boolean tryAcquire(String principal, Instant now) {
-            Window current = windows.get(principal);
-            if (current == null || !now.isBefore(current.startedAt().plus(window))) {
-                windows.put(principal, new Window(now, 1));
-                return true;
+            ArrayDeque<Instant> log = logs.computeIfAbsent(principal, k -> new ArrayDeque<>());
+            Instant cutoff = now.minus(window);
+            while (!log.isEmpty() && !log.peekFirst().isAfter(cutoff)) {
+                log.removeFirst();
             }
-            if (current.count() >= maxRequests) {
+            if (log.size() >= maxRequests) {
                 return false;
             }
-            windows.put(principal, new Window(current.startedAt(), current.count() + 1));
+            log.addLast(now);
             return true;
-        }
-
-        private record Window(Instant startedAt, int count) {
         }
     }
 

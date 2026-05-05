@@ -72,7 +72,8 @@ final class JasperJspPrecompiler {
             diagnostics.add(new JavaAnalysisDiagnostic(
                     "JASPER_SEMANTIC_PARSE_USED",
                     "Jasper parsed JSP files before tolerant fact extraction"));
-            return new JspParseAttempt(JspParserMode.JASPER, diagnostics);
+            List<JasperSmapParser.JasperSmapResult> smapResults = collectSmap(outputDir, jspFiles, diagnostics);
+            return new JspParseAttempt(JspParserMode.JASPER, diagnostics, smapResults);
         } catch (IOException
                 | IllegalAccessException
                 | InstantiationException
@@ -120,6 +121,45 @@ final class JasperJspPrecompiler {
         }
         String message = cursor.getMessage();
         return message == null || message.isBlank() ? cursor.getClass().getName() : message;
+    }
+
+    private static List<JasperSmapParser.JasperSmapResult> collectSmap(
+            Path outputDir,
+            List<Path> jspFiles,
+            List<JavaAnalysisDiagnostic> diagnostics) {
+        List<JasperSmapParser.JasperSmapResult> results = new ArrayList<>();
+        if (outputDir == null || !Files.exists(outputDir)) {
+            return results;
+        }
+        JasperSmapParser smapParser = JasperSmapParser.defaults();
+        try (var files = Files.walk(outputDir)) {
+            List<Path> generatedJavaFiles = files
+                    .filter(path -> path.toString().endsWith(".java"))
+                    .toList();
+            if (generatedJavaFiles.isEmpty()) {
+                diagnostics.add(new JavaAnalysisDiagnostic(
+                        "JASPER_NO_GENERATED_JAVA",
+                        "Jasper produced no .java files; SMAP unavailable"));
+            }
+            for (Path generatedJava : generatedJavaFiles) {
+                try {
+                    String content = Files.readString(generatedJava);
+                    String generatedPath = generatedJava.toAbsolutePath().normalize().toString();
+                    var smapResult = smapParser.parse(content, generatedPath);
+                    smapResult.ifPresent(results::add);
+                } catch (IOException ignored) {
+                    // Continue parsing other files.
+                }
+            }
+        } catch (IOException ignored) {
+            // Continue without SMAP data.
+        }
+        if (results.isEmpty() && !jspFiles.isEmpty()) {
+            diagnostics.add(new JavaAnalysisDiagnostic(
+                    "SMAP_MISSING_CONFIDENCE_DOWNGRADE",
+                    "No SMAP mapping found for JSP files; confidence may be lower for JSP evidence"));
+        }
+        return results;
     }
 
     private static void deleteRecursivelyQuietly(Path path) {

@@ -76,6 +76,7 @@ public final class GraphNodeTypeRegistry {
         builder.symbol("ConfigKey", "config-key", GraphNodeLayer.FRAMEWORK_SEMANTICS);
         builder.symbol("ReportDefinition", "report-definition", GraphNodeLayer.FRAMEWORK_SEMANTICS);
         builder.symbol("ReportField", "report-field", GraphNodeLayer.FRAMEWORK_SEMANTICS);
+        builder.symbol("ReportParameter", "report-parameter", GraphNodeLayer.FRAMEWORK_SEMANTICS);
         builder.symbol("NativeLibrary", "native-library", GraphNodeLayer.FRAMEWORK_SEMANTICS);
         builder.symbol("BoundarySymbol", "boundary-symbol", GraphNodeLayer.FRAMEWORK_SEMANTICS);
         builder.symbol("SyntheticSymbol", "synthetic-symbol", GraphNodeLayer.FRAMEWORK_SEMANTICS);
